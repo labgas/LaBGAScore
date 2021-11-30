@@ -33,7 +33,8 @@ sourcesubjs = cellstr(char(sourcelist(:).name));
 BIDSlist = dir(fullfile(BIDSdir,'sub-*'));
 BIDSsubjs = cellstr(char(BIDSlist(:).name));
 derivlist = dir(fullfile(derivdir,'sub-*'));
-derivsubjs = cellstr(char(derivlist([derivlist(:).isdir]').name));
+derivlist = derivlist([derivlist(:).isdir]);
+derivsubjs = cellstr(char(derivlist.name));
 
 if isequal(sourcesubjs,BIDSsubjs,derivsubjs)
     disp('numbers or names of subjects in sourcedata, BIDS, and derivatives/fmriprep directory match - good to go');
