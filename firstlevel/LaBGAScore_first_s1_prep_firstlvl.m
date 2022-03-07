@@ -101,16 +101,14 @@ spike_additional_vols=0;
 
 LaBGAScore_prep_s0_define_directories;
 
-% create first level directory
+% define mkdir as an anonymous function that can be applied to cell arrays
+% to crease directory structure
 
-firstleveldir = fullfile(rootdir,'firstlevel');
-if ~exist(firstleveldir,'dir')
-    mkdir(firstleveldir);
-end
+sm=@(x)mkdir(x);
 
-% define runs
+% define run directory names
 
-runs = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
+rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
 
 
 %% CREATE CANLAB DSGN STRUCTURE
@@ -149,9 +147,12 @@ runs = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
     % cell array (one cell per session (i.e. run in our case)) of cell
     % arrays (one cell per condition) of MAT-file names, in fixed order:
     % all conditions of interest first, conditions of no interest last
-    % if only one session is specified, it will be applied to all sessions
-    % TO BE CHECKED WHETHER THIS WORKS
     c=0;
+    c=c+1;DSGN.conditions{c}={'sucrose' 'erythritol' 'sucralose' 'water' 'rating' 'swallow_rinse'};
+    c=c+1;DSGN.conditions{c}={'sucrose' 'erythritol' 'sucralose' 'water' 'rating' 'swallow_rinse'};
+    c=c+1;DSGN.conditions{c}={'sucrose' 'erythritol' 'sucralose' 'water' 'rating' 'swallow_rinse'};
+    c=c+1;DSGN.conditions{c}={'sucrose' 'erythritol' 'sucralose' 'water' 'rating' 'swallow_rinse'};
+    c=c+1;DSGN.conditions{c}={'sucrose' 'erythritol' 'sucralose' 'water' 'rating' 'swallow_rinse'};
     c=c+1;DSGN.conditions{c}={'sucrose' 'erythritol' 'sucralose' 'water' 'rating' 'swallow_rinse'};
     
     % optional fields
@@ -205,19 +206,28 @@ runs = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
 % END OF STUDY-SPECIFIC CODE, BELOW SHOULD WORK OUT OF THE BOX
 %--------------------------------------------------------------------------
 
-%% CREATE MODELDIR IN FIRSTLEVELDIR
+%% CREATE DIRECTORY STRUCTURE
+
+% create first level directory
+
+firstleveldir = fullfile(rootdir,'firstlevel');
+if ~exist(firstleveldir,'dir')
+    mkdir(firstleveldir);
+end
 
 % create firstmodeldir
+
 firstmodeldir = fullfile(firstleveldir,DSGN.modelingfilesdir);
 if ~exist(firstmodeldir,'dir')
     mkdir(firstmodeldir);
 end
 
-cd (firstmodeldir);
-
 % write subjectdirs in firstlevelmodeldir
-sm=@(x)mkdir(x); % defines mkdir as an anonymous function sm
-cellfun(sm,derivsubjs);
+
+if ~contains(ls(firstmodeldir),'sub-') % checks whether there are already subject dirs in firstmodeldir
+    cd (firstmodeldir);
+    cellfun(sm,derivsubjs);
+end
 
 
 %% LOOP OVER SUBJECTS
@@ -225,63 +235,70 @@ cellfun(sm,derivsubjs);
 
 for sub=1:size(derivsubjs,1)
     
-    %% WRITE RUNDIRS & DEFINE SUBJECT LEVEL FILENAMES
+    %% DEFINE SUBJECT LEVEL DIRS & FILENAMES, AND PERFORM SANITY CHECK
     
     subjderivdir = fullfile(derivsubjdirs{sub},'func');
-    cd(subjderivdir);
-    cellfun(sm,runs);
+    subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
     
+    BIDSimgs = dir(fullfile(subjBIDSdir,'*bold.nii.gz'));
+    BIDSimgs = {BIDSimgs(:).name}';
+    BIDSidx = ~contains(BIDSimgs,'rest'); % omit resting state scan if it exists
+    BIDSimgs = {BIDSimgs{BIDSidx}}';
     
-    rawimgs = dir(fullfile(BIDSsubjdirs{sub},'func/*bold.nii.gz'));
-    rawimgs = {rawimgs(:).name}';
-    if strcmpi(spike_def,'CANlab')==1 % we only need raw images in case spike_def = CANlab
-        for rawimg = 1:size(rawimgs,1) % raw images are needed when spike_def = CANlab, which calls a function that is incompatible with .nii.gz, hence we unzip
-            gunzip(rawimgs{rawimg});
-        end
-        rawimgs = dir(fullfile(BIDSsubjdirs{sub},'func/*bold.nii'));
-        rawimgs = {rawimgs(:).name}';
-        rawidx = ~contains(rawimgs,'rest'); % omit resting state scan if it exists
-        rawimgs = {rawimgs{rawidx}}';
-    else
-        continue
-    end
-    
-    preprocimgs = dir(fullfile(subjderivdir,'s6-*.nii.gz'));
-    preprocimgs = {preprocimgs(:).name}';
-        for preprocimg = 1:size(preprocimgs,1) % raw images are needed when spike_def = CANlab, which calls a function that is incompatible with .nii.gz, hence we unzip
-                gunzip(preprocimgs{preprocimg});
-                delete(preprocimgs{preprocimg});
-        end
-    preprocimgs = dir(fullfile(subjderivdir,'s6-*.nii'));
-    preprocimgs = {preprocimgs(:).name}';
-    preprocidx = ~contains(preprocimgs,'rest'); % omit resting state scan if it exists
-    preprocimgs = {preprocimgs{preprocidx}}';
+    derivimgs = dir(fullfile(subjderivdir,'s6-*.nii.gz'));
+    derivimgs = {derivimgs(:).name}';
+    derividx = ~contains(derivimgs,'rest'); % omit resting state scan if it exists
+    derivimgs = {derivimgs{derividx}}';
     
     fmriprep_noisefiles = dir(fullfile(subjderivdir,'*desc-confounds_timeseries.tsv'));
     fmriprep_noisefiles = {fmriprep_noisefiles(:).name}';
     noiseidx = ~contains(fmriprep_noisefiles,'rest'); % omit resting state scan if it exists
     fmriprep_noisefiles = {fmriprep_noisefiles{noiseidx}}';
     
+    % read events.tsv files with onsets, durations, and trial type
+    eventsfiles = dir(fullfile(subjBIDSdir,'*events.tsv'));
+    eventsfiles = {eventsfiles(:).name}';
+    
     runnames = char(fmriprep_noisefiles);
     runnames = runnames(:,1:29); % this is study-specific, depends on length of subjectname and taskname - could be adapted based on regexp, but easy enough to adapt per study
-        if ~isequal(size(rawimgs,1),size(preprocimgs,1),size(fmriprep_noisefiles,1)) 
-            error('numbers of raw images, preprocessed images, and noise files do not match for %s, please check before proceeding',derivsubjs{sub});
-        else
-            disp('numbers of raw images, preprocessed images, and noise files match for %s, good to go',derivsubjs{sub});
-        end
+    
+    if ~isfolder(fullfile(subjderivdir,rundirnames{1}))
+        cd(subjderivdir);
+        cellfun(sm,rundirnames);
+    end
+    
+    % sanity check
+    if ~isequal(size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1),size(eventsfiles,1)) 
+        error('numbers of raw images, preprocessed images, noise, and events files do not match for %s, please check before proceeding',derivsubjs{sub});
+    else
+        warning('numbers of raw images, preprocessed images, noise, and events files match for %s, good to go',derivsubjs{sub});
+    end
 
     %% CALCULATE AND/OR EXTRACT CONFOUND REGRESSORS AND EVENTS FILES, AND WRITE TO THE CORRECT FILE/FOLDER STRUCTURE
     
     for run=1:size(fmriprep_noisefiles,1)
         
         % define subdir for this run
-        rundir = fullfile(subjderivdir,runs{run});
+        rundir = fullfile(subjderivdir,rundirnames{run});
         
-        if contains(fmriprep_noisefiles{run},runs{run}) % check whether data for run are not missing/excluded
+        if contains(fmriprep_noisefiles{run},rundirnames{run}) % check whether data for run are not missing/excluded
         
-            % move preprocessed image and fmriprep noisefile into rundir
-            movefile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
-            movefile(fullfile(subjderivdir,preprocimgs{run}),fullfile(rundir,preprocimgs{run}));
+            % move preprocessed image and fmriprep noisefile into rundir if
+            % needed
+            if ~contains(ls(rundir),fmriprep_noisefiles{run})
+                copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
+            end
+            
+            if ~contains(ls(rundir),derivimgs{run})
+                copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
+                gunzip(fullfile(rundir,derivimgs{run}));
+                delete(fullfile(rundir,derivimgs{run}));
+            end
+            
+            uderivimg = dir(fullfile(DSGN.subjects{sub},DSGN.funcnames{run}));
+            if ~contains(ls(rundir),uderivimg.name)
+                error('run indices for smoothed images in derivdir do not match for %s, please check before proceeding',derivsubjs{sub});
+            end
 
             % CONFOUND REGRESSOR FILES
             % load confound regressor file generated by fMRIprep into Matlab table
@@ -339,13 +356,16 @@ for sub=1:size(derivsubjs,1)
 
                 elseif strcmpi(spike_def,'CANlab')==1
 
-                    % define raw image file
-                    raw_img_fname = rawimgs{run};
+                    % unzip & define raw image file
+                    gunzip(BIDSimgs{run}); % raw images are needed when spike_def = CANlab, which calls a function that is incompatible with .nii.gz, hence we unzip
+                    uBIDSimg = dir(fullfile(subjBIDSdir,'*bold.nii'));
+                    uBIDSimg = {uBIDSimg(:).name}';
 
                     % add in canlab spike detection (Mahalanobis distance)
-                    [g, mahal_spikes, gtrim, mahal_spikes_regs, snr] = scn_session_spike_id(fullfile(subjrawdir,raw_img_fname), 'doplot', 0); % CANlab function needs to be on your Matlab path
+                    [g, mahal_spikes, gtrim, mahal_spikes_regs, snr] = scn_session_spike_id(fullfile(subjBIDSdir,uBIDSimg), 'doplot', 0); % CANlab function needs to be on your Matlab path
                     delete('*.img'); % delete implicit mask .hdr/.img files generated by the CANlab function on the line above, since we don't need/use them
                     delete('*.hdr');
+                    delete(uBIDSimg); % delete unzipped image since we don't need it anymore 
                     mahal_spikes_regs(:,1) = []; %drop gtrim which is the global signal
                     Rfull(:,contains(Rfull.Properties.VariableNames,'motion_outlier'))=[]; % drop fmriprep motion outliers since we do not use them when spike_def = CANlab, and they cause redundancies
                     Rfull = [Rfull array2table(mahal_spikes_regs)];
@@ -429,37 +449,81 @@ for sub=1:size(derivsubjs,1)
             % save confound regressors as matrix named R for use in
             % SPM/CANlab GLM model tools
             R=table2array(R);
-            filename_noise_regs = fullfile(rundir,DSGN.multireg);
+            % define and create subdir for model
+            runmodeldir = fullfile(rundir,DSGN.modelingfilesdir);
+                if ~exist(runmodeldir,'dir')
+                    mkdir(runmodeldir);
+                end
+            % write confound regressors
+            filename_noise_regs = fullfile(runmodeldir,DSGN.multireg);
             save(filename_noise_regs,'R');
             
             clear R* filename_events
 
             % EVENTS FILES
-            % read events.tsv files with onsets, durations, and trial type
-            eventsfiles = dir(fullfile(subjrawdir,strcat(runnames(run,:),'*events.tsv')));
-            eventsfiles = {eventsfiles(:).name}';
-            % loop over models
-            for model = 1:size(models,1)
-                O=readtable(fullfile(subjrawdir,eventsfiles{model}),'FileType', 'text', 'Delimiter', 'tab');
-                O.trial_type = categorical(O.trial_type);
-                % omit trials that coincide with spikes if that option is chosen
-                    if strcmpi(omit_spike_trials,'yes')==1
-                        same=ismember(O.onset,spikes); % identify trials for which onset coincides with spike
-                        O(same,:)=[]; % get rid of trials coinciding with spikes
-                    elseif strcmpi(omit_spike_trials,'no')==1
-                    else
-                        error('invalid omit_spike_trials option')
+            % read events.tsv files
+            O = readtable(fullfile(subjBIDSdir,eventsfiles{run}),'FileType', 'text', 'Delimiter', 'tab');
+            O.trial_type = categorical(O.trial_type);
+            % omit trials that coincide with spikes if that option is chosen
+                if strcmpi(omit_spike_trials,'yes')==1
+                    same=ismember(O.onset,spikes); % identify trials for which onset coincides with spike
+                    O(same,:)=[]; % get rid of trials coinciding with spikes
+                elseif strcmpi(omit_spike_trials,'no')==1
+                else
+                    error('invalid omit_spike_trials option')
+                end
+            
+            % initialize structures for conditions
+            for cond = 1:size(DSGN.conditions{1},2)
+                cond_struct{cond} = struct('name',{DSGN.conditions{1}{cond}}, ...
+                    'onset',{{[]}}, ...
+                    'duration',{{[]}});
+            end
+            
+%             if ~isequal(char(unique(O.trial_type)'),char(DSGN.conditions{1}))
+%                 error('conditions in DSGN structure do not match conditions in events.tsv file in %s',runnames{run})
+%             end
+            
+            for trial = 1:size(O.trial_type,1)
+                cond = 1;
+                while cond < size(DSGN.conditions{1},2) + 1
+                    switch O.trial_type(trial)
+                        case DSGN.conditions{1}{cond}
+                                cond_struct{cond}.onset{1} = [cond_struct{cond}.onset{1},O.onset(trial)];
+                                cond_struct{cond}.duration{1} = [cond_struct{cond}.duration{1},O.duration(trial)];
                     end
-                % save events file as .mat file
-                filename_events = strcat(rundir,'\onsets_',runnames(run,:),'_',models{model});
-                save(filename_events,'O');
-                clear O filename_events
-            end % for loop models
+                cond = cond + 1;
+                end
+%                     case DSGN.conditions{1}{2}
+%                         cond_struct{2}.onset{1} = [cond_struct{2}.onset{1},O.onset(trial)];
+%                         cond_struct{2}.duration{1} = [cond_struct{2}.duration{1},O.duration(trial)];
+%                     case DSGN.conditions{1}{3}
+%                         cond_struct{3}.onset{1} = [cond_struct{3}.onset{1},O.onset(trial)];
+%                         cond_struct{3}.duration{1} = [cond_struct{3}.duration{1},O.duration(trial)];
+%                     case DSGN.conditions{1}{4}
+%                         cond_struct{4}.onset{1} = [cond_struct{4}.onset{1},O.onset(trial)];
+%                         cond_struct{4}.duration{1} = [cond_struct{4}.duration{1},O.duration(trial)];
+%                     case DSGN.conditions{1}{5}
+%                         cond_struct{5}.onset{1} = [cond_struct{5}.onset{1},O.onset(trial)];
+%                         cond_struct{5}.duration{1} = [cond_struct{5}.duration{1},O.duration(trial)];
+%                     case DSGN.conditions{1}{6}
+%                         cond_struct{6}.onset{1} = [cond_struct{5}.onset{1},O.onset(trial)];
+%                         cond_struct{6}.duration{1} = [cond_struct{5}.duration{1},O.duration(trial)];
+%                 end
+                continue
+            end
+  
+                
+                    
+            % save events file as .mat file
+            filename_events = strcat(rundir,'\onsets_',runnames(run,:));
+            save(filename_events,'O');
+            clear O filename_events
 
             clear onsetfiles
             
         else
-            continue
+            warning('missing run %s',runnames(run,:))
             
         end % if loop checking if data for run is not missing
         
