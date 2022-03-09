@@ -112,14 +112,12 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
 
 
 %% CREATE CANLAB DSGN STRUCTURE
-    
+%--------------------------------------------------------------------------    
 % INPUT
-    % required fields
-    DSGN.metadata = "proj-erythritol_4a first level analysis model 1, i.e. modeling 4 conditions for high, moderate, neutral fear as long events (= duration of solution in mouth)"; % field for annotation with study info, or whatever you like
-    DSGN.modeldir = '/data/test_scripts/firstlevel/model_1_basic'; % directory where you want to write first level results for this model
-        if ~exist(DSGN.modeldir,'dir')
-            mkdir(DSGN.modeldir);
-        end
+    
+    % REQUIRED FIELDS
+    DSGN.metadata = "proj-erythritol_4a first level analysis model 1, i.e. modeling 4 conditions for sucrose, erythritol, sucralose, and water as long events (= duration of solution in mouth), with sweetness liking ratings as parametric modulators"; % field for annotation with study info, or whatever you like
+    DSGN.modeldir = '/data/test_scripts/firstlevel/model_1_conds_pmods'; % directory where you want to write first level results for this model
     DSGN.subjects = derivsubjdirs'; % sets up empty cell array field for subjects in structure array DSGN
     DSGN.funcnames = {'/func/run-1/s6*.nii',...
         '/func/run-2/s6*.nii',...
@@ -128,21 +126,22 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
         '/func/run-5/s6*.nii',...
         '/func/run-6/s6*.nii'}; % cell array (one cell per session) of paths to functional files, relative to absolute path specific in DSGN.subjects
    
-    % optional fields
+    % OPTIONAL FIELDS
     DSGN.concatenation = {}; % default: none; cell array of arrays of runs to concatenate; see documentation for when to concatenate, and how it works exactly
     DSGN.allowmissingfunc = true; % default: false; true will prevent erroring out when functional file is missing for at least one run is missing for at least one subject
     DSGN.customrunintercepts = {}; % default: none; will only work if DSGN.concatenation is specified; cell array of vectors specifying custom intercepts
     
 % PARAMETERS
+
     DSGN.tr = 1.8; % repetition time (TR) in seconds
-    DSGN.hpf = 128; % high pass filter in seconds; SPM default is 128, CANlab default is 180 since the brain response to pain stimuli last long and variance may be lost at shorter lengths, use scn_spm_design_check output, and review the SPM.mat in spm for diagnostics; 
-    % STUDY-SPECIFIC: in this study, with rather short non-pain events and
-    % relatively short ITI, we stick with the SPM default
+    DSGN.hpf = 180; % high pass filter in seconds; SPM default is 128, CANlab default is 180 since the brain response to pain stimuli last long and variance may be lost at shorter lengths, use scn_spm_design_check output, and review the SPM.mat in spm for diagnostics; 
+    % STUDY-SPECIFIC: in this study, we stick with the CANlab default
     DSGN.fmri_t = 30; % microtime resolution - t=number of slices since we did slice timing; spm (and CANlab) default 16 can be kept for multiband w/o slice timing; TO BE CHECKED SINCE WE HAVE MULTIBAND WITH SLICE TIMING
     DSGN.fmri_t0 = 15; % microtime onset - reference slice used in slice timing correction; spm (and CANlab) default 1 can be kept for multiband w/o slice timing
     
 % MODELING
-    % required fields
+
+    % REQUIRED FIELDS
     
     % cell array (one cell per session (i.e. run in our case)) of cell
     % arrays (one cell per condition) of MAT-file names, in fixed order:
@@ -155,52 +154,156 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
     c=c+1;DSGN.conditions{c}={'sucrose' 'erythritol' 'sucralose' 'water' 'rating' 'swallow_rinse'};
     c=c+1;DSGN.conditions{c}={'sucrose' 'erythritol' 'sucralose' 'water' 'rating' 'swallow_rinse'};
     
-    % optional fields
-%     DSGN.pmods = {{}}; % cell array (one cell per session) of cell arrays (one cell per condition) of cell arrays (one cell per modulator) of MAT-file names
+    % OPTIONAL FIELDS
+    
+    % cell array (one cell per session) of cell arrays (one cell per condition) of cell arrays (one cell per modulator) of MAT-file names; set to {{}} if you don't want parametric modulators
+    c=0;
+    c=c+1;DSGN.pmods{c}={'liking_sucrose' 'liking_erythritol' 'liking_sucralose' 'liking_water'};
+    c=c+1;DSGN.pmods{c}={'liking_sucrose' 'liking_erythritol' 'liking_sucralose' 'liking_water'};
+    c=c+1;DSGN.pmods{c}={'liking_sucrose' 'liking_erythritol' 'liking_sucralose' 'liking_water'};
+    c=c+1;DSGN.pmods{c}={'liking_sucrose' 'liking_erythritol' 'liking_sucralose' 'liking_water'};
+    c=c+1;DSGN.pmods{c}={'liking_sucrose' 'liking_erythritol' 'liking_sucralose' 'liking_water'};
+    c=c+1;DSGN.pmods{c}={'liking_sucrose' 'liking_erythritol' 'liking_sucralose' 'liking_water'};
 %     DSGN.convolution; default hrf.derivs = [0 0]; structure specifying the convolution to use for conditions different fields required depending on convolution type; 
 %     DSGN.ar1 = false; % autoregressive AR(1) to model serial correlations; SPM default is true, CANlab default is false, Tor recommends turning autocorrelation off, because this algorithm pools across the whole brain, and does not perform well in some situations; if you are performing a group analysis, the autocorrelation problem is not as concerning
     DSGN.notimemod = true; % default: false; if true, turn off time modulation of conditions, i.e. when you do not expect linear trends over time
 %     DSGN.singletrials = {{}}; % a cell array (1 cell per session) of cell arrays (1 cell per condition) of (corresponding to DSGN.conditions) of true/false values indicating whether to convert specified condition to set of single trial conditions
 %     DSGN.singletrialsall = false; % default: false; if true, set DSGN.singletrials to true for all conditions
-    DSGN.modelingfilesdir = 'model_1_basic'; % name of subfolder which will be created within directory containing functional files where .mat files containing fields of DSGN structure will be saved
+    DSGN.modelingfilesdir = 'model_1_conds_pmods'; % name of subfolder which will be created within directory containing functional files where .mat files containing fields of DSGN structure will be saved
 %     DSGN.allowemptycond = false; % default:false; if true, allow empty conditions
 %     DSGN.allowmissingcondfiles = false; % default:false; if true, throw warning instead of error when no file(s) are found corresponding to a MAT-file name/wildcard
     DSGN.multireg = 'noise_regs'; % specify name for matfile with noise parameters you want to save
     
-    % CONTRASTS
-    % required fields
+% CONTRASTS
+    
+    % OPTIONAL FIELDS
+    
+    % for flexible definition of contrasts - for more info
+    % - help canlab_spm_contrast_job_luke
+    % - https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_example_DSGN_setup.txt
+    
+    DSGN.regmatching = 'regexp'; % regular experession mode to match keywords you provide in cell arrays below with beta regressor names stored in the SPM.Vbeta.descrip field of your first level SPM.mat file
+    % DSGN.defaultsuffix = '\*bf\(1\)$'; % adds this suffix to each keyword
+    
+    % REQUIRED FIELDS
+    
     % cell array (one cell per contrast) of contrast definitions
+    
+    % unmodulated contrasts
     c=0;
-    c=c+1;DSGN.contrasts{c} = {{'sucrose'}}; % CON_0001
-    DSGN.contrastnames{c} = 'sucrose'; % not needed strictly, because this will be automatically generated for standard contrasts like this (sucrose versus baseline)
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*sucrose{1}\s[^x]'}}; % CON_0001; this regexp will select any beta regressor starting with "sucrose", followed by exactly one white space, but not followed by x - which is only the unmodulated regressors for the sucrose condition
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*erythritol{1}\s[^x]'}}; % CON_0002
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*sucralose{1}\s[^x]'}}; % CON_0003
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*water{1}\s[^x]'}}; % CON_0004
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*sucrose{1}\s[^x]'} {'.*water{1}\s[^x]'}}; % CON_0005
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*erythritol{1}\s[^x]'} {'.*water{1}\s[^x]'}}; % CON_0006
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*sucralose{1}\s[^x]'} {'.*water{1}\s[^x]'}}; % CON_0007
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*sucrose{1}\s[^x]'} {'.*sucralose{1}\s[^x]'}}; % CON_0008
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*sucrose{1}\s[^x]'} {'.*erythritol{1}\s[^x]'}}; % CON_0009
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*erythritol{1}\s[^x]'} {'.*sucralose{1}\s[^x]'}}; % CON_0010
+    
+    % modulated contrasts
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*liking_sucrose'}}; % CON_0011; this regexp will select any beta regressor with "liking_sucrose" anywhere in its name - which is only the modulated regressors for the sucrose condition
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*liking_erythritol'}}; % CON_0012
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*liking_sucralose'}}; % CON_0013
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*liking_water'}}; % CON_0014
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*liking_sucrose'} {'.*liking_water'}}; % CON_0015
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*liking_erythritol'} {'.*liking_water'}}; % CON_0016
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*liking_sucralose'} {'.*liking_water'}}; % CON_0017
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*liking_sucrose'} {'.*liking_sucralose'}}; % CON_0018
+    c=c+1;
+    DSGN.contrasts{c} = {{'.*liking_sucrose'} {'.*liking_erythritol'}}; % CON_0019
+    c=c+1;strsplit(eventsfiles{1},'_desc');
+    DSGN.contrasts{c} = {{'.*liking_erythritol'} {'.*liking_sucralose'}}; % CON_0020
+    
+    % OPTIONAL FIELDS
+    
+    % to define custom contrast names and weights
+    % not needed strictly in this case, because this will be automatically generated for standard contrasts like this
+    
+    % unmodulated
+    c=0;
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucrose unmodulated'; % CON_0001
     DSGN.contrastweights{c} = [1];
-    c=c+1;DSGN.contrasts{c} = {{'erythritol'}}; % CON_0002
-    DSGN.contrastnames{c} = 'erythritol'; % not needed strictly, because this will be automatically generated for standard contrasts like this (erythritol versus baseline)
+    c=c+1;
+    DSGN.contrastnames{c} = 'erythritol unmodulated'; % CON_0002
     DSGN.contrastweights{c} = [1];
-    c=c+1;DSGN.contrasts{c} = {{'sucralose'}}; % CON_0003
-    DSGN.contrastnames{c} = 'sucralose'; % not needed strictly, because this will be automatically generated for standard contrasts like this (sucralose versus baseline)
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucralose unmodulated'; % CON_0003
     DSGN.contrastweights{c} = [1];
-    c=c+1;DSGN.contrasts{c} = {{'water'}}; % CON_0004
-    DSGN.contrastnames{c} = 'water'; % not needed strictly, because this will be automatically generated for standard contrasts like this (sucralose versus baseline)
+    c=c+1;
+    DSGN.contrastnames{c} = 'water unmodulated'; % CON_0004
     DSGN.contrastweights{c} = [1];
-    c=c+1;DSGN.contrasts{c} = {{'sucrose'} {'water'}}; % CON_0005
-    DSGN.contrastnames{c} = 'sucrose_vs_water'; % not needed strictly, because this will be automatically generated for standard contrasts like this (sucrose versus water)
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucrose unmodulated vs water unmodulated'; % CON_0005
     DSGN.contrastweights{c} = [1 -1];
-    c=c+1;DSGN.contrasts{c} = {{'erythritol'} {'water'}}; % CON_0006
-    DSGN.contrastnames{c} = 'erythritol_vs_water'; % not needed strictly, because this will be automatically generated for standard contrasts like this (erythritol versus water)
+    c=c+1;
+    DSGN.contrastnames{c} = 'erythritol unmodulated vs water unmodulated'; % CON_0006
     DSGN.contrastweights{c} = [1 -1];
-    c=c+1;DSGN.contrasts{c} = {{'sucralose'} {'water'}}; % CON_0007
-    DSGN.contrastnames{c} = 'sucralose_vs_water'; % not needed strictly, because this will be automatically generated for standard contrasts like this (sucralose versus water)
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucralose unmodulated vs water unmodulated'; % CON_0007
     DSGN.contrastweights{c} = [1 -1];
-    c=c+1;DSGN.contrasts{c} = {{'sucrose'} {'sucralose'}}; % CON_0008
-    DSGN.contrastnames{c} = 'sucrose_vs_sucralose'; % not needed strictly, because this will be automatically generated for standard contrasts like this (sucrose versus sucralose)
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucrose unmodulated vs sucralose unmodulated'; % CON_0008
     DSGN.contrastweights{c} = [1 -1];
-    c=c+1;DSGN.contrasts{c} = {{'sucrose'} {'erythritol'}}; % CON_0009
-    DSGN.contrastnames{c} = 'sucrose_vs_erythritol'; % not needed strictly, because this will be automatically generated for standard contrasts like this (sucrose versus erythritol)
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucrose unmodulated vs erythritol unmodulated'; % CON_0009
     DSGN.contrastweights{c} = [1 -1];
-    c=c+1;DSGN.contrasts{c} = {{'erythritol'} {'sucralose'}}; % CON_0010
-    DSGN.contrastnames{c} = 'erythritol_vs_sucralose'; % not needed strictly, because this will be automatically generated for standard contrasts like this (erythritol versus sucralose)
+    c=c+1;
+    DSGN.contrastnames{c} = 'erythritol unmodulated vs sucralose unmodulated'; % CON_0010
     DSGN.contrastweights{c} = [1 -1];
+    
+    % modulated
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucrose modulated'; % CON_0011
+    DSGN.contrastweights{c} = [1];
+    c=c+1;
+    DSGN.contrastnames{c} = 'erythritol modulated'; % CON_0012
+    DSGN.contrastweights{c} = [1];
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucralose modulated'; % CON_0013
+    DSGN.contrastweights{c} = [1];
+    c=c+1;
+    DSGN.contrastnames{c} = 'water modulated'; % CON_0014
+    DSGN.contrastweights{c} = [1];
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucrose modulated vs water modulated'; % CON_0015
+    DSGN.contrastweights{c} = [1 -1];
+    c=c+1;
+    DSGN.contrastnames{c} = 'erythritol modulated vs water modulated'; % CON_0016
+    DSGN.contrastweights{c} = [1 -1];    
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucralose modulated vs water modulated'; % CON_0017
+    DSGN.contrastweights{c} = [1 -1];
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucrose modulated vs sucralose modulated'; % CON_0018
+    DSGN.contrastweights{c} = [1 -1];
+    c=c+1;
+    DSGN.contrastnames{c} = 'sucrose modulated vs erythritol modulated'; % CON_0019
+    DSGN.contrastweights{c} = [1 -1];
+    c=c+1;
+    DSGN.contrastnames{c} = 'erythritol modulated vs sucralose modulated'; % CON_0020
+    DSGN.contrastweights{c} = [1 -1];
+    
 
 %--------------------------------------------------------------------------
 % END OF STUDY-SPECIFIC CODE, BELOW SHOULD WORK OUT OF THE BOX
@@ -217,7 +320,7 @@ end
 
 % create firstmodeldir
 
-firstmodeldir = fullfile(firstleveldir,DSGN.modelingfilesdir);
+firstmodeldir = DSGN.modeldir;
 if ~exist(firstmodeldir,'dir')
     mkdir(firstmodeldir);
 end
@@ -235,7 +338,7 @@ end
 
 for sub=1:size(derivsubjs,1)
     
-    %% DEFINE SUBJECT LEVEL DIRS & FILENAMES, AND PERFORM SANITY CHECK
+    %% DEFINE SUBJECT LEVEL DIRS & FILENAMES
     
     subjderivdir = fullfile(derivsubjdirs{sub},'func');
     subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
@@ -259,231 +362,243 @@ for sub=1:size(derivsubjs,1)
     eventsfiles = dir(fullfile(subjBIDSdir,'*events.tsv'));
     eventsfiles = {eventsfiles(:).name}';
     
-    runnames = char(fmriprep_noisefiles);
-    runnames = runnames(:,1:29); % this is study-specific, depends on length of subjectname and taskname - could be adapted based on regexp, but easy enough to adapt per study
-    
+    for runname = 1:size(fmriprep_noisefiles,1)
+        subjrunnames{runname} = strsplit(fmriprep_noisefiles{runname},'_desc');
+        subjrunnames{runname} = subjrunnames{runname}{1};
+        subjrundirnames{runname} = subjrunnames{runname}(end-4:end);
+    end
+    subjrunnames = subjrunnames';
+    subjrundirnames = subjrundirnames';
+        
+    % create rundirs in subjderivdir if needed
     if ~isfolder(fullfile(subjderivdir,rundirnames{1}))
         cd(subjderivdir);
         cellfun(sm,rundirnames);
     end
     
-    % sanity check
+    % sanity check #1: number of images & noise/event files
     if ~isequal(size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1),size(eventsfiles,1)) 
         error('numbers of raw images, preprocessed images, noise, and events files do not match for %s, please check before proceeding',derivsubjs{sub});
     else
-        warning('numbers of raw images, preprocessed images, noise, and events files match for %s, good to go',derivsubjs{sub});
+        warning('numbers of raw images, preprocessed images, noise, and events files match for %s, continuing',derivsubjs{sub});
     end
 
     %% CALCULATE AND/OR EXTRACT CONFOUND REGRESSORS AND EVENTS FILES, AND WRITE TO THE CORRECT FILE/FOLDER STRUCTURE
     
     for run=1:size(fmriprep_noisefiles,1)
         
-        % define subdir for this run
-        rundir = fullfile(subjderivdir,rundirnames{run});
+        % DEFINE SUBDIR FOR THIS RUN
+        rundir = fullfile(subjderivdir,subjrundirnames{run});
         
-        if contains(fmriprep_noisefiles{run},rundirnames{run}) % check whether data for run are not missing/excluded
-        
-            % move preprocessed image and fmriprep noisefile into rundir if
-            % needed
+        % MOVE FMRIPREP NOISEFILE AND SMOOTHED IMAGE INTO RUNDIR IF
             if ~contains(ls(rundir),fmriprep_noisefiles{run})
                 copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
             end
-            
+
             if ~contains(ls(rundir),derivimgs{run})
                 copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
                 gunzip(fullfile(rundir,derivimgs{run}));
                 delete(fullfile(rundir,derivimgs{run}));
             end
-            
-            uderivimg = dir(fullfile(DSGN.subjects{sub},DSGN.funcnames{run}));
-            if ~contains(ls(rundir),uderivimg.name)
-                error('run indices for smoothed images in derivdir do not match for %s, please check before proceeding',derivsubjs{sub});
+
+        % CONFOUND REGRESSOR FILES
+        
+        % load confound regressor file generated by fMRIprep into Matlab table
+        % variable
+        Rfull = readtable(fullfile(rundir,fmriprep_noisefiles{run}),'TreatAsEmpty','n/a','FileType', 'text', 'Delimiter', 'tab');
+
+        % replace NaNs in first row with Os
+        wh_replace = ismissing(Rfull(1,:));
+            if any(wh_replace)
+                Rfull{1, wh_replace} = zeros(1, sum(wh_replace)); % make array of zeros of the right size
             end
 
-            % CONFOUND REGRESSOR FILES
-            % load confound regressor file generated by fMRIprep into Matlab table
-            % variable
-            Rfull = readtable(fullfile(rundir,fmriprep_noisefiles{run}),'TreatAsEmpty','n/a','FileType', 'text', 'Delimiter', 'tab');
+        % calculate and extract confound regressors
+            if strcmpi(spike_def,'fMRIprep')==1 % switch would probably make more sense in this case, but this works too!
 
-            % replace NaNs in first row with Os
-            wh_replace = ismissing(Rfull(1,:));
-                if any(wh_replace)
-                    Rfull{1, wh_replace} = zeros(1, sum(wh_replace)); % make array of zeros of the right size
-                end
+                % define regressors in fMRIprep output
+                regs=Rfull.Properties.VariableNames;
+                spike_cols = contains(regs,'motion_outlier');
+                Rspikes=Rfull(:,spike_cols);
+                Rspikes.spikes=sum(Rspikes{:,1:end},2);
+                volume_idx = [1:height(Rfull)]; 
+                spikes = volume_idx(Rspikes.spikes==1);
 
-            % calculate and extract confound regressors
-                if strcmpi(spike_def,'fMRIprep')==1 % switch would probably make more sense in this case, but this works too!
+                % flag user-specified number of volumes after each spike
+                % Motion can create artifacts lasting longer than the single image we
+                % usually account for using spike id scripts. we're also going to flag the
+                % following TRs, the number of which is defined by the user. If
+                % 'spike_additional_vols' remains unspecified, everything will proceed as
+                % it did before, meaning spikes will be identified and flagged in the
+                % creation of nuisance regressors without considering the following TRs
+                % Add them if user requested, for both nuisance_covs and dvars_spikes_regs
+                    if exist('spike_additional_vols')
+                        additional_spikes_regs = zeros(height(Rfull),size(spikes,2)*spike_additional_vols);
+                            % This loop will create a separate column with ones in each row (TR) 
+                            % we would like to consider a nuisance regressor
+                            for i = 1:size(spikes,2) 
+                                additional_spikes_regs(spikes(i)+1 : spikes(i)+spike_additional_vols,(i*spike_additional_vols-(spike_additional_vols-1)):(i*spike_additional_vols)) = eye(spike_additional_vols);
+                            end
+                        % if any spikes went beyond the end, trim it down
+                        additional_spikes_regs = additional_spikes_regs(1:height(Rfull),:);
+                        % add the additional spikes to the larger matrix
+                        Rfull = [Rfull array2table(additional_spikes_regs)];
+                    end
 
-                    % define regressors in fMRIprep output
-                    regs=Rfull.Properties.VariableNames;
-                    spike_cols = contains(regs,'motion_outlier');
-                    Rspikes=Rfull(:,spike_cols);
-                    Rspikes.spikes=sum(Rspikes{:,1:end},2);
-                    volume_idx = [1:height(Rfull)]; 
-                    spikes = volume_idx(Rspikes.spikes==1);
+                % remove redundant spike regressors
+                regs = Rfull.Properties.VariableNames;
+                spike_cols = contains(regs,'motion_outlier');
+                additional_spike_cols = contains(regs,'additional_spikes'); 
+                [duplicate_rows, ~] = find(sum(Rfull{:, spike_cols | additional_spike_cols}, 2)>1);
+                    for i = 1:length(duplicate_rows) % This loop sets duplicate values to zero; drops them later (to keep indices the same during the loop)
+                        [~,curr_cols] = find(Rfull{duplicate_rows(i),:}==1);
+                        Rfull{duplicate_rows(i), curr_cols(2:end)} = 0;
+                    end
+                Rfull = Rfull(1:height(Rfull), any(table2array(Rfull)));
 
-                    % flag user-specified number of volumes after each spike
-                    % Motion can create artifacts lasting longer than the single image we
-                    % usually account for using spike id scripts. we're also going to flag the
-                    % following TRs, the number of which is defined by the user. If
-                    % 'spike_additional_vols' remains unspecified, everything will proceed as
-                    % it did before, meaning spikes will be identified and flagged in the
-                    % creation of nuisance regressors without considering the following TRs
-                    % Add them if user requested, for both nuisance_covs and dvars_spikes_regs
-                        if exist('spike_additional_vols')
-                            additional_spikes_regs = zeros(height(Rfull),size(spikes,2)*spike_additional_vols);
-                                % This loop will create a separate column with ones in each row (TR) 
-                                % we would like to consider a nuisance regressor
-                                for i = 1:size(spikes,2) 
-                                    additional_spikes_regs(spikes(i)+1 : spikes(i)+spike_additional_vols,(i*spike_additional_vols-(spike_additional_vols-1)):(i*spike_additional_vols)) = eye(spike_additional_vols);
-                                end
-                            % if any spikes went beyond the end, trim it down
-                            additional_spikes_regs = additional_spikes_regs(1:height(Rfull),:);
-                            % add the additional spikes to the larger matrix
-                            Rfull = [Rfull array2table(additional_spikes_regs)];
-                        end
+            elseif strcmpi(spike_def,'CANlab')==1
 
-                    % remove redundant spike regressors
-                    regs = Rfull.Properties.VariableNames;
-                    spike_cols = contains(regs,'motion_outlier');
-                    additional_spike_cols = contains(regs,'additional_spikes'); 
-                    [duplicate_rows, ~] = find(sum(Rfull{:, spike_cols | additional_spike_cols}, 2)>1);
-                        for i = 1:length(duplicate_rows) % This loop sets duplicate values to zero; drops them later (to keep indices the same during the loop)
-                            [~,curr_cols] = find(Rfull{duplicate_rows(i),:}==1);
-                            Rfull{duplicate_rows(i), curr_cols(2:end)} = 0;
-                        end
-                    Rfull = Rfull(1:height(Rfull), any(table2array(Rfull)));
+                % unzip & define raw image file
+                gunzip(BIDSimgs{run}); % raw images are needed when spike_def = CANlab, which calls a function that is incompatible with .nii.gz, hence we unzip
+                uBIDSimg = dir(fullfile(subjBIDSdir,'*bold.nii'));
+                uBIDSimg = {uBIDSimg(:).name}';
 
-                elseif strcmpi(spike_def,'CANlab')==1
+                % add in canlab spike detection (Mahalanobis distance)
+                [g, mahal_spikes, gtrim, mahal_spikes_regs, snr] = scn_session_spike_id(fullfile(subjBIDSdir,uBIDSimg), 'doplot', 0); % CANlab function needs to be on your Matlab path
+                delete('*.img'); % delete implicit mask .hdr/.img files generated by the CANlab function on the line above, since we don't need/use them
+                delete('*.hdr');
+                delete(uBIDSimg); % delete unzipped image since we don't need it anymore and it eats up space
+                mahal_spikes_regs(:,1) = []; %drop gtrim which is the global signal
+                Rfull(:,contains(Rfull.Properties.VariableNames,'motion_outlier'))=[]; % drop fmriprep motion outliers since we do not use them when spike_def = CANlab, and they cause redundancies
+                Rfull = [Rfull array2table(mahal_spikes_regs)];
 
-                    % unzip & define raw image file
-                    gunzip(BIDSimgs{run}); % raw images are needed when spike_def = CANlab, which calls a function that is incompatible with .nii.gz, hence we unzip
-                    uBIDSimg = dir(fullfile(subjBIDSdir,'*bold.nii'));
-                    uBIDSimg = {uBIDSimg(:).name}';
+                % add in dvars spike regressors that are non-redundant with mahal spikes
+                dvarsZ = [0; zscore(Rfull.dvars(2:end))]; % first element of dvars always = 0, drop it from zscoring and set it to Z=0
+                dvars_spikes = find(dvarsZ > dvars_threshold);
+                same = ismember(dvars_spikes,mahal_spikes);
+                dvars_spikes(same) = []; % drop the redundant ones
+                dvars_spikes_regs = zeros(height(Rfull),size(dvars_spikes,1));
+                    for i=1:size(dvars_spikes,1)
+                        dvars_spikes_regs(dvars_spikes(i),i) = 1;
+                    end
+                Rfull = [Rfull array2table(dvars_spikes_regs)];
 
-                    % add in canlab spike detection (Mahalanobis distance)
-                    [g, mahal_spikes, gtrim, mahal_spikes_regs, snr] = scn_session_spike_id(fullfile(subjBIDSdir,uBIDSimg), 'doplot', 0); % CANlab function needs to be on your Matlab path
-                    delete('*.img'); % delete implicit mask .hdr/.img files generated by the CANlab function on the line above, since we don't need/use them
-                    delete('*.hdr');
-                    delete(uBIDSimg); % delete unzipped image since we don't need it anymore 
-                    mahal_spikes_regs(:,1) = []; %drop gtrim which is the global signal
-                    Rfull(:,contains(Rfull.Properties.VariableNames,'motion_outlier'))=[]; % drop fmriprep motion outliers since we do not use them when spike_def = CANlab, and they cause redundancies
-                    Rfull = [Rfull array2table(mahal_spikes_regs)];
+                % flag user-specified number of volumes after each spike
+                % Motion can create artifacts lasting longer than the single image we
+                % usually account for using spike id scripts. we're also going to flag the
+                % following TRs, the number of which is defined by the user. If
+                % 'spike_additional_vols' remains unspecified, everything will proceed as
+                % it did before, meaning spikes will be identified and flagged in the
+                % creation of nuisance regressors without considering the following TRs
+                % Add them if user requested, for both nuisance_covs and dvars_spikes_regs
+                    if exist('spike_additional_vols')
+                        % concatenate generated spike and DVARS regs. We
+                        % would like to flag subsequent TR's with respect to both of these
+                        % measures.
+                        spikes = [mahal_spikes;dvars_spikes];
+                        additional_spikes_regs = zeros(size(mahal_spikes_regs,1),size(spikes,1)*spike_additional_vols);
+                            % This loop will create a separate column with ones in each row (TR) 
+                            % we would like to consider a nuisance regressor
+                            % Performs this function for spikes and DVARS. 
+                            for i = 1:size(spikes,1) 
+                                additional_spikes_regs(spikes(i)+1 : spikes(i)+spike_additional_vols,(i*spike_additional_vols-(spike_additional_vols-1)):(i*spike_additional_vols)) = eye(spike_additional_vols);
+                            end
+                        % if any spikes went beyond the end, trim it down
+                        additional_spikes_regs = additional_spikes_regs(1:height(Rfull),:);
+                        % add the additional spikes to the larger matrix
+                        Rfull = [Rfull array2table(additional_spikes_regs)];
+                    end
 
-                    % add in dvars spike regressors that are non-redundant with mahal spikes
-                    dvarsZ = [0; zscore(Rfull.dvars(2:end))]; % first element of dvars always = 0, drop it from zscoring and set it to Z=0
-                    dvars_spikes = find(dvarsZ > dvars_threshold);
-                    same = ismember(dvars_spikes,mahal_spikes);
-                    dvars_spikes(same) = []; % drop the redundant ones
-                    dvars_spikes_regs = zeros(height(Rfull),size(dvars_spikes,1));
-                        for i=1:size(dvars_spikes,1)
-                            dvars_spikes_regs(dvars_spikes(i),i) = 1;
-                        end
-                    Rfull = [Rfull array2table(dvars_spikes_regs)];
+                % remove redundant spike regressors
+                regs = Rfull.Properties.VariableNames;
+                spike_cols = contains(regs,'mahal_spikes'); 
+                dvars_cols = contains(regs,'dvars_spikes'); 
+                additional_spike_cols = contains(regs,'additional_spikes'); 
 
-                    % flag user-specified number of volumes after each spike
-                    % Motion can create artifacts lasting longer than the single image we
-                    % usually account for using spike id scripts. we're also going to flag the
-                    % following TRs, the number of which is defined by the user. If
-                    % 'spike_additional_vols' remains unspecified, everything will proceed as
-                    % it did before, meaning spikes will be identified and flagged in the
-                    % creation of nuisance regressors without considering the following TRs
-                    % Add them if user requested, for both nuisance_covs and dvars_spikes_regs
-                        if exist('spike_additional_vols')
-                            % concatenate generated spike and DVARS regs. We
-                            % would like to flag subsequent TR's with respect to both of these
-                            % measures.
-                            spikes = [mahal_spikes;dvars_spikes];
-                            additional_spikes_regs = zeros(size(mahal_spikes_regs,1),size(spikes,1)*spike_additional_vols);
-                                % This loop will create a separate column with ones in each row (TR) 
-                                % we would like to consider a nuisance regressor
-                                % Performs this function for spikes and DVARS. 
-                                for i = 1:size(spikes,1) 
-                                    additional_spikes_regs(spikes(i)+1 : spikes(i)+spike_additional_vols,(i*spike_additional_vols-(spike_additional_vols-1)):(i*spike_additional_vols)) = eye(spike_additional_vols);
-                                end
-                            % if any spikes went beyond the end, trim it down
-                            additional_spikes_regs = additional_spikes_regs(1:height(Rfull),:);
-                            % add the additional spikes to the larger matrix
-                            Rfull = [Rfull array2table(additional_spikes_regs)];
-                        end
+                [duplicate_rows, ~] = find(sum(Rfull{:, spike_cols | dvars_cols | additional_spike_cols}, 2)>1);
+                    % set duplicate values to zero; drops them later (to keep indices the same during the loop)
+                    for i = 1:size(duplicate_rows,1) 
+                        [~,curr_cols] = find(Rfull{duplicate_rows(i),:}==1);
+                        Rfull{duplicate_rows(i), curr_cols(2:end)} = 0;
+                    end
+                Rfull = Rfull(1:size(mahal_spikes_regs,1), any(table2array(Rfull)));
+            else
+                error('invalid spike_def option')
+            end
 
-                    % remove redundant spike regressors
-                    regs = Rfull.Properties.VariableNames;
-                    spike_cols = contains(regs,'mahal_spikes'); 
-                    dvars_cols = contains(regs,'dvars_spikes'); 
-                    additional_spike_cols = contains(regs,'additional_spikes'); 
+        % Select confound and spike regressors to return for use in GLM 
+        regs = Rfull.Properties.VariableNames;
+        motion_cols = contains(regs,'rot') | contains(regs,'trans');
+        spike_cols = contains(regs,'mahal_spikes') | contains(regs,'motion_outlier'); 
+        dvars_cols = contains(regs,'dvars_spikes'); 
+        additional_spike_cols = contains(regs,'additional_spikes'); 
+        R = Rfull(:,motion_cols | spike_cols | dvars_cols | additional_spike_cols);
+        R.csf = Rfull.csf;
+        Rspikes=Rfull(:,spike_cols | dvars_cols | additional_spike_cols);
+        Rspikes.spikes=sum(Rspikes{:,1:end},2);
+        volume_idx = [1:height(Rfull)]; 
+        spikes = volume_idx(Rspikes.spikes==1)';
 
-                    [duplicate_rows, ~] = find(sum(Rfull{:, spike_cols | dvars_cols | additional_spike_cols}, 2)>1);
-                        for i = 1:size(duplicate_rows,1) %This loop sets duplicate values to zero; drops them later (to keep indices the same during the loop)
-                            [~,curr_cols] = find(Rfull{duplicate_rows(i),:}==1);
-                            Rfull{duplicate_rows(i), curr_cols(2:end)} = 0;
-                        end
-                    Rfull = Rfull(1:size(mahal_spikes_regs,1), any(table2array(Rfull)));
-                else
-                    error('invalid spike_def option')
-                end
+        % compute and output how many spikes total
+        n_spike_regs = sum(dvars_cols | spike_cols | additional_spike_cols);
+        n_spike_regs_percent = n_spike_regs / height(Rfull);
 
-            % Select confound and spike regressors to return for use in GLM 
-            regs = Rfull.Properties.VariableNames;
-            motion_cols = contains(regs,'rot') | contains(regs,'trans');
-            spike_cols = contains(regs,'mahal_spikes') | contains(regs,'motion_outlier'); 
-            dvars_cols = contains(regs,'dvars_spikes'); 
-            additional_spike_cols = contains(regs,'additional_spikes'); 
-            R = Rfull(:,motion_cols | spike_cols | dvars_cols | additional_spike_cols);
-            R.csf = Rfull.csf;
-            Rspikes=Rfull(:,spike_cols | dvars_cols | additional_spike_cols);
-            Rspikes.spikes=sum(Rspikes{:,1:end},2);
-            volume_idx = [1:height(Rfull)]; 
-            spikes = volume_idx(Rspikes.spikes==1)';
+        % print warning if #volumes identified as spikes exceeds
+        % user-defined threshold
+            if n_spike_regs_percent > spikes_percent_threshold
+                warning('number of volumes identified as spikes exceeds threshold in %s',subjrunnames{run})
+            end
 
-            % compute and output how many spikes total
-            n_spike_regs = sum(dvars_cols | spike_cols | additional_spike_cols);
-            n_spike_regs_percent = n_spike_regs / height(Rfull);
+        % save confound regressors as matrix named R for use in
+        % SPM/CANlab GLM model tools
+        R=table2array(R);
 
-            % print warning if #volumes identified as spikes exceeds
-            % user-defined threshold
-                if n_spike_regs_percent > spikes_percent_threshold
-                    warning('number of volumes identified as spikes exceeds threshold in %s',runnames(run,:))
-                end
+        % define and create subdir for model
+        runmodeldir = fullfile(rundir,DSGN.modelingfilesdir);
+            if ~exist(runmodeldir,'dir')
+                mkdir(runmodeldir);
+            end
 
-            % save confound regressors as matrix named R for use in
-            % SPM/CANlab GLM model tools
-            R=table2array(R);
-            % define and create subdir for model
-            runmodeldir = fullfile(rundir,DSGN.modelingfilesdir);
-                if ~exist(runmodeldir,'dir')
-                    mkdir(runmodeldir);
-                end
-            % write confound regressors
-            filename_noise_regs = fullfile(runmodeldir,DSGN.multireg);
-            save(filename_noise_regs,'R');
-            
-            clear R* filename_events
+        % write confound regressors
+        filename_noise_regs = fullfile(runmodeldir,DSGN.multireg);
+        save(filename_noise_regs,'R');
 
-            % EVENTS FILES
-            % read events.tsv files
-            O = readtable(fullfile(subjBIDSdir,eventsfiles{run}),'FileType', 'text', 'Delimiter', 'tab');
-            O.trial_type = categorical(O.trial_type);
-            % omit trials that coincide with spikes if that option is chosen
-                if strcmpi(omit_spike_trials,'yes')==1
-                    same=ismember(O.onset,spikes); % identify trials for which onset coincides with spike
-                    O(same,:)=[]; % get rid of trials coinciding with spikes
-                elseif strcmpi(omit_spike_trials,'no')==1
-                else
-                    error('invalid omit_spike_trials option')
-                end
-            
-            % initialize structures for conditions
+        clear R* filename_events
+
+        % EVENTS FILES
+        % read events.tsv files
+        O = readtable(fullfile(subjBIDSdir,eventsfiles{run}),'FileType', 'text', 'Delimiter', 'tab');
+        O.trial_type = categorical(O.trial_type);
+        % omit trials that coincide with spikes if that option is chosen
+            if strcmpi(omit_spike_trials,'yes')==1
+                same=ismember(O.onset,spikes); % identify trials for which onset coincides with spike
+                O(same,:)=[]; % get rid of trials coinciding with spikes
+            elseif strcmpi(omit_spike_trials,'no')==1
+            else
+                error('invalid omit_spike_trials option')
+            end
+
+        % sanity check #3: conditions
+        cat_conds = reordercats(categorical(DSGN.conditions{1}));
+        cat_conds = categories(cat_conds);
+        cat_trial_type = cellstr(unique(O.trial_type));
+
+            if ~isequal(cat_trial_type,cat_conds)
+                error('conditions in DSGN structure do not match conditions in %s, please check before proceeding',fmriprep_noisefiles{run})
+            else 
+                warning('conditions in DSGN structure match conditions in %s, continuing',fmriprep_noisefiles{run})
+            end
+
+        % initialize structures for conditions
             for cond = 1:size(DSGN.conditions{1},2)
-                cond_struct{cond} = struct('name',{DSGN.conditions{1}{cond}}, ...
+                cond_struct{cond} = struct('name',{DSGN.conditions{1}(cond)}, ...
                     'onset',{{[]}}, ...
                     'duration',{{[]}});
             end
-            
-%             if ~isequal(char(unique(O.trial_type)'),char(DSGN.conditions{1}))
-%                 error('conditions in DSGN structure do not match conditions in events.tsv file in %s',runnames{run})
-%             end
-            
+
+            clear cond
+
+        % fill structures with onsets and durations
             for trial = 1:size(O.trial_type,1)
                 cond = 1;
                 while cond < size(DSGN.conditions{1},2) + 1
@@ -494,38 +609,40 @@ for sub=1:size(derivsubjs,1)
                     end
                 cond = cond + 1;
                 end
-%                     case DSGN.conditions{1}{2}
-%                         cond_struct{2}.onset{1} = [cond_struct{2}.onset{1},O.onset(trial)];
-%                         cond_struct{2}.duration{1} = [cond_struct{2}.duration{1},O.duration(trial)];
-%                     case DSGN.conditions{1}{3}
-%                         cond_struct{3}.onset{1} = [cond_struct{3}.onset{1},O.onset(trial)];
-%                         cond_struct{3}.duration{1} = [cond_struct{3}.duration{1},O.duration(trial)];
-%                     case DSGN.conditions{1}{4}
-%                         cond_struct{4}.onset{1} = [cond_struct{4}.onset{1},O.onset(trial)];
-%                         cond_struct{4}.duration{1} = [cond_struct{4}.duration{1},O.duration(trial)];
-%                     case DSGN.conditions{1}{5}
-%                         cond_struct{5}.onset{1} = [cond_struct{5}.onset{1},O.onset(trial)];
-%                         cond_struct{5}.duration{1} = [cond_struct{5}.duration{1},O.duration(trial)];
-%                     case DSGN.conditions{1}{6}
-%                         cond_struct{6}.onset{1} = [cond_struct{5}.onset{1},O.onset(trial)];
-%                         cond_struct{6}.duration{1} = [cond_struct{5}.duration{1},O.duration(trial)];
-%                 end
                 continue
             end
-  
-                
-                    
-            % save events file as .mat file
-            filename_events = strcat(rundir,'\onsets_',runnames(run,:));
-            save(filename_events,'O');
-            clear O filename_events
 
-            clear onsetfiles
-            
-        else
-            warning('missing run %s',runnames(run,:))
-            
-        end % if loop checking if data for run is not missing
+            clear cond
+
+        % initialize structures for pmods if specified in DSGN
+            if isfield(DSGN,'pmods')
+            end
+
+
+        % sanity check #2: design info
+        nii_hdr = read_hdr(derivimgs{run}); % reads Nifti header of smoothed image into a structure
+
+            for cond = 1:size(DSGN.conditions{1},2)
+                DesignTiming(1,cond) = (max(cond_struct{cond}.onset{1}) + cond_struct{cond}.duration{1}(1,end));
+            end
+
+            clear cond
+
+        maxDesignTiming = max(DesignTiming);
+        boldDuration = nii_hdr.tdim*DSGN.tr;
+
+            if boldDuration < maxDesignTiming
+                error('End of last condition (%s sec) exceeds BOLD duration (%s sec) in %s, please check before proceeding', num2str(maxDesignTiming), num2str(boldDuration), subjrunnames{run})
+            else
+                warning('End of last condition (%s sec) does not exceed BOLD duration (%s sec) in %s, continuing', num2str(maxDesignTiming), num2str(boldDuration), subjrunnames{run})
+            end
+
+        % save events file as .mat file
+            for cond = 1:size(DSGN.conditions{1},2)
+                struct = cond_struct{cond};
+                save(fullfile(rundir,char(cond_struct{cond}.name)),'-struct','struct');
+                clear struct
+            end
         
     end % for loop runs
     
