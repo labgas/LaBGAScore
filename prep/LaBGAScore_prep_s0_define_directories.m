@@ -37,9 +37,9 @@ derivlist = derivlist([derivlist(:).isdir]);
 derivsubjs = cellstr(char(derivlist.name));
 
 if isequal(sourcesubjs,BIDSsubjs,derivsubjs)
-    warning('numbers and names of subjects in %s, %s, and %s match - good to go \n',sourcedir,BIDSdir,derivdir);
+    warning('\n numbers and names of subjects in %s, %s, and %s match - good to go',sourcedir,BIDSdir,derivdir);
 else
-    error('numbers and names of subjects in %s, %s, and %s do not match - please check before proceeding and make sure your file organization is consistent with LaBGAS conventions \n',sourcedir,BIDSdir,derivdir);
+    error('\n numbers and names of subjects in %s, %s, and %s do not match - please check before proceeding and make sure your file organization is consistent with LaBGAS conventions',sourcedir,BIDSdir,derivdir);
 end
 
 
