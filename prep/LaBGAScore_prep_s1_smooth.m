@@ -33,8 +33,8 @@
 % date:   November, 2021
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s1_smooth.m         v1.0       
-% last modified: 2021/06/04
+% @(#)% LaBGAScore_prep_s1_smooth.m         v1.1       
+% last modified: 2022/03/10
 %
 %
 %% SET SMOOTHING OPTIONS, AND SUBJECTS
