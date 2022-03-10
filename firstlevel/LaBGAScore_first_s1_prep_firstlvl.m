@@ -90,11 +90,15 @@ spikes_percent_threshold=0.15;
 dvars_threshold = 2;
 spike_additional_vols=0;
 
+% ONLY NEEDED IF YOU HAVE PARAMETRIC MODULATORS
+pmod_polynom = 1; % polynomial expansion for pmods
+pmod_name = 'rating'; % variable name of your pmod in events.tsv file
+
 % THIS CHOICE OF OPTIONS CAN BE CONSIDERED LABGAS DEFAULTS, BUT MAY BE
 % STUDY SPECIFIC, SO DISCUSS WITH LUKAS IF IN DOUBT!
 
 
-%% DEFINE AND CREATE DIRECTORIES AND RUNS
+%% DEFINE DIRECTORIES AND CONDITIONS OF INTEREST
 %--------------------------------------------------------------------------
 
 % load standard BIDS directory structure from root dir
@@ -231,7 +235,7 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
     DSGN.contrasts{c} = {{'.*liking_sucrose'} {'.*liking_sucralose'}}; % CON_0018
     c=c+1;
     DSGN.contrasts{c} = {{'.*liking_sucrose'} {'.*liking_erythritol'}}; % CON_0019
-    c=c+1;strsplit(eventsfiles{1},'_desc');
+    c=c+1;
     DSGN.contrasts{c} = {{'.*liking_erythritol'} {'.*liking_sucralose'}}; % CON_0020
     
     % OPTIONAL FIELDS
@@ -378,9 +382,9 @@ for sub=1:size(derivsubjs,1)
     
     % sanity check #1: number of images & noise/event files
     if ~isequal(size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1),size(eventsfiles,1)) 
-        error('numbers of raw images, preprocessed images, noise, and events files do not match for %s, please check before proceeding',derivsubjs{sub});
+        error('\n numbers of raw images, preprocessed images, noise, and events files do not match for %s, please check BIDSimgs, derivimgs, fmriprep_noisefiles, and eventsfiles variables before proceeding',derivsubjs{sub});
     else
-        warning('numbers of raw images, preprocessed images, noise, and events files match for %s, continuing',derivsubjs{sub});
+        warning('\n numbers of raw images, preprocessed images, noise, and events files match for %s, continuing',derivsubjs{sub});
     end
 
     %% CALCULATE AND/OR EXTRACT CONFOUND REGRESSORS AND EVENTS FILES, AND WRITE TO THE CORRECT FILE/FOLDER STRUCTURE
@@ -523,7 +527,7 @@ for sub=1:size(derivsubjs,1)
                     end
                 Rfull = Rfull(1:size(mahal_spikes_regs,1), any(table2array(Rfull)));
             else
-                error('invalid spike_def option')
+                error('\n invalid spike_def option')
             end
 
         % Select confound and spike regressors to return for use in GLM 
@@ -546,7 +550,7 @@ for sub=1:size(derivsubjs,1)
         % print warning if #volumes identified as spikes exceeds
         % user-defined threshold
             if n_spike_regs_percent > spikes_percent_threshold
-                warning('number of volumes identified as spikes exceeds threshold in %s',subjrunnames{run})
+                warning('\n number of volumes identified as spikes exceeds threshold in %s',subjrunnames{run})
             end
 
         % save confound regressors as matrix named R for use in
@@ -569,29 +573,31 @@ for sub=1:size(derivsubjs,1)
         % read events.tsv files
         O = readtable(fullfile(subjBIDSdir,eventsfiles{run}),'FileType', 'text', 'Delimiter', 'tab');
         O.trial_type = categorical(O.trial_type);
+        O.Properties.VariableNames(categorical(O.Properties.VariableNames) == pmod_name) = {'pmod'};
+        
         % omit trials that coincide with spikes if that option is chosen
             if strcmpi(omit_spike_trials,'yes')==1
                 same=ismember(O.onset,spikes); % identify trials for which onset coincides with spike
                 O(same,:)=[]; % get rid of trials coinciding with spikes
             elseif strcmpi(omit_spike_trials,'no')==1
             else
-                error('invalid omit_spike_trials option')
+                error('\n invalid omit_spike_trials option')
             end
 
-        % sanity check #3: conditions
-        cat_conds = reordercats(categorical(DSGN.conditions{1}));
+        % sanity check #2: conditions
+        cat_conds = reordercats(categorical(DSGN.conditions{run}));
         cat_conds = categories(cat_conds);
         cat_trial_type = cellstr(unique(O.trial_type));
 
             if ~isequal(cat_trial_type,cat_conds)
-                error('conditions in DSGN structure do not match conditions in %s, please check before proceeding',fmriprep_noisefiles{run})
+                error('\n conditions in DSGN structure do not match conditions in %s, please check before proceeding',fmriprep_noisefiles{run})
             else 
-                warning('conditions in DSGN structure match conditions in %s, continuing',fmriprep_noisefiles{run})
+                warning('\n conditions in DSGN structure match conditions in %s, continuing',fmriprep_noisefiles{run})
             end
 
         % initialize structures for conditions
             for cond = 1:size(DSGN.conditions{1},2)
-                cond_struct{cond} = struct('name',{DSGN.conditions{1}(cond)}, ...
+                cond_struct{cond} = struct('name',{DSGN.conditions{run}(cond)}, ...
                     'onset',{{[]}}, ...
                     'duration',{{[]}});
             end
@@ -601,9 +607,9 @@ for sub=1:size(derivsubjs,1)
         % fill structures with onsets and durations
             for trial = 1:size(O.trial_type,1)
                 cond = 1;
-                while cond < size(DSGN.conditions{1},2) + 1
+                while cond < size(DSGN.conditions{run},2) + 1
                     switch O.trial_type(trial)
-                        case DSGN.conditions{1}{cond}
+                        case DSGN.conditions{run}{cond}
                                 cond_struct{cond}.onset{1} = [cond_struct{cond}.onset{1},O.onset(trial)];
                                 cond_struct{cond}.duration{1} = [cond_struct{cond}.duration{1},O.duration(trial)];
                     end
@@ -614,13 +620,36 @@ for sub=1:size(derivsubjs,1)
 
             clear cond
 
-        % initialize structures for pmods if specified in DSGN
+        % add pmods to structures for conditions of interest if specified in DSGN
             if isfield(DSGN,'pmods')
+                for pmod = 1:size(DSGN.pmods{run},2)
+                    cond_struct{pmod}.pmod = struct('name',{DSGN.pmods{run}(pmod)}, ...
+                        'param',{{[]}}, ...
+                        'poly',{{pmod_polynom}});
+                end
+                
+                clear pmod
+                
+                for trial = 1:size(O.trial_type,1)
+                    pmod = 1; 
+                    while pmod < size(DSGN.pmods{run},2) + 1
+                        switch O.trial_type(trial)
+                            case DSGN.conditions{run}{pmod}
+                               cond_struct{pmod}.pmod.param{1} = [cond_struct{pmod}.pmod.param{1},O.pmod(trial)];
+                        end
+                    pmod = pmod + 1;
+                    end
+                    continue
+                end
+                
+                clear pmod
+                
             end
 
 
-        % sanity check #2: design info
-        nii_hdr = read_hdr(derivimgs{run}); % reads Nifti header of smoothed image into a structure
+        % sanity check #3: design info
+        nii = dir(fullfile(rundir,'*.nii')).name;
+        nii_hdr = read_hdr(fullfile(rundir,nii)); % reads Nifti header of smoothed image into a structure
 
             for cond = 1:size(DSGN.conditions{1},2)
                 DesignTiming(1,cond) = (max(cond_struct{cond}.onset{1}) + cond_struct{cond}.duration{1}(1,end));
@@ -632,15 +661,15 @@ for sub=1:size(derivsubjs,1)
         boldDuration = nii_hdr.tdim*DSGN.tr;
 
             if boldDuration < maxDesignTiming
-                error('End of last condition (%s sec) exceeds BOLD duration (%s sec) in %s, please check before proceeding', num2str(maxDesignTiming), num2str(boldDuration), subjrunnames{run})
+                error('\n End of last condition (%s sec) exceeds BOLD duration (%s sec) in %s, please check before proceeding', num2str(maxDesignTiming), num2str(boldDuration), subjrunnames{run})
             else
-                warning('End of last condition (%s sec) does not exceed BOLD duration (%s sec) in %s, continuing', num2str(maxDesignTiming), num2str(boldDuration), subjrunnames{run})
+                warning('\n End of last condition (%s sec) does not exceed BOLD duration (%s sec) in %s, continuing', num2str(maxDesignTiming), num2str(boldDuration), subjrunnames{run})
             end
 
         % save events file as .mat file
             for cond = 1:size(DSGN.conditions{1},2)
                 struct = cond_struct{cond};
-                save(fullfile(rundir,char(cond_struct{cond}.name)),'-struct','struct');
+                save(fullfile(runmodeldir,char(cond_struct{cond}.name)),'-struct','struct');
                 clear struct
             end
         
