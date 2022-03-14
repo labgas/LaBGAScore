@@ -1,4 +1,4 @@
-%% LaBGAScore_prep_s0_define directories
+%% LaBGAScore_prep_s0_define_directories
 %
 % This script will define the paths for the standard BIDS-compliant
 % directory structure for (datalad) datasets for LaBGAS neuroimaging projects
@@ -13,6 +13,8 @@
 % date:   November, 2021
 %
 %__________________________________________________________________________
+% @(#)% LaBGAScore_prep_s0_define_directories.m         v1.1       
+% last modified: 2022/03/14
 % 
 %
 %% DEFINE DIRECTORIES AND ADD CODE DIR TO MATLAB PATH

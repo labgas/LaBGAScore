@@ -3,7 +3,7 @@
 % This script will unzip fMRIprep output images, smooth them, zip the
 % smoothed images, and delete all the unzipped images again
 %
-% IMPORTANT NOTE
+% USAGE
 % Run this script from the root dir of your (super)dataset as it first
 % calls LaBGAScore_prep_s0_define_directories which uses a relative path
 % 
