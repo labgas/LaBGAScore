@@ -75,9 +75,9 @@
 %
 %__________________________________________________________________________
 % @(#)% LaBGAScore_first_s1_prep_firstlvl.m         v1.0        
-% last modified: 2022/03/04
-
-
+% last modified: 2022/03/14
+%
+%
 %% SET OPTIONS
 %--------------------------------------------------------------------------
 
@@ -122,7 +122,7 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
     % REQUIRED FIELDS
     DSGN.metadata = "proj-erythritol_4a first level analysis model 1, i.e. modeling 4 conditions for sucrose, erythritol, sucralose, and water as long events (= duration of solution in mouth), with sweetness liking ratings as parametric modulators"; % field for annotation with study info, or whatever you like
     DSGN.modeldir = '/data/test_scripts/firstlevel/model_1_conds_pmods'; % directory where you want to write first level results for this model
-    DSGN.subjects = derivsubjdirs'; % sets up empty cell array field for subjects in structure array DSGN
+    DSGN.subjects = derivsubjdirs';
     DSGN.funcnames = {'/func/run-1/s6*.nii',...
         '/func/run-2/s6*.nii',...
         '/func/run-3/s6*.nii',...
@@ -318,23 +318,34 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
 % create first level directory
 
 firstleveldir = fullfile(rootdir,'firstlevel');
-if ~exist(firstleveldir,'dir')
-    mkdir(firstleveldir);
-end
+    if ~exist(firstleveldir,'dir')
+        mkdir(firstleveldir);
+    end
 
 % create firstmodeldir
 
 firstmodeldir = DSGN.modeldir;
-if ~exist(firstmodeldir,'dir')
-    mkdir(firstmodeldir);
-end
+    if ~exist(firstmodeldir,'dir')
+        mkdir(firstmodeldir);
+    end
 
-% write subjectdirs in firstlevelmodeldir
+% write subjectdirs in firstmodeldir
 
-if ~contains(ls(firstmodeldir),'sub-') % checks whether there are already subject dirs in firstmodeldir
-    cd (firstmodeldir);
-    cellfun(sm,derivsubjs);
-end
+    if ~contains(ls(firstmodeldir),'sub-') % checks whether there are already subject dirs in firstmodeldir
+        cd (firstmodeldir);
+        cellfun(sm,derivsubjs);
+    end
+    
+cd(rootdir);
+
+% create list of subjectdirs in firstmodel dir
+
+firstlist = dir(fullfile(firstmodeldir,'sub-*'));
+firstsubjs = cellstr(char(firstlist(:).name));
+
+    for firstsub = 1:size(firstsubjs,1)
+        firstsubjdirs{firstsub,1} = fullfile(firstlist(firstsub).folder,firstlist(firstsub).name);
+    end
 
 
 %% LOOP OVER SUBJECTS
@@ -346,6 +357,11 @@ for sub=1:size(derivsubjs,1)
     
     subjderivdir = fullfile(derivsubjdirs{sub},'func');
     subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
+    subjfirstdir = firstsubjdirs{sub};
+    subjfirstdiagnosedir = fullfile(subjfirstdir,'diagnostics');
+        if ~exist(subjfirstdiagnosedir,'dir')
+            mkdir(subjfirstdiagnosedir);
+        end
     
     BIDSimgs = dir(fullfile(subjBIDSdir,'*bold.nii.gz'));
     BIDSimgs = {BIDSimgs(:).name}';
@@ -380,6 +396,8 @@ for sub=1:size(derivsubjs,1)
         cellfun(sm,rundirnames);
     end
     
+    cd(rootdir);
+    
     % sanity check #1: number of images & noise/event files
     if ~isequal(size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1),size(eventsfiles,1)) 
         error('\n numbers of raw images, preprocessed images, noise, and events files do not match for %s, please check BIDSimgs, derivimgs, fmriprep_noisefiles, and eventsfiles variables before proceeding',derivsubjs{sub});
@@ -387,7 +405,7 @@ for sub=1:size(derivsubjs,1)
         warning('\n numbers of raw images, preprocessed images, noise, and events files match for %s, continuing',derivsubjs{sub});
     end
 
-    %% CALCULATE AND/OR EXTRACT CONFOUND REGRESSORS AND EVENTS FILES, AND WRITE TO THE CORRECT FILE/FOLDER STRUCTURE
+    %% LOOP OVER RUNS: CREATE NOISE REGRESSORS, ONSETS, DURATIONS, AND PARAMETRIC MODULATORS
     
     for run=1:size(fmriprep_noisefiles,1)
         
@@ -674,5 +692,25 @@ for sub=1:size(derivsubjs,1)
             end
         
     end % for loop runs
+    
+    %% FIT FIRST LEVEL MODEL
+    
+    fprintf('\n Running on subject directory %s\n',DSGN.subjects{sub});
+    canlab_glm_subject_levels(DSGN,'subjects',DSGN.subjects(sub),'overwrite','nolinks','noreview');
+    
+    
+    %% DIAGNOSE FIRST LEVEL MODEL
+    
+    diagnose_struct = struct('useNewFigure',false,'maxHeight',800,'maxWidth',1600,...
+        'format','html','outputDir',subjfirstdiagnosedir,...
+        'showCode',true);
+    
+    cd(subjfirstdiagnosedir);
+    
+    publish('LaBGAScore_first_s2_diagnose_firstlvl.m',diagnose_struct)
+    delete('High_pass_filter_analysis.png','Variance_Inflation.png','LaBGAScore_first_s2_diagnose_firstlvl.png'); % getting rid of some redundant output images due to the use of publish()
+    
+    cd(rootdir);
+    
     
 end % for loop subjects 
