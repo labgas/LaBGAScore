@@ -7,6 +7,11 @@
 % Script should be run from the root directory of your superdataset, e.g.
 % /data/proj_discoverie, on Linux OS
 %
+% DEPENDENCIES
+% spm12 added to your Matlab path WITHOUT subdirectories
+% no spm functions are called by this script, 
+% but spmrootdir is defined automatically, for use in later scripts
+%
 %__________________________________________________________________________
 %
 % author: Lukas Van Oudenhove
@@ -24,9 +29,21 @@ sourcedir = fullfile(rootdir,'sourcedata');
 BIDSdir = fullfile(rootdir,'BIDS');
 codedir = fullfile(rootdir,'code');
 derivdir = fullfile(rootdir,'derivatives','fmriprep');
+matlabpath = path;
 
-addpath(genpath(codedir));
+    if ~exist('spm.m','file')
+        spmpathcommand = "addpath('your_spm_rootdir','-end')";
+        error('spm12 not found on Matlab path, please add WITHOUT subfolders using the Matlab GUI or type %s in Matlab terminal before proceeding',spmpathcommand)
+    else
+        spmrootdir = which('spm.m');
+        spmrootdir = strsplit(spmrootdir,'/spm.m');
+        spmrootdir = spmrootdir{1,1};
+    end
 
+if sum(contains(matlabpath,codedir)) == 0
+    addpath(genpath(codedir),'-end');
+    warning('adding %s to end of Matlab path',codedir)
+end
 
 %% READ IN SUBJECT LISTS AND COMPARE THEM
 %--------------------------------------------------------------------------

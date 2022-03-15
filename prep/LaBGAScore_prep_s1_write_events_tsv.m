@@ -1,4 +1,4 @@
-%% ery_4a_prep_s1_write_events_tsv
+%% LaBGAScore_prep_s1_write_events_tsv
 %
 % This script reads logfiles, extracts the onsets and durations for
 % different conditions, and writes events.tsv files to the BIDS dir for
@@ -19,14 +19,14 @@
 % date:   December, 2021
 %
 %__________________________________________________________________________
-% @(#)% ery_4a_prep_s1_write_events_tsv.m         v1.1        
-% last modified: 2022/03/10
+% @(#)% LaBGAScore_prep_s1_write_events_tsv.m         v1.1        
+% last modified: 2022/03/15
 
 
 %% DEFINE DIRECTORIES, SUBJECTS, RUNS, CONDITIONS, AND IMPORT OPTIONS
 %--------------------------------------------------------------------------
 
-ery_4a_prep_s0_define_directories;
+LaBGAScore_prep_s0_define_directories;
 
 subjs2write = {}; % enter subjects separated by comma if you only want to write files for selected subjects e.g. {'sub-01','sub-02'}
 

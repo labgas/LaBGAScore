@@ -1,4 +1,4 @@
-%% LaBGAScore_prep_s1_smooth
+%% LaBGAScore_prep_s2_smooth
 %
 % This script will unzip fMRIprep output images, smooth them, zip the
 % smoothed images, and delete all the unzipped images again
@@ -8,7 +8,8 @@
 % calls LaBGAScore_prep_s0_define_directories which uses a relative path
 % 
 % DEPENDENCIES
-% SPM12 on your Matlab path
+% SPM12 on your Matlab path, without subfolders, will be checked
+% by calling LaBGAScore_prep_s0_define_directories first
 % 
 % INPUTS
 % preprocessed .nii.gz images outputted by fMRIprep
@@ -33,8 +34,8 @@
 % date:   November, 2021
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s1_smooth.m         v1.1       
-% last modified: 2022/03/10
+% @(#)% LaBGAScore_prep_s2_smooth.m         v1.1       
+% last modified: 2022/03/15
 %
 %
 %% SET SMOOTHING OPTIONS, AND SUBJECTS
