@@ -98,21 +98,21 @@ pmod_name = 'rating'; % variable name of your pmod in events.tsv file
 % STUDY SPECIFIC, SO DISCUSS WITH LUKAS IF IN DOUBT!
 
 
-%% DEFINE DIRECTORIES AND CONDITIONS OF INTEREST
+%% DEFINE DIRECTORIES AND RUNDIRNAMES
 %--------------------------------------------------------------------------
 
 % load standard BIDS directory structure from root dir
 
 LaBGAScore_prep_s0_define_directories;
 
-% define mkdir as an anonymous function that can be applied to cell arrays
-% to crease directory structure
-
-sm=@(x)mkdir(x);
-
 % define run directory names
+% names are defaults, only change number
 
 rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
+
+% define rootdir for Github repos
+
+githubrootdir = '/data/master_github_repos';
 
 
 %% CREATE CANLAB DSGN STRUCTURE
@@ -313,7 +313,80 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
 % END OF STUDY-SPECIFIC CODE, BELOW SHOULD WORK OUT OF THE BOX
 %--------------------------------------------------------------------------
 
+%% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH
+
+% check whether necessary spm subdirs are on path, and add if needed
+
+spmcanonicaldir = fullfile(spmrootdir,'canonical');
+    if sum(contains(matlabpath,spmcanonicaldir)) == 0
+        addpath(spmcanonicaldir,'-end');
+        warning('adding %s to end of Matlab path',spmcanonicaldir)
+    end
+spmconfigdir = fullfile(spmrootdir,'config');
+    if sum(contains(matlabpath,spmconfigdir)) == 0
+        addpath(spmconfigdir,'-end');
+        warning('adding %s to end of Matlab path',spmconfigdir)
+    end
+spmmatlabbatchdir = fullfile(spmrootdir,'matlabbatch');
+    if sum(contains(matlabpath,spmmatlabbatchdir)) == 0
+        addpath(spmmatlabbatchdir,'-end');
+        warning('adding %s to end of Matlab path',spmmatlabbatchdir)
+    end
+spmtoolboxdir = fullfile(spmrootdir,'toolbox');
+    if sum(contains(matlabpath,spmtoolboxdir)) == 0
+        addpath(spmtoolboxdir,'-end');
+        warning('adding %s to end of Matlab path',spmtoolboxdir)
+    end
+    
+% check whether necessary CANlab Github repos are on Matlab path
+
+  % CANLABCORE
+    canlabcoredir = fullfile(githubrootdir,'CanlabCore');
+        if ~isfolder(canlabcoredir) % canlabcore not yet cloned
+          canlabcoreurl = "https://github.com/canlab/CanlabCore";
+          canlabcoreclonecmd = ['git clone ' canlabcoreurl];
+          cd(githubrootdir);
+          [status,cmdout] = system(canlabcoreclonecmd);
+          disp(cmdout);
+              if status == -0
+                  addpath(genpath(canlabcoredir,'-end'));
+                  warning('git succesfully cloned %s to %s and added repo to Matlab path\n',canlabcoreurl, canlabcoredir)
+              else
+                  error('cloning %s into %s failed, please try %s in linux terminal before proceeding, or use Gitkraken\n',canlabcoreurl,canlabcoredir,canlabcoreclonecmd)
+              end
+          cd(rootdir);
+          clear status cmdout
+        elseif ~exist('fmri_data.m','file') % canlabcore cloned but not yet on Matlab path
+            addpath(genpath(canlabcoredir,'-end'));
+        end
+        
+  % CANLABPRIVATE
+    canlabprivdir = fullfile(githubrootdir,'CanlabPrivate');
+        if ~isfolder(canlabprivdir) % canlabprivate not yet cloned
+          canlabprivurl = "https://github.com/canlab/CanlabPrivate";
+          canlabprivclonecmd = ['git clone ' canlabprivurl];
+          cd(githubrootdir);
+          [status,cmdout] = system(canlabprivclonecmd);
+          disp(cmdout);
+              if status == -0
+                  addpath(genpath(canlabprivdir,'-end'));
+                  warning('git succesfully cloned %s to %s and added repo to Matlab path\n',canlabprivurl, canlabprivdir)
+              else
+                  error('cloning %s into %s failed, please try %s in linux terminal before proceeding, or use Gitkraken\n',canlabprivurl,canlabprivdir,canlabprivclonecmd)
+              end
+          cd(rootdir);
+          clear status cmdout
+        elseif ~exist('power_calc.m','file') % canlabprivate cloned but not yet on Matlab path
+            addpath(genpath(canlabprivdir,'-end'));
+        end
+
+    
 %% CREATE DIRECTORY STRUCTURE
+
+% define mkdir as an anonymous function that can be applied to cell arrays
+% to crease directory structure
+
+sm=@(x)mkdir(x);
 
 % create first level directory
 
@@ -358,10 +431,6 @@ for sub=1:size(derivsubjs,1)
     subjderivdir = fullfile(derivsubjdirs{sub},'func');
     subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
     subjfirstdir = firstsubjdirs{sub};
-    subjfirstdiagnosedir = fullfile(subjfirstdir,'diagnostics');
-        if ~exist(subjfirstdiagnosedir,'dir')
-            mkdir(subjfirstdiagnosedir);
-        end
     
     BIDSimgs = dir(fullfile(subjBIDSdir,'*bold.nii.gz'));
     BIDSimgs = {BIDSimgs(:).name}';
@@ -701,11 +770,16 @@ for sub=1:size(derivsubjs,1)
     
     %% DIAGNOSE FIRST LEVEL MODEL
     
+    subjfirstdiagnosedir = fullfile(subjfirstdir,'diagnostics');
+        if ~exist(subjfirstdiagnosedir,'dir')
+            mkdir(subjfirstdiagnosedir);
+        end
+        
+    cd(subjfirstdiagnosedir);
+        
     diagnose_struct = struct('useNewFigure',false,'maxHeight',800,'maxWidth',1600,...
         'format','html','outputDir',subjfirstdiagnosedir,...
         'showCode',true);
-    
-    cd(subjfirstdiagnosedir);
     
     publish('LaBGAScore_first_s2_diagnose_firstlvl.m',diagnose_struct)
     delete('High_pass_filter_analysis.png','Variance_Inflation.png','LaBGAScore_first_s2_diagnose_firstlvl.png'); % getting rid of some redundant output images due to the use of publish()
