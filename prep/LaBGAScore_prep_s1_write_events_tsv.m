@@ -1,16 +1,27 @@
 %% LaBGAScore_prep_s1_write_events_tsv
 %
-% This script reads logfiles, extracts the onsets and durations for
+% This script reads logfiles, extracts the onsets, durations, and ratings for
 % different conditions, and writes events.tsv files to the BIDS dir for
 % each subject
 % 
+% USAGE
+% Script should be run from the root directory of the superdataset, e.g.
+% /data/proj_discoverie
+% The script is highly study-specific, as logfiles will vary with design,
+% stimulus presentation software used, etc
+% Hence, it is provided in LaBGAScore as an example and needs to be
+% downloaded and adapted to the code subdataset for your study/project
+% This example is from LaBGAS proj_erythritol_4a
+% (https://gin.g-node.org/labgas/proj_erythritol_4a)
+%
 % DEPENDENCIES
-% None
+% LaBGAScore Github repo on Matlab path, with subfolders
+% https://github.com/labgas/LaBGAScore
 % 
 % INPUTS
 % Presentation .log files in sourcedata dir for each subject
 %
-% OUTPUT
+% OUTPUTS
 % events.tsv files for each run in BIDS dir for each subject
 %
 %__________________________________________________________________________
@@ -20,7 +31,7 @@
 %
 %__________________________________________________________________________
 % @(#)% LaBGAScore_prep_s1_write_events_tsv.m         v1.1        
-% last modified: 2022/03/15
+% last modified: 2022/03/16
 
 
 %% DEFINE DIRECTORIES, SUBJECTS, RUNS, CONDITIONS, AND IMPORT OPTIONS
@@ -61,7 +72,7 @@ if ~isempty(subjs2write)
     [C,ia,~] = intersect(sourcesubjs,subjs2write);
     
     if ~isequal(C',subjs2write)
-        error('subject defined in subjs2write not present in sourcedir, please check before proceeding');
+        error('\nsubject %s defined in subjs2smooth not present in %s, please check before proceeding\n',subjs2smooth{~ismember(subjs2smooth,C)},derivdir);
     
     else
         
@@ -114,7 +125,8 @@ if ~isempty(subjs2write)
                             elseif ismember(log.Code(k),fixation_labels)
                                 log.trial_type{k} = 'fixation';
                             
-                            else log.trial_type{k} = '';
+                            else
+                                log.trial_type{k} = '';
                             
                             end
                         end
@@ -126,14 +138,19 @@ if ~isempty(subjs2write)
                             if contains(char(log.Code(l)),'score','IgnoreCase',true)
                                 scorestring = char(log.Code(l));
                                 
-                                if ~contains(scorestring(1,end-2:end),':')
+                                if strcmp(scorestring(1,end-3:end),'-100')
+                                    log.rating(l) = str2double(scorestring(1,end-3:end));
+                                
+                                elseif ~contains(scorestring(1,end-2:end),':')
                                     log.rating(l) = str2double(strtrim(scorestring(1,end-2:end)));
                                 
-                                else log.rating(l) = str2double(scorestring(1,end));
+                                else
+                                    log.rating(l) = str2double(scorestring(1,end));
                                     
                                 end
                             
-                            else log.rating(l) = NaN;
+                            else
+                                log.rating(l) = NaN;
                                 
                             end
                             
@@ -163,14 +180,15 @@ if ~isempty(subjs2write)
                             if ~isequal(log.trial_type(m),'fixation')
                                 log.duration(m) = log.onset(m+1) - log.onset(m);
                             
-                            else log.duration(m) = NaN;
+                            else
+                                log.duration(m) = NaN;
                             
                             end
                         end
                         
                     log = log(~isnan(log.duration),:);
                         
-                    filename = fullfile(subjBIDSdir,sourcesubjs{sub},'_task-',taskname,runnames{run},'_events.tsv');
+                    filename = fullfile(subjBIDSdir,[sourcesubjs{sub},'_task-',taskname,runnames{run},'_events.tsv']);
                     writetable(log,filename,'Filetype','text','Delimiter','\t');
                     clear logfile log time_zero filename
 
@@ -238,7 +256,8 @@ else
                             elseif ismember(log.Code(k),fixation_labels)
                                 log.trial_type{k} = 'fixation';
                             
-                            else log.trial_type{k} = '';
+                            else
+                                log.trial_type{k} = '';
                             
                             end
                         end
@@ -250,14 +269,19 @@ else
                             if contains(char(log.Code(l)),'score','IgnoreCase',true)
                                 scorestring = char(log.Code(l));
                                 
-                                if ~contains(scorestring(1,end-2:end),':')
+                                if strcmp(scorestring(1,end-3:end),'-100')
+                                    log.rating(l) = str2double(scorestring(1,end-3:end));
+                                
+                                elseif ~contains(scorestring(1,end-2:end),':')
                                     log.rating(l) = str2double(strtrim(scorestring(1,end-2:end)));
                                 
-                                else log.rating(l) = str2double(scorestring(1,end));
+                                else
+                                    log.rating(l) = str2double(scorestring(1,end));
                                     
                                 end
                             
-                            else log.rating(l) = NaN;
+                            else
+                                log.rating(l) = NaN;
                                 
                             end
                             
@@ -287,14 +311,15 @@ else
                             if ~isequal(log.trial_type(m),'fixation')
                                 log.duration(m) = log.onset(m+1) - log.onset(m);
                             
-                            else log.duration(m) = NaN;
+                            else
+                                log.duration(m) = NaN;
                             
                             end
                         end
                         
                     log = log(~isnan(log.duration),:);
                         
-                    filename = fullfile(subjBIDSdir,sourcesubjs{sub},'_task-',taskname,runnames{run},'_events.tsv');
+                    filename = fullfile(subjBIDSdir,[sourcesubjs{sub},'_task-',taskname,runnames{run},'_events.tsv']);
                     writetable(log,filename,'Filetype','text','Delimiter','\t');
                     clear logfile log time_zero filename
 
