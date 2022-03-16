@@ -182,12 +182,13 @@ githubrootdir = '/data/master_github_repos';
     
     % OPTIONAL FIELDS
     
-    % for flexible definition of contrasts - for more info
-    % - help canlab_spm_contrast_job_luke
+    % flexible definition of contrasts - for more info
+    % - help canlab_spm_contrast_job_luka
     % - https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_example_DSGN_setup.txt
     
     DSGN.regmatching = 'regexp'; % regular experession mode to match keywords you provide in cell arrays below with beta regressor names stored in the SPM.Vbeta.descrip field of your first level SPM.mat file
     % DSGN.defaultsuffix = '\*bf\(1\)$'; % adds this suffix to each keyword
+    % DSGN.noscale = true; % default: false; if true, turn off scaling of contrasts to sum up to zero or one, not recommended if you have unequal amounts of run between subjects, unless you concatenate
     
     % REQUIRED FIELDS
     
