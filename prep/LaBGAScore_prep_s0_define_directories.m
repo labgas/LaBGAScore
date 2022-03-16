@@ -1,14 +1,17 @@
 %% LaBGAScore_prep_s0_define_directories
 %
-% This script will define the paths for the standard BIDS-compliant
-% directory structure for (datalad) datasets for LaBGAS neuroimaging projects
+% This script defines the paths for the standard BIDS-compliant
+% directory structure for LaBGAS neuroimaging (datalad) datasets
 % 
 % USAGE
-% Script should be run from the root directory of your superdataset, e.g.
-% /data/proj_discoverie, on Linux OS
+% Script should be run from the root directory of the superdataset, e.g.
+% /data/proj_discoverie
+% It can be used standalone, but is typically called from the subsequent
+% scripts in the standard LaBGAScore workflow
+% The script is generic, i.e. it does not require study-specific adaptions
 %
 % DEPENDENCIES
-% spm12 added to your Matlab path WITHOUT subdirectories
+% spm12 on Matlab path WITHOUT subdirectories
 % no spm functions are called by this script, 
 % but spmrootdir is defined automatically, for use in later scripts
 %
@@ -19,7 +22,7 @@
 %
 %__________________________________________________________________________
 % @(#)% LaBGAScore_prep_s0_define_directories.m         v1.1       
-% last modified: 2022/03/14
+% last modified: 2022/03/16
 % 
 %
 %% DEFINE DIRECTORIES AND ADD CODE DIR TO MATLAB PATH
@@ -33,7 +36,7 @@ matlabpath = path;
 
     if ~exist('spm.m','file')
         spmpathcommand = "addpath('your_spm_rootdir','-end')";
-        error('spm12 not found on Matlab path, please add WITHOUT subfolders using the Matlab GUI or type %s in Matlab terminal before proceeding',spmpathcommand)
+        error('\nspm12 not found on Matlab path, please add WITHOUT subfolders using the Matlab GUI or type %s in Matlab terminal before proceeding\n',spmpathcommand)
     else
         spmrootdir = which('spm.m');
         spmrootdir = strsplit(spmrootdir,'/spm.m');
@@ -56,9 +59,9 @@ derivlist = derivlist([derivlist(:).isdir]);
 derivsubjs = cellstr(char(derivlist.name));
 
 if isequal(sourcesubjs,BIDSsubjs,derivsubjs)
-    warning('\n numbers and names of subjects in %s, %s, and %s match - good to go',sourcedir,BIDSdir,derivdir);
+    warning('\nnumbers and names of subjects in %s, %s, and %s match - good to go\n',sourcedir,BIDSdir,derivdir);
 else
-    error('\n numbers and names of subjects in %s, %s, and %s do not match - please check before proceeding and make sure your file organization is consistent with LaBGAS conventions',sourcedir,BIDSdir,derivdir);
+    error('\nnumbers and names of subjects in %s, %s, and %s do not match - please check before proceeding and make sure your file organization is consistent with LaBGAS conventions\n',sourcedir,BIDSdir,derivdir);
 end
 
 

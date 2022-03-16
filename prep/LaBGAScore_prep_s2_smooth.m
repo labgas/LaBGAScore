@@ -1,15 +1,19 @@
 %% LaBGAScore_prep_s2_smooth
 %
-% This script will unzip fMRIprep output images, smooth them, zip the
+% This script unzips fMRIprep output images, smooth them, zip the
 % smoothed images, and delete all the unzipped images again
 %
 % USAGE
-% Run this script from the root dir of your (super)dataset as it first
-% calls LaBGAScore_prep_s0_define_directories which uses a relative path
+% Script should be run from the root directory of the superdataset, e.g.
+% /data/proj_discoverie
+% The script is generic, i.e. it does not require study-specific adaptions,
+% but you can change some default options if required
 % 
 % DEPENDENCIES
-% SPM12 on your Matlab path, without subfolders, will be checked
-% by calling LaBGAScore_prep_s0_define_directories first
+% 1. LaBGAScore Github repo on Matlab path, with subfolders
+%   https://github.com/labgas/LaBGAScore
+% 2. SPM12 on Matlab path, without subfolders
+%   will be checked by calling LaBGAScore_prep_s0_define_directories
 % 
 % INPUTS
 % preprocessed .nii.gz images outputted by fMRIprep
@@ -43,7 +47,7 @@
 
 fwhm = 6; % kernel width in mm
 prefix = 's6-'; % prefix for name of smoothed images
-subjs2smooth = {}; % specify if you only want to smooth a subset of all subjects in derivdir, otherwise leave cell array empty
+subjs2smooth = {}; % enter subjects separated by comma if you only want to smooth selected subjects e.g. {'sub-01','sub-02'}
 
 
 %% DEFINE DIRECTORIES
@@ -56,7 +60,7 @@ LaBGAScore_prep_s0_define_directories;
 %----------------------------------------------------------------------------
 
 if ~isempty(subjs2smooth)
-    [C,ia,~] = intersect(derivsubjs,subjs2smooth);
+    [C,ia,~] = intersect(derivsubjs,subjs2smooth);error('\n subject %s defined in subjs2smooth not present in %s, please check before proceeding',subjs2smooth{~ismember(subjs2smooth,C)},derivdir);
     
     if ~isequal(C,subjs2smooth)
         error('\n subject %s defined in subjs2smooth not present in %s, please check before proceeding',subjs2smooth{~ismember(subjs2smooth,C)},derivdir);
