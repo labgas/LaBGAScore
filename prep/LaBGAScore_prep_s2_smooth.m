@@ -4,26 +4,35 @@
 % smoothed images, and delete all the unzipped images again
 %
 % USAGE
+%
 % Script should be run from the root directory of the superdataset, e.g.
 % /data/proj_discoverie
 % The script is generic, i.e. it does not require study-specific adaptions,
 % but you can change some default options if required
-% 
+%
+%
 % DEPENDENCIES
+%
 % 1. LaBGAScore Github repo on Matlab path, with subfolders
 %   https://github.com/labgas/LaBGAScore
-% 2. SPM12 on Matlab path, without subfolders
+% 2. spm12 on Matlab path, without subfolders
 %   will be checked by calling LaBGAScore_prep_s0_define_directories
-% 
+%
+%
 % INPUTS
+%
 % preprocessed .nii.gz images outputted by fMRIprep
 % variables created by running LaBGAScore_prep_s0_define_directories from
 % the root directory of your (super)dataset
 %
+%
 % OUTPUT
+%
 % smoothed .nii.gz images
 %
+%
 % OPTIONS
+%
 % 1. fwhm
 %   smoothing kernel width in mm
 % 2. prefix
@@ -40,8 +49,8 @@
 %__________________________________________________________________________
 % @(#)% LaBGAScore_prep_s2_smooth.m         v1.1       
 % last modified: 2022/03/15
-%
-%
+
+
 %% SET SMOOTHING OPTIONS, AND SUBJECTS
 %--------------------------------------------------------------------------
 
@@ -120,4 +129,4 @@ else
     
 end % if loop checking smoothing option
 
-cd(derivdir);
+cd(rootdir);

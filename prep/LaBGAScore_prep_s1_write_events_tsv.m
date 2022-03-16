@@ -5,6 +5,7 @@
 % each subject
 % 
 % USAGE
+%
 % Script should be run from the root directory of the superdataset, e.g.
 % /data/proj_discoverie
 % The script is highly study-specific, as logfiles will vary with design,
@@ -14,14 +15,20 @@
 % This example is from LaBGAS proj_erythritol_4a
 % (https://gin.g-node.org/labgas/proj_erythritol_4a)
 %
+%
 % DEPENDENCIES
+%
 % LaBGAScore Github repo on Matlab path, with subfolders
 % https://github.com/labgas/LaBGAScore
-% 
+%
+%
 % INPUTS
+%
 % Presentation .log files in sourcedata dir for each subject
 %
+%
 % OUTPUTS
+%
 % events.tsv files for each run in BIDS dir for each subject
 %
 %__________________________________________________________________________
@@ -72,7 +79,7 @@ if ~isempty(subjs2write)
     [C,ia,~] = intersect(sourcesubjs,subjs2write);
     
     if ~isequal(C',subjs2write)
-        error('\nsubject %s defined in subjs2smooth not present in %s, please check before proceeding\n',subjs2smooth{~ismember(subjs2smooth,C)},derivdir);
+        error('\nsubject %s present in subjs2smooth not present in %s, please check before proceeding',subjs2smooth{~ismember(subjs2smooth,C)},derivdir);
     
     else
         
@@ -90,11 +97,11 @@ if ~isempty(subjs2write)
                 logfilepath = fullfile(subjsourcedir,'logfiles',logfilename);
                 
                 if ~isfile(logfilepath)
-                    warning(strcat(logfilepath,' does not exist, please check'));
+                    warning('\n%s does not exist, please check before proceeding',logfilepath);
                     continue
                 
                 elseif size(logfilepath,1) > 1
-                    error(strcat('more than one logfile with run index_',run,' for subject_',sourcesubjs{sub}, ' please check'))
+                    error('\nmore than one logfile with run index %s for %s, please check before proceeding',run,sourcesubjs{sub})
                 
                 else
                     log = readtable(logfilepath,opts);
@@ -102,7 +109,7 @@ if ~isempty(subjs2write)
                     time_zero = log.Time(log.Trial == 0 & log.EventType == 'Pulse'); % time for onsets and durations is counted from the first scanner pulse onwards
                         
                         if size(time_zero,1) > 1
-                            error('ambiguity about time zero in %s%s, please check logfile',subjs{sub},logfilenames{run});
+                            error('\nambiguity about time zero in %s%s, please check logfile',subjs{sub},logfilenames{run});
                         end
                         
                     log.TimeZero = log.Time - time_zero;
@@ -203,7 +210,8 @@ if ~isempty(subjs2write)
 else
     
     if ~isequal(sourcesubjs, BIDSsubjs)
-        error('subjects in sourcedir and BIDSdir do not match, please check before proceeding');
+        [D,~,~] = intersect(sourcesubjs,BIDSsubjs);
+        error('\nsubject %s present in %s not present in %s, please check before proceeding',BIDSsubjs{~ismember(BIDSsubjs,D)},BIDSdir,derivdir);
         
     else
     
@@ -221,11 +229,11 @@ else
                 logfilepath = fullfile(subjsourcedir,'logfiles',logfilename);
                 
                 if ~isfile(logfilepath)
-                    warning(strcat(logfilepath,' does not exist, please check'));
+                    warning('\n%s does not exist, please check before proceeding',logfilepath);
                     continue
                 
                 elseif size(logfilepath,1) > 1
-                    error(strcat('more than one logfile with run index_',run,' for subject_',sourcesubjs{sub}, ' please check'))
+                    error('\nmore than one logfile with run index %s for %s, please check before proceeding',run,sourcesubjs{sub})
                 
                 else
                     log = readtable(logfilepath,opts);
@@ -233,7 +241,7 @@ else
                     time_zero = log.Time(log.Trial == 0 & log.EventType == 'Pulse'); % time for onsets and durations is counted from the first scanner pulse onwards
                         
                         if size(time_zero,1) > 1
-                            error('ambiguity about time zero in %s%s, please check logfile',subjs{sub},logfilenames{run});
+                            error('\nambiguity about time zero in %s%s, please check logfile',subjs{sub},logfilenames{run});
                         end
                         
                     log.TimeZero = log.Time - time_zero;
