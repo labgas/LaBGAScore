@@ -86,12 +86,24 @@
 % 3. pmod_ortho_off
 %
 %   default = false
-%   can be changed to true, but this is generally not recommended unless
-%   you mean centered your pmods
+%   should be changed to true if you have more than one pmod per condition,
+%   which will cause the script to demean your pmods per condition, to
+%   avoid the serial orthogonalization in spm
 %   for more info: 
-%   https://andysbrainbook.readthedocs.io/en/latest/PM/PM_Overview.html
 %   https://www.youtube.com/watch?v=iqwZmGOKqfM
 %   CANlabReposGuide_Hackpad.pdf (see below)
+%   https://www.bobspunt.com/resources/teaching/single-subject-analysis/parametric-modulation/#:~:text=In%20SPM%2C%20parametric%20modulators%20are,serial%20orthogonalisationto%20orthogonalise%20the%20parameters.
+%   https://imaging.mrc-cbu.cam.ac.uk/imaging/ParametricModulations
+%   https://www.researchgate.net/post/How_to_define_parametric_modulators_for_multiple_conditions_in_SPM
+%
+% 4. pmod_type
+%   default = 'parametric_standard', alternative is 'parametric_singleregressor'
+%   'standard' is for designs where each condition (of interest) has an
+%   unmodulated and (orthogonalized/demeaned) modulated regressor
+%   'singleregressor' is for designs where you only have modulated
+%   regressors, which is less common, and beware of orthogonalization
+%   issues
+%   help(onsets2fmridesign) for more info about these options
 %
 %
 % DSGN STRUCTURE
@@ -132,6 +144,7 @@ spike_additional_vols=0;
 pmod_polynom = 1; % polynomial expansion for pmods
 pmod_name = 'rating'; % variable name of your pmod in events.tsv file
 pmod_ortho_off = false; % turn off orthogonalization of pmods
+pmod_type = 'parametric_standard';
 
 % THIS CHOICE OF OPTIONS CAN BE CONSIDERED LABGAS DEFAULTS, BUT MAY BE
 % STUDY SPECIFIC, SO DISCUSS WITH LUKAS IF IN DOUBT!
@@ -207,7 +220,9 @@ githubrootdir = '/data/master_github_repos';
     c=c+1;DSGN.pmods{c}={'liking_sucrose' 'liking_erythritol' 'liking_sucralose' 'liking_water'};
     c=c+1;DSGN.pmods{c}={'liking_sucrose' 'liking_erythritol' 'liking_sucralose' 'liking_water'};
     c=c+1;DSGN.pmods{c}={'liking_sucrose' 'liking_erythritol' 'liking_sucralose' 'liking_water'};
-%     DSGN.convolution; default hrf.derivs = [0 0]; structure specifying the convolution to use for conditions different fields required depending on convolution type; 
+%     DSGN.convolution.type; default hrf, which means canonical hrf - other options: fir, spline (the latter is not yet implemented @LaBGAS, help needed from Tor/Martin/Bogdan)
+%     DSGN.convolution.time; default 0, which means no time derivative
+%     DSGN.convolution.dispersion: default 0, which means no dispersion derivative
 %     DSGN.ar1 = false; % autoregressive AR(1) to model serial correlations; SPM default is true, CANlab default is false, Tor recommends turning autocorrelation off, because this algorithm pools across the whole brain, and does not perform well in some situations; if you are performing a group analysis, the autocorrelation problem is not as concerning
     DSGN.notimemod = true; % default: false; if true, turn off time modulation of conditions, i.e. when you do not expect linear trends over time
 %     DSGN.singletrials = {{}}; % a cell array (1 cell per session) of cell arrays (1 cell per condition) of (corresponding to DSGN.conditions) of true/false values indicating whether to convert specified condition to set of single trial conditions
@@ -316,7 +331,7 @@ githubrootdir = '/data/master_github_repos';
     DSGN.contrastnames{c} = 'erythritol unmodulated vs sucralose unmodulated'; % CON_0010
     DSGN.contrastweights{c} = [1 -1];
     
-    % modulated
+    % modulated[X,delta,delta_hires,hrf] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_singleregressor',pmods);
     c=c+1;
     DSGN.contrastnames{c} = 'sucrose modulated'; % CON_0011
     DSGN.contrastweights{c} = [1];
