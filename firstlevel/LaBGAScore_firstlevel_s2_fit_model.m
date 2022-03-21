@@ -73,6 +73,10 @@
 %
 % OUTPUTS
 %
+% Run-specific in derivatives/fmriprep/sub-xxx/func, including 
+% 1. plots illustrating design
+% 2. files needed for running first level analysis using canlab/spm GLM batch tools
+%
 % First level directories for each subject for the model specified in DSGN, including
 % 1. DSGN.mat file
 % 2. SPM.mat file
@@ -90,7 +94,7 @@
 %
 %__________________________________________________________________________
 % @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.0        
-% last modified: 2022/03/16
+% last modified: 2022/03/19
 
 
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN
@@ -479,9 +483,10 @@ for sub=1:size(derivsubjs,1)
         filename_noise_regs = fullfile(runmodeldir,DSGN.multireg);
         save(filename_noise_regs,'R');
 
-        clear R* filename_events
+        clear Rmotion* Rcsf Rspikes
 
         %% EVENTS FILES
+        
         % read events.tsv files
         O = readtable(fullfile(subjBIDSdir,eventsfiles{run}),'FileType', 'text', 'Delimiter', 'tab');
         O.trial_type = categorical(O.trial_type);
@@ -531,7 +536,8 @@ for sub=1:size(derivsubjs,1)
 
             clear trial cond
             
-        % create and plot design including conditions of no interest
+        % create and plot design including conditions of no interest, and
+        % save figure
         
         nii = dir(fullfile(rundir,'*.nii')).name;
         nii_hdr = read_hdr(fullfile(rundir,nii)); % reads Nifti header of smoothed image into a structure
@@ -540,7 +546,7 @@ for sub=1:size(derivsubjs,1)
                 switch DSGN.convolution.type
                     case 'hrf'
                         if DSGN.convolution.time == 0
-                            hrf_name = 'hrf';
+                            hrf_name = spm_hrf(1);
                         elseif DSGN.convolution.time == 1
                             if DSGN.convolution.dispersion == 0
                                 hrf_name = 'hrf (with time derivative)';
@@ -558,7 +564,7 @@ for sub=1:size(derivsubjs,1)
                         error('\nUnrecognized convolution type: %s',DSGN.convolution.type)
                 end
             else
-                hrf_name = 'hrf';
+                hrf_name = spm_hrf(1);
             end                                
         
         ons_durs = cell(1,size(cat_trial_type,1));
@@ -570,35 +576,53 @@ for sub=1:size(derivsubjs,1)
             
             clear cond
         
+        [Xfull,~,~,hrf_full] = onsets2fmridesign(ons_durs,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name);    
+        
         f1 = figure('WindowState','maximized');
         
-        title(['design ',derivsubjs{sub},' ',subjrundirnames{run}]);
-        
-        subplot(2,2,1)
-        h1=plotDesign(ons_durs,[],DSGN.tr,'samefig');
-        ax1=gca;
+        subplot(2,1,1);
+        plotDesign(ons_durs,[],DSGN.tr,'samefig','basisset',hrf_name);
+        ax1 = gca;
+        ax1.TickLabelInterpreter = 'none';
         ax1.YTickLabel = (DSGN.conditions{run});
-        ax1.FontSize = 12;
-        ax1.LabelFontSizeMultiplier = 1;
-        ax1.TitleFontSizeMultiplier = 1.5;
+        ax1.YLabel.String = 'condition';
+        ax1.YLabel.FontSize = 12;
+        ax1.YLabel.FontWeight = 'bold';
+        ax1.XLabel.FontSize = 12;
+        ax1.XLabel.FontWeight = 'bold';
+        ax1.FontSize = 11;
+        ax1.Title.FontSize = 14;
+        ax1.Title.FontWeight = 'bold';
+        ax1.TitleHorizontalAlignment = 'left';
         
-        [X,delta,delta_hires,hrf] = onsets2fmridesign(ons_durs,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name);
+        subplot(2,1,2);
+        imagesc(zscore(Xfull(:,1:end-1)));
+        colorbar
+        ax2 = gca;
+        ax2.TickLabelInterpreter = 'none';
+        ax2.XTickLabel = (DSGN.conditions{run});
+        ax2.XLabel.String = 'condition';
+        ax2.XLabel.FontSize = 12;
+        ax2.XLabel.FontWeight = 'bold';
+        ax2.YLabel.String = ['#volume (TR = ',num2str(DSGN.tr),' sec)']; 
+        ax2.YLabel.FontSize = 12;
+        ax2.YLabel.FontWeight = 'bold';
+        ax2.FontSize = 11;
+        ax2.Title.FontSize = 14;
+        ax2.Title.String = 'Design matrix';
+        ax2.Title.FontWeight = 'bold';
+        ax2.TitleHorizontalAlignment = 'left';
         
-        subplot(2,2,2)
-        plot_matrix_cols(zscore(X),'horizontal');
+        sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
         
-        subplot(2,2,3)
-        imagesc(X);
+        print(f1,fullfile(rundir,['design_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
         
-        subplot(2,2,4)
-        plot(hrf);
-       
-        
-
+        clear f1 ax1 ax2
+   
         
         %% PARAMETRIC MODULATORS IF SPECIFIED
         
-        % prep work for para
+        % prep work for parametric modulators
         if isfield(DSGN,'pmods')
             O.Properties.VariableNames(categorical(O.Properties.VariableNames) == pmod_name) = {'pmod'};
             
@@ -670,41 +694,153 @@ for sub=1:size(derivsubjs,1)
 
             % get design matrix and plot
             ons_durs_int = cell(1,size(DSGN.pmods{run},2));
+            pmods_raw = cell(1,size(DSGN.pmods{run},2));
             pmods_demean_run = cell(1,size(DSGN.pmods{run},2));
             pmods_demean_cond = cell(1,size(DSGN.pmods{run},2));
                 for cond = 1:size(DSGN.pmods{run},2)
                         ons_durs_int{cond}(:,1) = cond_struct{cond}.onset{1};
                         ons_durs_int{cond}(:,2) = cond_struct{cond}.duration{1};
-                        pmods_demean_run{cond} = pmod_demean_run_struct{cond}.pmod.param{1};
-                        pmods_demean_cond{cond} = pmod_demean_cond_struct{cond}.pmod.param{1};
+                        pmods_raw{cond}(:,1) = cond_struct{cond}.pmod.param{1};
+                        pmods_demean_run{cond}(:,1) = pmod_demean_run_struct{cond}.pmod.param{1};
+                        pmods_demean_cond{cond}(:,1) = pmod_demean_cond_struct{cond}.pmod.param{1};
                 end
 
                 clear cond
 
                 switch pmod_type
                     case 'parametric_singleregressor'
-                        [X_unmod,delta_unmod,delta_hires_unmod,hrf_unmod] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name);
-                        [X_pmod,delta_pmod,delta_hires_pmod,hrf_pmod] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_singleregressor',pmods_demean_cond);
-%                         plotDesign(ons_durs_int,pmods_demean_cond,DSGN.tr); % function does not seem to work with second ('rt') input
+                        [X_pmod_raw,~,~,hrf_pmod_raw] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_singleregressor',pmods_raw);
 
                         f2 = figure('WindowState','maximized');
+                        
+                        colors = get(gcf, 'DefaultAxesColorOrder');
+                        colors = mat2cell(colors, ones(size(colors, 1), 1), 3);
         
-                        title(['design ',derivsubjs{sub},' ',subjrundirnames{run}]);
+                        subplot(2,1,1);
+                        plot_matrix_cols(zscore(X_pmod_raw(:,1:end-1)),'horizontal',[],colors,3,[0 nii_hdr.tdim]);
+                        ax1 = gca;
+                        ax1.TickLabelInterpreter = 'none';
+                        ax1.YTick = [1:4];
+                        ax1.YTickLabel = DSGN.pmods{run};
+                        ax1.YLabel.String = 'condition';
+                        ax1.YLabel.FontSize = 12;
+                        ax1.YLabel.FontWeight = 'bold';
+                        ax1.XLabel.String = ['#volume (TR = ',num2str(DSGN.tr),' sec)']; 
+                        ax1.XLabel.FontSize = 12;
+                        ax1.XLabel.FontWeight = 'bold';
+                        ax1.XLim = [0 (nii_hdr.tdim + 2)];
+                        ax1.FontSize = 11;
+                        ax1.Title.String = 'Predicted activity';
+                        ax1.Title.FontSize = 14;
+                        ax1.Title.FontWeight = 'bold';
+                        ax1.TitleHorizontalAlignment = 'left';
 
-                        subplot(2,2,1)
-                        plot_matrix_cols(zscore(X_unmod),'horizontal');
+                        subplot(2,1,2);
+                        imagesc(zscore(X_pmod_raw(:,1:end-1)));
+                        colorbar
+                        ax2 = gca;
+                        ax2.TickLabelInterpreter = 'none';
+                        ax2.XTick = [1:4];
+                        ax2.XTickLabel = (DSGN.pmods{run});
+                        ax2.XLabel.String = 'condition';
+                        ax2.XLabel.FontSize = 12;
+                        ax2.XLabel.FontWeight = 'bold';
+                        ax2.YLabel.String = ['#volume (TR = ',num2str(DSGN.tr),' sec)']; 
+                        ax2.YLabel.FontSize = 12;
+                        ax2.YLabel.FontWeight = 'bold';
+                        ax2.FontSize = 11;
+                        ax2.Title.FontSize = 14;
+                        ax2.Title.String = 'Design matrix';
+                        ax2.Title.FontWeight = 'bold';
+                        ax2.TitleHorizontalAlignment = 'left';
 
-                        subplot(2,2,2)
-                        plot_matrix_cols(zscore(X_pmod),'horizontal');
+                        sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
 
-                        subplot(2,2,3)
-                        imagesc(X_unmod);
+                        print(f2,fullfile(rundir,['design_',pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
-                        subplot(2,2,4)
-                        imagesc(X_pmod);
+                        clear f2 ax1 ax2
                         
                     case 'parametric_standard'
-    %                     [X_pmod,delta,delta_hires,hrf_pmod] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_standard',pmods_demean_cond); % unclear what to add as first column in matrix following 'parametric_standard' option, tried ones but did not work
+                        [X_unmod,delta_unmod,delta_hires_unmod,hrf_unmod] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name);  
+                        [X_pmod_run,delta,delta_hires,hrf_pmod] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_singleregressor',pmods_demean_cond); % unclear what to add as first column in matrix following 'parametric_standard' option
+                        
+                        f2 = figure('WindowState','maximized');
+                        
+                        colors = get(gcf, 'DefaultAxesColorOrder');
+                        colors = mat2cell(colors, ones(size(colors, 1), 1), 3);
+        
+                        subplot(2,2,[1 2]);
+                        l1 = plot_matrix_cols(zscore(X_unmod(:,1:end-1)),'horizontal',[],colors,3,[0 nii_hdr.tdim]);
+                        ax1 = gca;
+                        ax1.TickLabelInterpreter = 'none';
+                        ax1.YTick = [1:size(DSGN.pmods{run},2)];
+                        ax1.YTickLabel = DSGN.conditions{run}(1:size(DSGN.pmods{run},2));
+                        ax1.YLabel.String = 'condition';
+                        ax1.YLabel.FontSize = 12;
+                        ax1.YLabel.FontWeight = 'bold';
+                        ax1.XLabel.String = ['#volume (TR = ',num2str(DSGN.tr),' sec)']; 
+                        ax1.XLabel.FontSize = 12;
+                        ax1.XLabel.FontWeight = 'bold';
+                        ax1.XLim = [0 (nii_hdr.tdim + 2)];
+                        ax1.FontSize = 11;
+                        ax1.Title.String = 'Predicted activity';
+                        ax1.Title.FontSize = 14;
+                        ax1.Title.FontWeight = 'bold';
+                        ax1.TitleHorizontalAlignment = 'left';
+                        
+                        hold on
+                        
+                        l2 = plot_matrix_cols(zscore(X_pmod_run(:,1:end-1)),'horizontal',[],colors,1.5,[0 nii_hdr.tdim]);
+                         for line = 1:size(l2,2)
+                             l2(line).LineStyle = '--';
+                         end
+                         
+                        hold off
+
+                        subplot(2,2,3);
+                        imagesc(zscore(X_unmod(:,1:end-1)));
+                        colorbar
+                        ax2 = gca;
+                        ax2.TickLabelInterpreter = 'none';
+                        ax2.XTick = [1:size(DSGN.pmods{run},2)];
+                        ax2.XTickLabel = DSGN.conditions{run}(1:size(DSGN.pmods{run},2));
+                        ax2.XLabel.String = 'condition';
+                        ax2.XLabel.FontSize = 12;
+                        ax2.XLabel.FontWeight = 'bold';
+                        ax2.YLabel.String = ['#volume (TR = ',num2str(DSGN.tr),' sec)']; 
+                        ax2.YLabel.FontSize = 12;
+                        ax2.YLabel.FontWeight = 'bold';
+                        ax2.FontSize = 11;
+                        ax2.Title.FontSize = 14;
+                        ax2.Title.String = 'Design matrix unmodulated';
+                        ax2.Title.FontWeight = 'bold';
+                        ax2.TitleHorizontalAlignment = 'left';
+                        
+                        subplot(2,2,4);
+                        imagesc(zscore(X_pmod_run(:,1:end-1)));
+                        colorbar
+                        ax3 = gca;
+                        ax3.TickLabelInterpreter = 'none';
+                        ax3.XTick = [1:size(DSGN.pmods{run},2)];
+                        ax3.XTickLabel = DSGN.pmods{run};
+                        ax3.XLabel.String = 'condition';
+                        ax3.XLabel.FontSize = 12;
+                        ax3.XLabel.FontWeight = 'bold';
+                        ax3.YLabel.String = ['#volume (TR = ',num2str(DSGN.tr),' sec)']; 
+                        ax3.YLabel.FontSize = 12;
+                        ax3.YLabel.FontWeight = 'bold';
+                        ax3.FontSize = 11;
+                        ax3.Title.FontSize = 14;
+                        ax3.Title.String = 'Design matrix modulated';
+                        ax3.Title.FontWeight = 'bold';
+                        ax3.TitleHorizontalAlignment = 'left';
+
+                        sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
+
+                        print(f2,fullfile(rundir,['design_',pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
+
+                        clear f2 ax1 ax2 ax3
+                    
                     otherwise
                         error('\nInvalid pmod_type option %s specified in LaBGAScore_firstlevel_s1_options_dsgn_struct, please check before proceeding',pmod_type)
                 end   

@@ -53,6 +53,13 @@
 % model diagnosis
 % default = 3, sensible range 1.3 (stringent) to 5 (lenient)
 %
+% 5. subjs2analyze
+%
+% cell array of subjects in derivdir you want to analyze, empty cell array
+% if you want to loop over all subjects
+% NOTE: THIS OPTION IS NOT YET IMPLEMENTED IN THE NEXT SCRIPT, HENCE LEAVE
+%       EMPTY FOR NOT BUT DO NOT DELETE OPTION
+%
 %
 % NEEDED IF SPIKE_DEF = CANLAB
 %
@@ -124,7 +131,7 @@
 %
 %__________________________________________________________________________
 % @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.0        
-% last modified: 2022/03/16
+% last modified: 2022/03/19
 
 
 %% SET OPTIONS
@@ -135,6 +142,7 @@ spike_def = 'fMRIprep';
 omit_spike_trials = 'no';
 spikes_percent_threshold=0.15;
 vif_thresh=3;
+subjs2analyze = {}; % enter subjects separated by comma if you only want to analyze selected subjects e.g. {'sub-01','sub-02'}
 
 % ONLY NEEDED IF SPIKE_DEF = CANlab
 dvars_threshold = 2;
@@ -174,7 +182,19 @@ githubrootdir = '/data/master_github_repos';
     % REQUIRED FIELDS
     DSGN.metadata = "proj-erythritol_4a first level analysis model 1, i.e. modeling 4 conditions for sucrose, erythritol, sucralose, and water as long events (= duration of solution in mouth), with sweetness liking ratings as parametric modulators"; % field for annotation with study info, or whatever you like
     DSGN.modeldir = '/data/test_scripts/firstlevel/model_1_conds_pmods'; % directory where you want to write first level results for this model
-    DSGN.subjects = derivsubjdirs';
+        if ~isempty(subjs2analyze)
+            [C,~,~] = intersect(derivsubjs,subjs2analyze);
+            if ~isequal(C',subjs2analyze)
+                error('\n subject %s defined in subjs2smooth not present in %s, please check before proceeding',subjs2analyze{~ismember(subjs2analyze,C)},derivdir);
+            else
+                DSGN.subjects = cell(1,size(subjs2analyze,2));
+                    for sub = 1:size(DSGN.subjects,2)
+                        DSGN.subjects{sub} = fullfile(derivdir,subjs2analyze{sub});
+                    end
+            end
+        else
+            DSGN.subjects = derivsubjdirs';
+        end
     DSGN.funcnames = {'/func/run-1/s6*.nii',...
         '/func/run-2/s6*.nii',...
         '/func/run-3/s6*.nii',...
@@ -183,9 +203,9 @@ githubrootdir = '/data/master_github_repos';
         '/func/run-6/s6*.nii'}; % cell array (one cell per session) of paths to functional files, relative to absolute path specific in DSGN.subjects
    
     % OPTIONAL FIELDS
-    DSGN.concatenation = {}; % default: none; cell array of arrays of runs to concatenate; see documentation for when to concatenate, and how it works exactly
+    DSGN.concatenation = {[1:6]}; % default: none; cell array of arrays of runs to concatenate; see documentation for when to concatenate, and how it works exactly
     DSGN.allowmissingfunc = true; % default: false; true will prevent erroring out when functional file is missing for at least one run is missing for at least one subject
-    DSGN.customrunintercepts = {}; % default: none; will only work if DSGN.concatenation is specified; cell array of vectors specifying custom intercepts
+%     DSGN.customrunintercepts = {1:6}; % default: none; will only work if DSGN.concatenation is specified; cell array of vectors specifying custom intercepts, NEEDS WORK 
     
 % PARAMETERS
 
