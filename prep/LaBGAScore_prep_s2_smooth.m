@@ -69,7 +69,7 @@ LaBGAScore_prep_s0_define_directories;
 %----------------------------------------------------------------------------
 
 if ~isempty(subjs2smooth)
-    [C,ia,~] = intersect(derivsubjs,subjs2smooth);error('\n subject %s defined in subjs2smooth not present in %s, please check before proceeding',subjs2smooth{~ismember(subjs2smooth,C)},derivdir);
+    [C,ia,~] = intersect(derivsubjs,subjs2smooth);
     
     if ~isequal(C,subjs2smooth)
         error('\n subject %s defined in subjs2smooth not present in %s, please check before proceeding',subjs2smooth{~ismember(subjs2smooth,C)},derivdir);
