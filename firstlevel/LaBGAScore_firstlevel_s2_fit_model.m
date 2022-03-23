@@ -149,7 +149,7 @@ spmtoolboxdir = fullfile(spmrootdir,'toolbox');
           cd(rootdir);
           clear status cmdout
         elseif ~exist('fmri_data.m','file') % canlabcore cloned but not yet on Matlab path
-            addpath(genpath(canlabcoredir,'-end'));
+            addpath(genpath(canlabcoredir),'-end');
         end
         
   % CANLABPRIVATE
@@ -169,7 +169,7 @@ spmtoolboxdir = fullfile(spmrootdir,'toolbox');
           cd(rootdir);
           clear status cmdout
         elseif ~exist('power_calc.m','file') % canlabprivate cloned but not yet on Matlab path
-            addpath(genpath(canlabprivdir,'-end'));
+            addpath(genpath(canlabprivdir),'-end');
         end
 
     
@@ -196,7 +196,8 @@ firstmodeldir = DSGN.modeldir;
 
 % write subjectdirs in firstmodeldir
 
-    if ~contains(ls(firstmodeldir),'sub-') % checks whether there are already subject dirs in firstmodeldir
+firstmodeldirlist = dir(firstmodeldir);
+    if ~contains([firstmodeldirlist(:).name],'sub-') % checks whether there are already subject dirs in firstmodeldir
         cd (firstmodeldir);
         cellfun(sm,derivsubjs);
     end
@@ -277,11 +278,12 @@ for sub=1:size(derivsubjs,1)
         rundir = fullfile(subjderivdir,subjrundirnames{run});
         
         % move fmriprep noisefile and smoothed image into subdir if needed
-            if ~contains(ls(rundir),fmriprep_noisefiles{run})
+        rundirlist = dir(rundir);
+            if ~contains([rundirlist(:).name],fmriprep_noisefiles{run})
                 copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
             end
 
-            if ~contains(ls(rundir),derivimgs{run})
+            if ~contains([rundirlist(:).name],fmriprep_noisefiles{run})
                 copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
                 gunzip(fullfile(rundir,derivimgs{run}));
                 delete(fullfile(rundir,derivimgs{run}));
@@ -839,7 +841,7 @@ for sub=1:size(derivsubjs,1)
 
                         print(f2,fullfile(rundir,['design_',LaBGAS_options.pmods.pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
-                        clear f2 ax1 ax2 ax3
+                        clear f2 ax1 ax2 ax3 l1 l2
                     
                     otherwise
                         error('\nInvalid LaBGAS_options.pmods.pmod_type option %s specified in LaBGAScore_firstlevel_s1_options_dsgn_struct, please check before proceeding',LaBGAS_options.pmods.pmod_type)
