@@ -593,6 +593,7 @@ for sub=1:size(derivsubjs,1)
         plotDesign(ons_durs,[],DSGN.tr,'samefig','basisset',hrf_name);
         ax1 = gca;
         ax1.TickLabelInterpreter = 'none';
+        ax1.YTick = [1:size(DSGN.conditions{run},2)];
         ax1.YTickLabel = (DSGN.conditions{run});
         ax1.YLabel.String = 'condition';
         ax1.YLabel.FontSize = 12;
@@ -609,6 +610,7 @@ for sub=1:size(derivsubjs,1)
         colorbar
         ax2 = gca;
         ax2.TickLabelInterpreter = 'none';
+        ax2.XTick = [1:size(DSGN.conditions{run},2)];
         ax2.XTickLabel = (DSGN.conditions{run});
         ax2.XLabel.String = 'condition';
         ax2.XLabel.FontSize = 12;
@@ -729,7 +731,7 @@ for sub=1:size(derivsubjs,1)
                         plot_matrix_cols(zscore(X_pmod_raw(:,1:end-1)),'horizontal',[],colors,3,[0 nii_hdr.tdim]);
                         ax1 = gca;
                         ax1.TickLabelInterpreter = 'none';
-                        ax1.YTick = [1:4];
+                        ax1.YTick = [1:size(DSGN.pmods{run},2)];
                         ax1.YTickLabel = DSGN.pmods{run};
                         ax1.YLabel.String = 'condition';
                         ax1.YLabel.FontSize = 12;
@@ -749,7 +751,7 @@ for sub=1:size(derivsubjs,1)
                         colorbar
                         ax2 = gca;
                         ax2.TickLabelInterpreter = 'none';
-                        ax2.XTick = [1:4];
+                        ax2.XTick = [1:size(DSGN.pmods{run},2)];
                         ax2.XTickLabel = (DSGN.pmods{run});
                         ax2.XLabel.String = 'condition';
                         ax2.XLabel.FontSize = 12;
