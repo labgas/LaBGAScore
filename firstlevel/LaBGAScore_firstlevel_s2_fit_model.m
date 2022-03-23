@@ -279,11 +279,18 @@ for sub=1:size(derivsubjs,1)
         
         % move fmriprep noisefile and smoothed image into subdir if needed
         rundirlist = dir(rundir);
-            if ~contains([rundirlist(:).name],fmriprep_noisefiles{run})
+        rundirlist = [rundirlist(:).name];
+            if isempty(rundirlist)
+                copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
+            elseif ~contains(rundirlist,fmriprep_noisefiles{run})
                 copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
             end
 
-            if ~contains([rundirlist(:).name],fmriprep_noisefiles{run})
+            if isempty(rundirlist)
+                copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
+                gunzip(fullfile(rundir,derivimgs{run}));
+                delete(fullfile(rundir,derivimgs{run}));
+            elseif ~contains(rundirlist,derivimgs{run})
                 copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
                 gunzip(fullfile(rundir,derivimgs{run}));
                 delete(fullfile(rundir,derivimgs{run}));
