@@ -23,7 +23,7 @@
 % https://github.com/labgas/LaBGAScore
 %
 %
-% OPTIONS
+% LABGAS_OPTIONS STRUCTURE
 %
 % MANDATORY OPTIONS
 % 
@@ -44,29 +44,32 @@
 %
 % 3. spikes_percent_threshold
 %
-% set the maximum number of spikes (% of total volumes expressed as 0-1) you want to
-% tolerate
+%   set the maximum number of spikes (% of total volumes expressed as 0-1) you want to
+%   tolerate
 %
 % 4. vif_thresh
 %
-% set the threshold for variance inflation factor to flag regressors during
-% model diagnosis
-% default = 3, sensible range 1.3 (stringent) to 5 (lenient)
+%   set the threshold for variance inflation factor to flag regressors during
+%   model diagnosis
+%   default = 2, sensible range 1.3 (stringent) to 5 (lenient)
 %
-% 5. subjs2analyze
+% 
+% OPTIONAL
 %
-% cell array of subjects in derivdir you want to analyze, empty cell array
-% if you want to loop over all subjects
-% NOTE: THIS OPTION IS NOT YET IMPLEMENTED IN THE NEXT SCRIPT, HENCE LEAVE
-%       EMPTY FOR NOT BUT DO NOT DELETE OPTION
+% 1. subjs2analyze
+%
+%   cell array of subjects in derivdir you want to analyze, empty cell array
+%   if you want to loop over all subjects
+%   NOTE: THIS OPTION IS NOT YET IMPLEMENTED IN THE NEXT SCRIPT, HENCE LEAVE
+%           CELL ARRAY EMPTY OR COMMENT OUT FOR NOW
 %
 %
-% NEEDED IF SPIKE_DEF = CANLAB
+% SPIKE OPTIONS
 %
 % 1. dvars_threshold
 %
 %   set the threshold for standardized dvars to define a spike
-%   only used if spike_def = CANlab, otherwise set in fmriprep
+%   MANDATORY if spike_def = CANlab, otherwise set in fmriprep
 %   --dvars-spike-threshold command
 %   CANlab default is 3, but this is rather lenient, LaBGAS default 2
 %
@@ -78,7 +81,7 @@
 %   as creating missingness not at random - THIS IS NOT RECOMMENDED
 %
 %
-% NEEDED IF YOUR DESIGN INCLUDES PARAMETRIC MODULATORS
+% MANDATORY ONLY IF YOUR DESIGN INCLUDES PARAMETRIC MODULATORS
 %
 % 1. pmod_polynom
 %
@@ -113,14 +116,41 @@
 %   help(onsets2fmridesign) for more info about these options
 %
 %
+% THRESHOLDING & MASKING OPTIONS FOR DISPLAY PURPOSES
+%   inputs for the CANlab method statistic_image.threshold called by
+%   LaBGAScore_firstlevel_s3_diagnose_model.m
+%
+% 1. input_threshold
+%   p-value or range of raw values, depending on thresh_type
+%
+% 2. thresh_type
+%   threshold type which can be one of:
+%     - 'fdr' : FDR-correct based on p-values already stored in image .p field
+%     - 'bfr' : Bonferroni correction (FWE)
+%     - 'unc' : Uncorrected p-value threshold: p-value, e.g., .05 or .001
+%     - 'extent', 'cluster_extent' : Cluster extent correction with GRF at p < .05 corrected, primary threshold determined by input_threshold
+%     - 'raw-between' : threshold raw image values; save those > input_threshold(1) and < input_threshold(2)
+%     - 'raw-outside' : threshold raw image values; save those < input_threshold(1) or > input_threshold(2)
+%
+%   for more info:
+%       doc statistic_image in Matlab terminal
+%       edit statistic_image.threshold
+%
+% 3. k
+%   extent threshold, in voxels
+%
+% 4. mask
+%   image you want to mask with
+% 
+%
 % DSGN STRUCTURE
 %
-% The example below is maximally annotated, but more info on how to set up
-% the DSGN structure and first level analyses with CANlab tools can be found at
+%   The example below is maximally annotated, but more info on how to set up
+%   the DSGN structure and first level analyses with CANlab tools can be found at
 %
-% 1. canlab_glm_subject_levels('README') in Matlab terminal
-% 2. canlab_glm_subject_levels('dsgninfo') in Matlab terminal
-% 3. CANlabReposGuide_Hackpad.pdf
+%   1. canlab_glm_subject_levels('README') in Matlab terminal
+%   2. canlab_glm_subject_levels('dsgninfo') in Matlab terminal
+%   3. CANlabReposGuide_Hackpad.pdf
 %       LaBGAS url: https://drive.google.com/drive/folders/1-M5UvibmsWXVCIrR31-qJNu506pDA_0t
 %       CANlab url: https://drive.google.com/drive/folders/1G-_aDsylwOagCrS3ZMPPOmGsc2_eC4Nr
 %
@@ -134,28 +164,40 @@
 % last modified: 2022/03/19
 
 
-%% SET OPTIONS
+%% CREATE LABGAS_OPTIONS STRUCTURE
 %--------------------------------------------------------------------------
 
-% MANDATORY
-spike_def = 'fMRIprep';
-omit_spike_trials = 'no';
-spikes_percent_threshold=0.15;
-vif_thresh=3;
-subjs2analyze = {}; % enter subjects separated by comma if you only want to analyze selected subjects e.g. {'sub-01','sub-02'}
+% REQUIRED
+LaBGAS_options.mandatory.spike_def = 'fMRIprep';
+LaBGAS_options.mandatory.omit_spike_trials = 'no';
+LaBGAS_options.mandatory.spikes_percent_threshold=0.15;
+LaBGAS_options.mandatory.vif_thresh=2;
 
-% ONLY NEEDED IF SPIKE_DEF = CANlab
-dvars_threshold = 2;
-spike_additional_vols=0;
+% OPTIONAL
+LaBGAS_options.subjs2analyze = {}; % enter subjects separated by comma if you only want to analyze selected subjects e.g. {'sub-01','sub-02'}; THIS IS NOT YET FULLY IMPLEMENTED HENCE LEAVE CELL ARRAY EMPTY OR COMMENT OUT OR DO NOT SPECIFY FIELD AT ALL
 
-% ONLY NEEDED IF YOU HAVE PARAMETRIC MODULATORS
-pmod_polynom = 1; % polynomial expansion for pmods
-pmod_name = 'rating'; % variable name of your pmod in events.tsv file
-pmod_ortho_off = false; % turn off orthogonalization of pmods
-pmod_type = 'parametric_standard';
+% SPIKE OPTIONS
+LaBGAS_options.spikes.dvars_threshold = 2; % REQUIRED if spike_def = 'CANlab'
+LaBGAS_options.spikes.spike_additional_vols=0; % OPTIONAL, NOT RECOMMENDED TO TURN ON
 
-% THIS CHOICE OF OPTIONS CAN BE CONSIDERED LABGAS DEFAULTS, BUT MAY BE
-% STUDY SPECIFIC, SO DISCUSS WITH LUKAS IF IN DOUBT!
+% OPTIONS FOR THRESHOLDING AND MASKING FIRST LEVEL IMAGES FOR DISPLAY
+LaBGAS_options.display.input_threshold = 0.005;
+LaBGAS_options.display.thresh_type = 'unc';
+LaBGAS_options.display.k = 25;
+LaBGAS_options.display.mask = which('gray_matter_mask_sparse.img');
+
+% THE ABOVE OPTIONS CAN BE CONSIDERED LABGAS DEFAULTS, BUT MAY BE
+% STUDY-SPECIFIC, SO DISCUSS WITH LUKAS IF IN DOUBT!
+
+% REQUIRED IF YOU HAVE PARAMETRIC MODULATORS
+LaBGAS_options.pmods.pmod_polynom = 1;
+LaBGAS_options.pmods.pmod_name = 'rating';
+LaBGAS_options.pmods.pmod_ortho_off = false;
+LaBGAS_options.pmods.pmod_type = 'parametric_standard';
+
+if strcmpi(LaBGAS_options.mandatory.spike_def,'CANlab')==1 && ~isfield(LaBGAS_options.spikes,'dvars_threshold')
+    error('spike_def option %s requires specification of LaBGAS_options.spikes.dvars_threshold, please specify before proceeding',LaBGAS_options.mandatory.spike_def)
+end
 
 
 %% DEFINE DIRECTORIES AND RUNDIRNAMES
@@ -182,14 +224,16 @@ githubrootdir = '/data/master_github_repos';
     % REQUIRED FIELDS
     DSGN.metadata = "proj-erythritol_4a first level analysis model 1, i.e. modeling 4 conditions for sucrose, erythritol, sucralose, and water as long events (= duration of solution in mouth), with sweetness liking ratings as parametric modulators"; % field for annotation with study info, or whatever you like
     DSGN.modeldir = '/data/test_scripts/firstlevel/model_1_conds_pmods'; % directory where you want to write first level results for this model
-        if ~isempty(subjs2analyze)
-            [C,~,~] = intersect(derivsubjs,subjs2analyze);
-            if ~isequal(C',subjs2analyze)
-                error('\n subject %s defined in subjs2smooth not present in %s, please check before proceeding',subjs2analyze{~ismember(subjs2analyze,C)},derivdir);
+        if ~isfield(LaBGAS_options,'subjs2analyze')
+            DSGN.subjects = derivsubjdirs';
+        elseif ~isempty(LaBGAS_options.subjs2analyze)
+            [C,~,~] = intersect(derivsubjs,LaBGAS_options.mandatory.subjs2analyze);
+            if ~isequal(C',LaBGAS_options.mandatory.subjs2analyze)
+                error('\n subject %s defined in LaBGAS_options.mandatory.subjs2analyze not present in %s, please check before proceeding',LaBGAS_options.mandatory.subj2analyze{~ismember(LaBGAS_options.mandatory.subjs2analyze,C)},derivdir);
             else
-                DSGN.subjects = cell(1,size(subjs2analyze,2));
+                DSGN.subjects = cell(1,size(LaBGAS_options.mandatory.subjs2analyze,2));
                     for sub = 1:size(DSGN.subjects,2)
-                        DSGN.subjects{sub} = fullfile(derivdir,subjs2analyze{sub});
+                        DSGN.subjects{sub} = fullfile(derivdir,LaBGAS_options.mandatory.subjs2analyze{sub});
                     end
             end
         else
@@ -203,9 +247,9 @@ githubrootdir = '/data/master_github_repos';
         '/func/run-6/s6*.nii'}; % cell array (one cell per session) of paths to functional files, relative to absolute path specific in DSGN.subjects
    
     % OPTIONAL FIELDS
-    DSGN.concatenation = {[1:6]}; % default: none; cell array of arrays of runs to concatenate; see documentation for when to concatenate, and how it works exactly
+%     DSGN.concatenation = {[1:6]}; % default: none; cell array of arrays of runs to concatenate; see documentation for when to concatenate, and how it works exactly
     DSGN.allowmissingfunc = true; % default: false; true will prevent erroring out when functional file is missing for at least one run is missing for at least one subject
-%     DSGN.customrunintercepts = {1:6}; % default: none; will only work if DSGN.concatenation is specified; cell array of vectors specifying custom intercepts, NEEDS WORK 
+%     DSGN.customrunintercepts = {1:6}; % default: none; will only work if DSGN.concatenation is specified; cell array of vectors specifying custom intercepts, NOT YET FULLY TESTED 
     
 % PARAMETERS
 
