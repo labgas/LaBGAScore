@@ -223,7 +223,7 @@ githubrootdir = '/data/master_github_repos';
     
     % REQUIRED FIELDS
     DSGN.metadata = "proj-erythritol_4a first level analysis model 1, i.e. modeling 4 conditions for sucrose, erythritol, sucralose, and water as long events (= duration of solution in mouth), with sweetness liking ratings as parametric modulators"; % field for annotation with study info, or whatever you like
-    DSGN.modeldir = '/data/test_scripts/firstlevel/model_1_conds_pmods'; % directory where you want to write first level results for this model
+    DSGN.modeldir = '/data/test_scripts/firstlevel/model_1_conds_pmods'; % directory where you want to write firvifs = scn_spm_design_check(subjfirstdir,'events_only','from_multireg',4,'vif_thresh',LaBGAS_options.mandatory.vif_thresh);st level results for this model
         if ~isfield(LaBGAS_options,'subjs2analyze')
             DSGN.subjects = derivsubjdirs';
         elseif ~isempty(LaBGAS_options.subjs2analyze)
