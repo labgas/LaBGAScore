@@ -627,7 +627,7 @@ for sub=1:size(derivsubjs,1)
         
         sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
         
-        print(f1,fullfile(rundir,['design_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
+        print(f1,fullfile(runmodeldir,['design_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
         
         clear f1 ax1 ax2
    
@@ -769,7 +769,7 @@ for sub=1:size(derivsubjs,1)
 
                         sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
 
-                        print(f2,fullfile(rundir,['design_',LaBGAS_options.pmods.pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
+                        print(f2,fullfile(runmodeldir,['design_',LaBGAS_options.pmods.pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
                         clear f2 ax1 ax2
                         
@@ -852,7 +852,7 @@ for sub=1:size(derivsubjs,1)
 
                         sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
 
-                        print(f2,fullfile(rundir,['design_',LaBGAS_options.pmods.pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
+                        print(f2,fullfile(runmodeldir,['design_',LaBGAS_options.pmods.pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
                         clear f2 ax1 ax2 ax3 l1 l2
                     
