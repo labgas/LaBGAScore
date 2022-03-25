@@ -37,9 +37,10 @@ tmapspaths = cell(1,size(tmapnames,1));
 tmapsobj = cell(1,size(tmapnames,1));
 montages = cell(1,size(tmapnames,1));
 
-maskname = split(LaBGAS_options.display.mask,'/');
+[~,maskname,maskext] = fileparts(LaBGAS_options.display.mask);
+mask = [maskname,maskext];
 
-fprintf('\nShowing results at p < %s %s, k = %s, mask = %s\n',num2str(LaBGAS_options.display.input_threshold),LaBGAS_options.display.thresh_type,num2str(LaBGAS_options.display.k),maskname{end}); 
+fprintf('\nShowing results at p < %s %s, k = %s, mask = %s\n',num2str(LaBGAS_options.display.input_threshold),LaBGAS_options.display.thresh_type,num2str(LaBGAS_options.display.k),mask); 
 
 for tmap = 1:size(tmapnames,1)
     tmapspaths{tmap} = fullfile(tmapnames(tmap).folder,tmapnames(tmap).name);

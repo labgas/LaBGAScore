@@ -30,13 +30,17 @@
 %   save them in the correct format to the run-specific directories for each
 %   subject
 %
-% 6. define and estimate first level model and save the spm batches
+% 6. plot design (matrix) of conditions and their parametric modulators for each run, and
+%   save the output to model-specific subdir within run-specific subdirs in
+%   derivdir
+%
+% 7. define and estimate first level model and save the spm batches
 %   NOTE: CANlab functions called by this script in this step
 %       a) https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_subject_levels.m
 %       b) https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_subject_levels_run1subject.m
 %       c) https://github.com/canlab/CanlabPrivate/blob/master/spmUtility/canlab_spm_contrast_job_luka.m
 %
-% 7. run diagnostics on first level model and publish the output by calling
+% 8. run diagnostics on first level model and publish the output as html report by calling
 %   the subsequent LaBGAScore_firstlevel_s3_diagnose_model script
 %   NOTE: CANlab function called by this script
 %       https://github.com/canlab/CanlabCore/blob/master/CanlabCore/diagnostics/scn_spm_design_check.m
@@ -47,7 +51,9 @@
 % LaBGAS_firstlevel_s1_options_dsgn_struct.m should always be run prior to
 % this script; this script will check whether this is the case
 % Script is generic, i.e. it should not need any study-specific
-% modifcations
+% modifcations in principle
+%   NOTE: LaBGAScore first level scripts have been tested on Ubuntu 20.04.3
+%           and Windows 10 (thanks to Anne Willems), NOT (yet) on Mac OS X
 %
 % 
 % DEPENDENCIES
