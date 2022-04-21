@@ -353,7 +353,7 @@ else
                             log2 = removevars(log2,{'onset','duration'});
 
                             for n = 1:height(log2)
-                                log2.pariticipant_id(n,:) = BIDSsubjs{sub};
+                                log2.participant_id(n,:) = BIDSsubjs{sub};
                                 log2.run_id(n) = run;
                                 log2.trial_id_run(n) = n; % generates consecutive trial numbers within each run
                                 log2.trial_id_concat(n) = height(pheno_file_subj) + n; % generates consecutive trial numbers over all conditions & runs
