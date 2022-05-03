@@ -49,8 +49,9 @@
 % USAGE
 %
 % LaBGAS_firstlevel_s1_options_dsgn_struct.m should always be run prior to
-% this script; this script will check whether this is the case
-% Script is generic, i.e. it should not need any study-specific
+% this script, which will check whether this is the case, and run
+% LaBGAS_firstlevel_s1_options_dsgn_struct.m if not
+% This script is generic, i.e. it should not need any study-specific
 % modifcations in principle
 %   NOTE: LaBGAScore first level scripts have been tested on Ubuntu 20.04.3
 %           and Windows 10 (thanks to Anne Willems), NOT (yet) on Mac OS X
@@ -100,7 +101,7 @@
 %
 %__________________________________________________________________________
 % @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.0        
-% last modified: 2022/03/19
+% last modified: 2022/05/03
 
 
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN
@@ -108,7 +109,9 @@
 % check whether LaBGAScore_firstlevel_s1_options_dsgn_struct has been run
 
 if ~exist('DSGN','var')
-    error('\nDSGN structure variable not found in Matlab workspace, please run LaBGAScore_firstlevel_s1_options_dsgn_struct before proceeding')
+    warning('\nDSGN structure variable not found in Matlab workspace, running LaBGAScore_firstlevel_s1_options_dsgn_struct before proceeding')
+    LaBGAScore_firstlevel_s1_options_dsgn_struct;
+    cd(rootdir);
 else
     cd(rootdir);
 end
