@@ -100,8 +100,8 @@
 % date:   March, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.0        
-% last modified: 2022/05/03
+% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.1
+% last modified: 2022/05/04
 
 
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN
@@ -441,10 +441,15 @@ for sub=1:size(derivsubjs,1)
         % Select confound and spike regressors to return for use in GLM 
         regsfull = Rfull.Properties.VariableNames;
         motion_cols = contains(regsfull,'rot') | contains(regsfull,'trans');
+        motion_cols_no_quad = (contains(regsfull,'rot') | contains(regsfull,'trans')) & ~contains(regsfull,'power2');
         spike_cols = contains(regsfull,'mahal_spikes') | contains(regsfull,'motion_outlier'); 
         dvars_cols = contains(regsfull,'dvars_spikes'); 
         additional_spike_cols = contains(regsfull,'additional_spikes'); 
-        Rmotion = Rfull(:,motion_cols);
+            if LaBGAS_options.movement_reg_quadratic
+                Rmotion = Rfull(:,motion_cols);
+            else
+                Rmotion = Rfull(:,motion_cols_no_quad);
+            end
         Rspikes = Rfull(:,spike_cols | dvars_cols | additional_spike_cols);
         Rcsf = table(Rfull.csf,'VariableNames',{'csf'});
         
@@ -467,9 +472,13 @@ for sub=1:size(derivsubjs,1)
             for regz = 1:size(Rmotionzscore.Properties.VariableNames,2)
                 Rmotionzscore.Properties.VariableNames{regz} = regsmotion2{regz};
             end
-        quad = @(x) x.^ 2;
-        Rmotionquad = varfun(quad,Rmotionzscore);
-        Rmotionfinal = [Rmotionzscore,Rmotionquad];
+            
+            if LaBGAS_options.movement_reg_quadratic
+                quad = @(x) x.^ 2;
+                Rmotionquad = varfun(quad,Rmotionzscore);
+                Rmotionfinal = [Rmotionzscore,Rmotionquad];
+            else Rmotionfinal = Rmotionzscore;
+            end
         R = [Rmotionfinal,Rspikes,Rcsf];
         
         % get row indices for spikes for later use
