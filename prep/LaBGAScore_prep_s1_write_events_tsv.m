@@ -273,6 +273,7 @@ else
                             
                             elseif ismember(log.Code(k),rating_labels)
                                 log.trial_type{k} = events_nuisance{2};
+                                log.onset(k) = log.onset(k)+4;
                             
                             elseif ismember(log.Code(k),sweet_labels)
                                 idx = (log.Code(k) == sweet_labels);
