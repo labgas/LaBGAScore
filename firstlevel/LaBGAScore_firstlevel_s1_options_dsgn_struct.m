@@ -219,10 +219,6 @@ LaBGAScore_prep_s0_define_directories;
 
 rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
 
-% define rootdir for Github repos
-
-githubrootdir = '/data/master_github_repos';
-
 
 %% CREATE CANLAB DSGN STRUCTURE
 %--------------------------------------------------------------------------    

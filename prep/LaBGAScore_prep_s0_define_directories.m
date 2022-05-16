@@ -31,6 +31,7 @@
 %% DEFINE DIRECTORIES AND ADD CODE DIR TO MATLAB PATH
 %--------------------------------------------------------------------------
 rootdir = pwd;
+githubrootdir = '/data/master_github_repos'; %dir where all your Github repos are cloned locally
 sourcedir = fullfile(rootdir,'sourcedata');
 BIDSdir = fullfile(rootdir,'BIDS');
 codedir = fullfile(rootdir,'code');
