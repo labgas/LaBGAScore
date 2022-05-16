@@ -166,8 +166,8 @@
 % date:   March, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.1
-% last modified: 2022/05/04
+% @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.2
+% last modified: 2022/05/16
 
 
 %% CREATE LABGAS_OPTIONS STRUCTURE
@@ -211,11 +211,12 @@ end
 %--------------------------------------------------------------------------
 
 % load standard BIDS directory structure from root dir
+% STUDY-SPECIFIC: replace LaBGAScore with name of study-specific script
 
 LaBGAScore_prep_s0_define_directories;
 
 % define run directory names
-% names are defaults, only change number
+% STUDY-SPECIFIC: names are defaults, only change number
 
 rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
 
@@ -226,7 +227,7 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
     
     % REQUIRED FIELDS
     DSGN.metadata = "proj-erythritol_4a first level analysis model 1, i.e. modeling 4 conditions for sucrose, erythritol, sucralose, and water as long events (= duration of solution in mouth), with sweetness liking ratings as parametric modulators"; % field for annotation with study info, or whatever you like
-    DSGN.modeldir = '/data/test_scripts/firstlevel/model_1_conds_pmods'; % directory where you want to write first level results for this model
+    DSGN.modeldir = '/data/proj_erythritol/proj_erythritol_4a/firstlevel/model_1_conds_pmods'; % directory where you want to write first level results for this model
         if ~isfield(LaBGAS_options,'subjs2analyze')
             DSGN.subjects = derivsubjdirs';
         elseif ~isempty(LaBGAS_options.subjs2analyze)
@@ -398,7 +399,6 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
     DSGN.contrastnames{c} = 'erythritol unmodulated vs sucralose unmodulated'; % CON_0010
     DSGN.contrastweights{c} = [1 -1];
     
-    % modulated[X,delta,delta_hires,hrf] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_singleregressor',pmods);
     c=c+1;
     DSGN.contrastnames{c} = 'sucrose modulated'; % CON_0011
     DSGN.contrastweights{c} = [1];

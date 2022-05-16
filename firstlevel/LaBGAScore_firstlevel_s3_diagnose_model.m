@@ -8,7 +8,7 @@
 % help scn_spm_design_check
 % 
 % USAGE
-% Script should be called from LaBGAScore_firstlevel_s1_prep_firstlvl.m, it
+% Script should be called from LaBGAScore_firstlevel_s2_fit_model.m, it
 % is not for standalone use
 %
 %__________________________________________________________________________
@@ -17,8 +17,8 @@
 % date:   March, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s3_diagnose_model.m         v1.0        
-% last modified: 2022/03/22
+% @(#)% LaBGAScore_firstlevel_s3_diagnose_model.m         v1.1        
+% last modified: 2022/05/16
 
 
 %% VIFS AND DESIGN

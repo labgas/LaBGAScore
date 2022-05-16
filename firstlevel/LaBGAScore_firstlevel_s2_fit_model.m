@@ -52,7 +52,10 @@
 % this script, which will check whether this is the case, and run
 % LaBGAS_firstlevel_s1_options_dsgn_struct.m if not
 % This script is generic, i.e. it should not need any study-specific
-% modifcations in principle
+% modifcations in principle, except for changing the names of generic
+% scripts into study-specific ones on
+% - line 112-
+% - line 920-
 %   NOTE: LaBGAScore first level scripts have been tested on Ubuntu 20.04.3
 %           and Windows 10 (thanks to Anne Willems), NOT (yet) on Mac OS X
 %
@@ -100,13 +103,14 @@
 % date:   March, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.1
-% last modified: 2022/05/04
+% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.2
+% last modified: 2022/05/17
 
 
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN
 
 % check whether LaBGAScore_firstlevel_s1_options_dsgn_struct has been run
+% STUDY-SPECIFIC: replace LaBGAScore with name of study-specific script in code below
 
 if ~exist('DSGN','var')
     warning('\nDSGN structure variable not found in Matlab workspace, running LaBGAScore_firstlevel_s1_options_dsgn_struct before proceeding')
@@ -435,7 +439,7 @@ for sub=1:size(derivsubjs,1)
                     clear row
                 Rfull = Rfull(1:size(mahal_spikes_regs,1), any(table2array(Rfull)));
             else
-                error('\ninvalid LaBGAS_options.mandatory.spike_def option %s specified in LaBGAScore_firstlevel_s1_options_dsgn_struct.m, please check before proceeding', LaBGAS_options.mandatory.spike_def)
+                error('\ninvalid LaBGAS_options.mandatory.spike_def option %s specified in <study_name>_firstlevel_<mx>_s1_options_dsgn_struct.m, please check before proceeding', LaBGAS_options.mandatory.spike_def)
             end
 
         % Select confound and spike regressors to return for use in GLM 
@@ -535,7 +539,7 @@ for sub=1:size(derivsubjs,1)
                 O(same,:)=[]; % get rid of trials coinciding with spikes
             elseif strcmpi(LaBGAS_options.mandatory.omit_spike_trials,'no')==1
             else
-                error('\ninvalid LaBGAS_options.mandatory.omit_spike_trials option %s set in LaBGAScore_firstlevel_s1_options_dsgn_struct.m',LaBGAS_options.mandatory.omit_spike_trials)
+                error('\ninvalid LaBGAS_options.mandatory.omit_spike_trials option %s set in <study_name>_firstlevel_<mx>_s1_options_dsgn_struct.m',LaBGAS_options.mandatory.omit_spike_trials)
             end
 
         % initialize structures for conditions
@@ -875,7 +879,7 @@ for sub=1:size(derivsubjs,1)
                         clear f2 ax1 ax2 ax3 l1 l2
                     
                     otherwise
-                        error('\nInvalid LaBGAS_options.pmods.pmod_type option %s specified in LaBGAScore_firstlevel_s1_options_dsgn_struct, please check before proceeding',LaBGAS_options.pmods.pmod_type)
+                        error('\nInvalid LaBGAS_options.pmods.pmod_type option %s specified in <study_name>_firstlevel_<mx>_s1_options_dsgn_struct, please check before proceeding',LaBGAS_options.pmods.pmod_type)
                 end   
                 
         end % if loop pmods
@@ -914,6 +918,7 @@ for sub=1:size(derivsubjs,1)
         'format','html','outputDir',subjfirstdiagnosedir,...
         'showCode',true);
     
+    % STUDY-SPECIFIC: replace LaBGAScore with name of study-specific script in code below
     publish('LaBGAScore_firstlevel_s3_diagnose_model.m',diagnose_struct)
     delete('High_pass_filter_analysis.png','Variance_Inflation.png','LaBGAScore_firstlevel_s3_diagnose_model.png'); % getting rid of some redundant output images due to the use of publish()
     
