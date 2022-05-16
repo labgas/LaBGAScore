@@ -51,7 +51,7 @@ LaBGAScore_prep_s0_define_directories; % lukasvo edited from original LaBGAScore
 
 subjs2write = {}; % enter subjects separated by comma if you only want to write files for selected subjects e.g. {'sub-01','sub-02'}
 pheno_tsv = true; % turn to false if you do not wish to generate a phenotype.tsv file with trial-by-trial ratings; will only work if subjs2write is empty (i.e. when you loop over all your subjects)
-pheno_name = 'ratings.tsv';
+pheno_name = 'ratings_online.tsv';
 
 runnames = {'run-1','run-2','run-3','run-4','run-5','run-6'};
 logfilenames = {'*_run1.log','*_run2.log','*_run3.log','*_run4.log','*_run5.log','*_run6.log'};
