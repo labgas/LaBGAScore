@@ -1,4 +1,4 @@
-%% LaBGAScore_firstlevel_s1_options_dsgn_struct.m
+%%% LaBGAScore_firstlevel_s1_options_dsgn_struct.m
 %
 % This script sets the options and creates a CANlab-style DSGN structure
 % variable, which are used by the subsequent script in the standard LaBGAS
@@ -122,14 +122,23 @@
 %   help(onsets2fmridesign) for more info about these options
 %
 %
-% THRESHOLDING & MASKING OPTIONS FOR DISPLAY PURPOSES
-%   inputs for the CANlab method statistic_image.threshold called by
-%   LaBGAScore_firstlevel_s3_diagnose_model.m
+% PLOTTING, AND THRESHOLDING & MASKING OPTIONS FOR DISPLAY PURPOSES
+%  
+% 1. plotdesign
+%   default true, false suppresses design plots 
+%   (saves time, but generally not recommended)
 %
-% 1. input_threshold
+% 2. plotmontages
+%   default true, false suppresses montages of first level con images
+%   (saves a lot of time, but generally not recommended)
+%   
+%   inputs for the CANlab method statistic_image.threshold called by
+%   LaBGAScore_firstlevel_s3_diagnose_model.m:
+%
+% 3. input_threshold
 %   p-value or range of raw values, depending on thresh_type
 %
-% 2. thresh_type
+% 4. thresh_type
 %   threshold type which can be one of:
 %     - 'fdr' : FDR-correct based on p-values already stored in image .p field
 %     - 'bfr' : Bonferroni correction (FWE)
@@ -142,10 +151,10 @@
 %       doc statistic_image in Matlab terminal
 %       edit statistic_image.threshold
 %
-% 3. k
+% 5. k
 %   extent threshold, in voxels
 %
-% 4. mask
+% 6. mask
 %   image you want to mask with
 % 
 %
@@ -166,8 +175,8 @@
 % date:   March, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.2
-% last modified: 2022/05/16
+% @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.3
+% last modified: 2022/05/29
 
 
 %% CREATE LABGAS_OPTIONS STRUCTURE
@@ -187,7 +196,9 @@ LaBGAS_options.subjs2analyze = {}; % enter subjects separated by comma if you on
 LaBGAS_options.spikes.dvars_threshold = 2; % REQUIRED if spike_def = 'CANlab'
 LaBGAS_options.spikes.spike_additional_vols=0; % OPTIONAL, NOT RECOMMENDED TO TURN ON
 
-% OPTIONS FOR THRESHOLDING AND MASKING FIRST LEVEL IMAGES FOR DISPLAY
+% OPTIONS FOR PLOTTTING, AND THRESHOLDING AND MASKING FIRST LEVEL IMAGES FOR DISPLAY
+LaBGAS_options.display.plotdesign = true; % NOT RECOMMENDED TO TURN OFF
+LaBGAS_options.display.plotmontages = true; % NOT RECOMMENDED TO TURN OFF
 LaBGAS_options.display.input_threshold = 0.005;
 LaBGAS_options.display.thresh_type = 'unc';
 LaBGAS_options.display.k = 25;
