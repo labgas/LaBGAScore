@@ -914,6 +914,41 @@ for sub=1:size(derivsubjs,1)
     fprintf('\nRunning on subject directory %s\n',DSGN.subjects{sub});
     canlab_glm_subject_levels(DSGN,'subjects',DSGN.subjects(sub),'overwrite','nolinks','noreview');
     
+            if isfield(DSGN,'singletrials')
+            
+            load(fullfile(subjfirstdir,'SPM.mat'));
+            betas = SPM.xX.name;
+            
+                for cond = 1:size(DSGN.singletrials{1},2)
+                    if DSGN.singletrials{1}{cond}
+                        betas_cond{cond} = betas(contains(betas,DSGN.conditions{1}{cond}));
+                    end
+                end
+                
+            betas_ofint = {}; % preallocate
+            trial=1;
+            
+                while trial <= size(betas_cond,2)
+                    betas_ofint = [betas_ofint,betas_cond{trial}];
+                    trial=trial+1;
+                end
+                
+            clear trial
+                
+            weights = cell(1,size(betas_ofint,2)); % preallocate
+            connames = cell(1,size(betas_ofint,2)); % preallocate
+            
+                for trial = 1:size(betas_ofint,2)
+                    weights{trial} = strcmp(betas_ofint{trial},betas);
+                    weights{trial} = double(weights{trial});
+                    connames{trial} = betas_ofint{trial};
+                    betas_ofint{trial} = {{betas_ofint{trial}}};
+                end
+
+            [matlabbatch,connames,contrast_vectors] = canlab_spm_contrast_job_single_trials_lukasvo(subjfirstdir,betas_ofint,'weights',weights,'names',connames,'nodelete');
+
+        end
+    
     
     %% DIAGNOSE FIRST LEVEL MODEL
     
