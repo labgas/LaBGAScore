@@ -7,6 +7,9 @@
 % 1. single trial ratings from rootdir/BIDS/phenotype/<phenotype_trial>.tsv
 % 2. single trial vifs
 %
+% Except for the study-specific options set in the first part of the
+% script, it should be generic if your data are organized according to
+% LaBGAS conventions
 % 
 % Option to exclude trials for certain conditions is built in
 %
@@ -19,16 +22,17 @@
 % date:   March, 2021
 %__________________________________________________________________________
 % @(#)% LaBGAScore_secondlevel_create_single_trial_fmri_data_st_obj     v2.0        
-% last modified: 2022/05/30
+% last modified: 2022/05/31
 
 
 %% SET OPTIONS
 %--------------------------------------------------------------------------
 
 cons2exclude = {'water','erythritol'}; % cell array of conditions to exclude, separated by commas (or blanks)
-behav_outcome = 'rating';
-subj_identifier = 'participant_id'; % name of subject identifier variable in DAT.BEHAVIOR.behavioral_data_table_st
+behav_outcome = 'rating'; % name of outcome variable in DAT.BEHAVIOR.behavioral_data_table_st
+subj_identifier = 'participant_id'; % name of subject identifier variable in same table
 cond_identifier = 'trial_type'; % name of condition identifier variable in same table
+% group_identifier = 'group'; % name of group identifier variable in same table
 
 
 %% LOAD VARIABLES
@@ -105,7 +109,7 @@ nr_cons_no_st = sum(cell2mat(DSGN.singletrials{1}) == 0); % number of conditions
                 for con2ex = 1:size(cons2exclude,2)
                     idx_cons(conimg,con2ex) = ~contains(subjconimgs(conimg).name, char(cons2exclude{con2ex}));
                 end
-                idx_cons2(conimg) = logical(sum(idx_cons(conimg,:)) == 2);
+                idx_cons2(conimg) = logical(sum(idx_cons(conimg,:)) == size(cons2exclude,2));
             end
             
             subjconimgs = subjconimgs(idx_cons2'); % excluding cons2exclude
@@ -202,6 +206,18 @@ fprintf('\n');
 warning('passed sanity check #4: vifname and trial_type do match in all rows of fmri_data.metadata_table, proceeding')
 fprintf('\n');
 
+% SANITY CHECK #5
+
+for row = height(fmri_dat.metadata_table)
+    if ~isequal(fmri_dat.metadata_table.subjname{row}, fmri_dat.metadata_table.(subj_identifier){row})
+        error('\nsubject identifiers from fmri_dat and behav_dat do not match in row #%d of fmri_dat.metadata_table, please check before proceeding\n',row)
+    end
+end
+
+fprintf('\n');
+warning('passed sanity check #5: subject identifiers from fmri_dat and behav_dat do match in all rows of fmri_data.metadata_table, proceeding')
+fprintf('\n');
+
 
 %% ADD BEHAVIORAL OUTCOME TO Y FIELD OF FMRI_DATA_ST OBJECT
 %--------------------------------------------------------------------------
@@ -216,4 +232,4 @@ fmri_data_test = get_wh_image(fmri_dat,idx_Ynan); % @bogpetre's fmri_data_st obj
 %--------------------------------------------------------------------------
 
 savefilename = fullfile(resultsdir, ['single_trial_fmri_data_st_object_' DSGN.modelingfilesdir '.mat']);
-save(savefilename, 'fmri_dat');
+save(savefilename, 'fmri_dat', 'cons2exclude', 'behav_outcome', 'subj_identifier', 'cond_identifier');
