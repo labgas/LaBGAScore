@@ -28,11 +28,12 @@
 %% SET OPTIONS
 %--------------------------------------------------------------------------
 
-cons2exclude = {'water','erythritol'}; % cell array of conditions to exclude, separated by commas (or blanks)
+cons2exclude = {'water'}; % cell array of conditions to exclude, separated by commas (or blanks)
 behav_outcome = 'rating'; % name of outcome variable in DAT.BEHAVIOR.behavioral_data_table_st
 subj_identifier = 'participant_id'; % name of subject identifier variable in same table
 cond_identifier = 'trial_type'; % name of condition identifier variable in same table
 % group_identifier = 'group'; % name of group identifier variable in same table
+vif_threshold = 4; % variance inflation threshold to exclude trials
 
 
 %% LOAD VARIABLES
@@ -225,7 +226,80 @@ fprintf('\n');
 fmri_dat.Y = fmri_dat.metadata_table.(behav_outcome);
 fmri_dat.Y_descrip = behav_outcome;
 idx_Ynan = ~isnan(fmri_dat.Y);
-fmri_data_test = get_wh_image(fmri_dat,idx_Ynan); % @bogpetre's fmri_data_st object nicely excludes the right row in all fields - River Roost IPA earned ;)
+fmri_dat = get_wh_image(fmri_dat,idx_Ynan); % @bogpetre's fmri_data_st object nicely excludes the right row in all fields - River Roost IPA earned ;)
+
+
+%% EXCLUDE TRIALS EXCEEDING VIF THRESHOLD AND MASK
+%--------------------------------------------------------------------------
+
+% DEFINE SUBJECT IDENTIFIERS PRIOR TO REMOVING BAD TRIALS
+
+subject_id_vifs = fmri_dat.metadata_table.(subj_identifier);
+[uniq_subject_id_vifs, ~, subject_id_vifs] = unique(subject_id_vifs,'stable');
+n_subj_vifs = size(uniq_subject_id_vifs,1);
+
+% PLOT VIFS AND CALCULATE PERCENTAGE EXCEEDING THRESHOLD DEFINED ABOVE
+
+% over subjects
+
+v1=figure;
+hold off
+v1 = plot(fmri_dat.metadata_table.vifvalue);
+yline(5);
+title('vif values over all trials');
+xlabel('trial');
+ylabel('variance inflation factor');
+
+good_trials_idx = fmri_dat.metadata_table.vifvalue < vif_threshold;
+bad_trials_perc = sum(~good_trials_idx)./size(fmri_dat.metadata_table.vifvalue,1).*100;
+sprintf('%4.2f percent of trials exceeds a vif threshold of %d, indicating multicollinearity with noise regressors; script will remove them',bad_trials_perc,vif_threshold)
+
+% per subject
+
+v2=figure;
+
+    for sub = 1:n_subj_vifs
+        
+        this_idx_vifs = find(sub == subject_id_vifs);
+        this_vifs = fmri_dat.metadata_table.vifvalue(this_idx_vifs);
+
+        this_good_trials_idx = this_vifs < vif_threshold;
+        this_bad_trials_perc = sum(~this_good_trials_idx)./size(this_vifs,1).*100;
+        sprintf('%4.2f percent of trials for subject %s exceeds a vif threshold of %d, indicating multicollinearity with noise regressors; script will remove them',this_bad_trials_perc,uniq_subject_id_vifs{sub},vif_threshold)
+
+        subplot(ceil(sqrt(n_subj_vifs)), ceil(n_subj_vifs/ceil(sqrt(n_subj_vifs))), sub);
+        hold off
+        v2 = plot(this_vifs);
+        yline(5);
+        box off
+        title(uniq_subject_id_vifs{sub});
+        xlabel('trial');
+        ylabel('vif');
+        
+    end
+
+% REMOVE CON IMAGES CORRESPONDING TO TRIALS EXCEEDING VIF THRESHOLDS FROM
+% DATA OBJECT
+
+fmri_dat = fmri_dat.get_wh_image(good_trials_idx);
+
+% MASK
+
+if ~isempty(maskname_pcr)
+    mask = fmri_mask_image(maskname_pcr);
+    fmri_dat = fmri_dat.apply_mask(mask);
+    fmri_dat.mask = mask; % fmri_data.apply_mask does not seem to update mask info of the object automatically, so we do that manually here
+    fmri_dat.mask_descrip = maskname_pcr;
+end
+
+% ZSCORE BEHAVIORAL OUTCOME
+% NOTE: useful for more interpretable values of prediction MSE
+
+fmri_dat.Y = zscore(fmri_dat.Y);
+
+% CLEAR SUBJECT IDENTIFIERS
+
+clear sub subject_id_vifs uniq_subject_id_vifs n_subj_vifs this_idx_vifs this_vifs;
 
 
 %% SAVE FMRI_DATA_ST OBJECT
