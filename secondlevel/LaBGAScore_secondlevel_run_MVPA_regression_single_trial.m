@@ -29,6 +29,8 @@
 % Bogdan's more recent object-oriented machine learning framework for fMRI
 % data
 % 
+% NOTE: this script is work in progress, not yet extensively tested
+% 
 %__________________________________________________________________________
 %
 % author: lukas.vanoudenhove@kuleuven.be
@@ -152,69 +154,86 @@ end
 % function, for example LASSO-PCR or PLS
 % type help predict in Matlab command window for more info
 
-fmri_dat_c = fmri_dat.rescale('centerimages');
-fmri_dat_l2 = fmri_dat.rescale('l2norm_images');
-fmri_dat_z = fmri_dat.rescale('zscoreimages');
+    switch myscaling_mvpa_reg_st
 
-% default
-t0 = tic;
-[d_cverr, d_stats, d_optout] = predict(fmri_dat, 'algorithm_name', 'cv_svr', ...
-    'nfolds', fold_labels, 'error_type', 'mse', 'useparallel', 0, 'verbose', 0);
-d_t = toc(t0);
+        case 'raw'
 
-fprintf('PCR r = %0.3f\n', corr(d_stats.yfit, fmri_dat.Y));
+            % default
+            t0 = tic;
+            [d_cverr, d_stats, d_optout] = predict(fmri_dat, 'algorithm_name', 'cv_svr', ...
+                'nfolds', fold_labels, 'error_type', 'mse', 'useparallel', 0, 'verbose', 0);
+            d_t = toc(t0);
 
-figure
-line_plot_multisubject(fmri_dat.Y, d_stats.yfit, 'subjid', subject_id);
-xlabel({['Observed ' behav_outcome],'(average over conditions)'}); ylabel({['SVR Estimated ' behav_outcome],'(cross validated)'})
+            fprintf('PCR r = %0.3f\n', corr(d_stats.yfit, fmri_dat.Y));
 
-figure
-d_stats.weight_obj.montage;
+            figure
+            line_plot_multisubject(fmri_dat.Y, d_stats.yfit, 'subjid', subject_id);
+            xlabel({['Observed ' behav_outcome],'(average over conditions)'}); ylabel({['SVR Estimated ' behav_outcome],'(cross validated)'})
 
-% centered
-t0 = tic;
-[c_cverr, c_stats, c_optout] = predict(fmri_dat_c, 'algorithm_name', 'cv_svr', ...
-    'nfolds', fold_labels, 'error_type', 'mse', 'useparallel', 0, 'verbose', 0);
-c_t = toc(t0);
+            figure
+            d_stats.weight_obj.montage;
 
-fprintf('PCR r = %0.3f\n', corr(c_stats.yfit, fmri_dat.Y));
+        case 'centerimages'
 
-figure
-line_plot_multisubject(fmri_dat.Y, c_stats.yfit, 'subjid', subject_id);
-xlabel({['Observed ' behav_outcome],'(average over conditions)'}); ylabel({['SVR Estimated ' behav_outcome],'(cross validated)'})
+            fmri_dat = fmri_dat.rescale('centerimages');    
 
-figure
-c_stats.weight_obj.montage;
+            % centered
+            t0 = tic;
+            [c_cverr, c_stats, c_optout] = predict(fmri_dat, 'algorithm_name', 'cv_svr', ...
+                'nfolds', fold_labels, 'error_type', 'mse', 'useparallel', 0, 'verbose', 0);
+            c_t = toc(t0);
 
-% l2normed
-t0 = tic;
-[l2_cverr, l2_stats, l2_optout] = predict(fmri_dat_l2, 'algorithm_name', 'cv_svr', ...
-    'nfolds', fold_labels, 'error_type', 'mse', 'useparallel', 0, 'verbose', 0);
-l2_t = toc(t0);
+            fprintf('PCR r = %0.3f\n', corr(c_stats.yfit, fmri_dat.Y));
 
-fprintf('PCR r = %0.3f\n', corr(l2_stats.yfit, fmri_dat.Y));
+            figure
+            line_plot_multisubject(fmri_dat.Y, c_stats.yfit, 'subjid', subject_id);
+            xlabel({['Observed ' behav_outcome],'(average over conditions)'}); ylabel({['SVR Estimated ' behav_outcome],'(cross validated)'})
 
-figure
-line_plot_multisubject(fmri_dat.Y, l2_stats.yfit, 'subjid', subject_id);
-xlabel({['Observed ' behav_outcome],'(average over conditions)'}); ylabel({['SVR Estimated ' behav_outcome],'(cross validated)'})
+            figure
+            c_stats.weight_obj.montage;
 
-figure
-l2_stats.weight_obj.montage;
+        case 'l2norm_images'
 
-% zscored
-t0 = tic;
-[z_cverr, z_stats, z_optout] = predict(fmri_dat_z, 'algorithm_name', 'cv_svr', ...
-    'nfolds', fold_labels, 'error_type', 'mse', 'useparallel', 0, 'verbose', 0);
-z_t = toc(t0);
+            fmri_dat = fmri_dat.rescale('l2norm_images');
 
-fprintf('PCR r = %0.3f\n', corr(z_stats.yfit, fmri_dat.Y));
+            % l2normed
+            t0 = tic;
+            [l2_cverr, l2_stats, l2_optout] = predict(fmri_dat, 'algorithm_name', 'cv_svr', ...
+                'nfolds', fold_labels, 'error_type', 'mse', 'useparallel', 0, 'verbose', 0);
+            l2_t = toc(t0);
 
-figure
-line_plot_multisubject(fmri_dat.Y, z_stats.yfit, 'subjid', subject_id);
-xlabel({['Observed ' behav_outcome],'(average over conditions)'}); ylabel({['SVR Estimated ' behav_outcome],'(cross validated)'})
+            fprintf('PCR r = %0.3f\n', corr(l2_stats.yfit, fmri_dat.Y));
 
-figure
-z_stats.weight_obj.montage;
+            figure
+            line_plot_multisubject(fmri_dat.Y, l2_stats.yfit, 'subjid', subject_id);
+            xlabel({['Observed ' behav_outcome],'(average over conditions)'}); ylabel({['SVR Estimated ' behav_outcome],'(cross validated)'})
+
+            figure
+            l2_stats.weight_obj.montage;
+
+        case 'zscore_images'
+
+            fmri_dat_z = fmri_dat.rescale('zscoreimages');
+
+            % zscored
+            t0 = tic;
+            [z_cverr, z_stats, z_optout] = predict(fmri_dat, 'algorithm_name', 'cv_svr', ...
+                'nfolds', fold_labels, 'error_type', 'mse', 'useparallel', 0, 'verbose', 0);
+            z_t = toc(t0);
+
+            fprintf('PCR r = %0.3f\n', corr(z_stats.yfit, fmri_dat.Y));
+
+            figure
+            line_plot_multisubject(fmri_dat.Y, z_stats.yfit, 'subjid', subject_id);
+            xlabel({['Observed ' behav_outcome],'(average over conditions)'}); ylabel({['SVR Estimated ' behav_outcome],'(cross validated)'})
+
+            figure
+            z_stats.weight_obj.montage;
+
+        otherwise 
+            error('\ninvalid scaling option %s specified in myscaling_mvpa_reg_st variable defined in a2_set_default_options CANlabhelpexamples script, please correct\n', myscaling_mvpa_reg_st)
+
+    end % switch scaling
 
 
 %% FIT MULTILEVEL MVPA MODEL
@@ -356,3 +375,4 @@ mlpcr3rs_stats.weight_obj.montage;
 
 savefilename = fullfile(resultsdir, 'single_trial_MVPA_results.mat');
 save(savefilename, 'cv','d_stats','pcr_stats','mlpcr_stats','mlpcr3_stats','mlpcr3rs_stats', '-v7.3');
+
