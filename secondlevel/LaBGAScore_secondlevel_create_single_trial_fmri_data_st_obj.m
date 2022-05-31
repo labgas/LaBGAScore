@@ -283,20 +283,6 @@ v2=figure;
 
 fmri_dat = fmri_dat.get_wh_image(good_trials_idx);
 
-% MASK
-
-if ~isempty(maskname_mvpa_reg_st)
-    mask = fmri_mask_image(maskname_mvpa_reg_st);
-    fmri_dat = fmri_dat.apply_mask(mask);
-    fmri_dat.mask = mask; % fmri_data.apply_mask does not seem to update mask info of the object automatically, so we do that manually here
-    fmri_dat.mask_descrip = maskname_mvpa_reg_st;
-end
-
-% ZSCORE BEHAVIORAL OUTCOME
-% NOTE: useful for more interpretable values of prediction MSE
-
-fmri_dat.Y = zscore(fmri_dat.Y);
-
 % CLEAR SUBJECT IDENTIFIERS
 
 clear sub subject_id_vifs uniq_subject_id_vifs n_subj_vifs this_idx_vifs this_vifs;

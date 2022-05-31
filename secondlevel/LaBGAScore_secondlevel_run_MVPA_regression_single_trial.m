@@ -66,6 +66,25 @@ subject_id = fmri_dat.metadata_table.(subj_identifier);
 [uniq_subject_id, ~, subject_id] = unique(subject_id,'stable');
 n_subj = size(uniq_subject_id,1);
 
+%% MASK AND Z-SCORE DV IF REQUESTED IN OPTIONS
+%--------------------------------------------------------------------------
+
+% MASK
+
+if ~isempty(maskname_mvpa_reg_st)
+    mask = fmri_mask_image(maskname_mvpa_reg_st);
+    fmri_dat = fmri_dat.apply_mask(mask);
+    fmri_dat.mask = mask; % fmri_data.apply_mask does not seem to update mask info of the object automatically, so we do that manually here
+    fmri_dat.mask_descrip = maskname_mvpa_reg_st;
+end
+
+% ZSCORE BEHAVIORAL OUTCOME
+% NOTE: useful for more interpretable values of prediction MSE
+
+if zscore_outcome
+    fmri_dat.Y = zscore(fmri_dat.Y);
+end
+
 
 %% DATA VISUALISATION PRIOR TO MODEL BUILDING
 %--------------------------------------------------------------------------
