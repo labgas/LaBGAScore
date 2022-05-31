@@ -285,11 +285,11 @@ fmri_dat = fmri_dat.get_wh_image(good_trials_idx);
 
 % MASK
 
-if ~isempty(maskname_pcr)
-    mask = fmri_mask_image(maskname_pcr);
+if ~isempty(maskname_mvpa_reg_st)
+    mask = fmri_mask_image(maskname_mvpa_reg_st);
     fmri_dat = fmri_dat.apply_mask(mask);
     fmri_dat.mask = mask; % fmri_data.apply_mask does not seem to update mask info of the object automatically, so we do that manually here
-    fmri_dat.mask_descrip = maskname_pcr;
+    fmri_dat.mask_descrip = maskname_mvpa_reg_st;
 end
 
 % ZSCORE BEHAVIORAL OUTCOME
@@ -307,3 +307,4 @@ clear sub subject_id_vifs uniq_subject_id_vifs n_subj_vifs this_idx_vifs this_vi
 
 savefilename = fullfile(resultsdir, ['single_trial_fmri_data_st_object_' DSGN.modelingfilesdir '.mat']);
 save(savefilename, 'fmri_dat', 'cons2exclude', 'behav_outcome', 'subj_identifier', 'cond_identifier');
+
