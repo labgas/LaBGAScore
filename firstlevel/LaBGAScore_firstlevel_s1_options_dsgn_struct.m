@@ -168,8 +168,11 @@
 %   3. CANlabReposGuide_Hackpad.pdf
 %       LaBGAS url: https://drive.google.com/drive/folders/1-M5UvibmsWXVCIrR31-qJNu506pDA_0t
 %       CANlab url: https://drive.google.com/drive/folders/1G-_aDsylwOagCrS3ZMPPOmGsc2_eC4Nr
-%   4. help canlab_spm_contrast_job_luka in Matlab terminal, for info on
-%       contrast specification
+%   
+%   For info on contrast specification
+%
+%   1. help canlab_spm_contrast_job_luka in Matlab terminal
+%   2. https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_example_DSGN_setup.txt
 %
 %__________________________________________________________________________
 %
