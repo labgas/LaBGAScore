@@ -23,14 +23,11 @@
 
 %% VIFS AND DESIGN
 
-if LaBGAS_options.display.plotdesign
-
     vifs = scn_spm_design_check(subjfirstdir,'events_only','vif_thresh',LaBGAS_options.mandatory.vif_thresh);
     drawnow, snapnow
     save('vifs','vifs');
     close all
     
-end
 
 %% FIRST LEVEL MAPS
 
