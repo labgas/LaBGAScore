@@ -168,6 +168,8 @@
 %   3. CANlabReposGuide_Hackpad.pdf
 %       LaBGAS url: https://drive.google.com/drive/folders/1-M5UvibmsWXVCIrR31-qJNu506pDA_0t
 %       CANlab url: https://drive.google.com/drive/folders/1G-_aDsylwOagCrS3ZMPPOmGsc2_eC4Nr
+%   4. help canlab_spm_contrast_job_luka in Matlab terminal, for info on
+%       contrast specification
 %
 %__________________________________________________________________________
 %
@@ -176,7 +178,7 @@
 %
 %__________________________________________________________________________
 % @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.3
-% last modified: 2022/05/29
+% last modified: 2022/06/03
 
 
 %% CREATE LABGAS_OPTIONS STRUCTURE
