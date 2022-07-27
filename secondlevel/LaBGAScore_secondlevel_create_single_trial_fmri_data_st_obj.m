@@ -21,8 +21,8 @@
 % author: lukas.vanoudenhove@kuleuven.be
 % date:   March, 2021
 %__________________________________________________________________________
-% @(#)% LaBGAScore_secondlevel_create_single_trial_fmri_data_st_obj     v2.0        
-% last modified: 2022/05/31
+% @(#)% LaBGAScore_secondlevel_create_single_trial_fmri_data_st_obj     v2.1        
+% last modified: 2022/07/27
 
 
 %% SET OPTIONS
@@ -45,7 +45,7 @@ vif_threshold = 4; % variance inflation threshold to exclude trials
     if ~exist('DSGN','var') || ~exist('DAT','var')
         load(fullfile(resultsdir,'image_names_and_setup.mat'));
         if ~isfield(DAT,'BEHAVIOR')
-            error('\n Behavioral data not yet added to DAT structure - run prep_1b script first')
+            error('\n Behavioral data not yet added to DAT structure - run prep_1b script first\n')
         end
     end
 
@@ -61,8 +61,8 @@ vif_threshold = 4; % variance inflation threshold to exclude trials
     
 outcome_vars_between = DAT.BEHAVIOR.behavioral_data_table(:,outcome_vars_between_idx2);
 
-    for var=1:sum(outcome_vars_between_idx2)
-        missings{var} = isnan(table2array(outcome_vars_between(:,var))); % index for subjects with missing behavioral data, which we want to exclude
+    for var = 1:sum(outcome_vars_between_idx2)
+        missings{var} = isnan(tableTitle2array(outcome_vars_between(:,var))); % index for subjects with missing behavioral data, which we want to exclude
     end
     
 missings = cell2mat(missings);
@@ -71,7 +71,7 @@ missings = cell2mat(missings);
         idx_behav(sub) = sum(missings(sub,:));
     end
     
-clear sub
+clear sub var out con2ex
 
 idx_behav = ~idx_behav;
 subjs2use = subjs(:,idx_behav); % exclude subjects if ratings for any of the conditions of interest are missing
