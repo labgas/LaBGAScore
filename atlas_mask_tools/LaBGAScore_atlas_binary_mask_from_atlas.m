@@ -20,7 +20,7 @@
 % date:   KU Leuven, July, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_binary_mask_from_atlas.m         v1.1       
+% @(#)% LaBGAScore_atlas_binary_mask_from_atlas.m         v1.2       
 % last modified: 2022/07/26
 
 
@@ -28,7 +28,7 @@
 %--------------------------------------------------------------------------
 
 maskname = 'ery_4a_m6_mask_all_regions';
-maskdir = '/data/proj_erythritol/proj_erythritol_4a/secondlevel/model_6_long_12hmp_can_ar1/maskdir';
+maskdir = '/data/proj_erythritol/proj_erythritol_4a/secondlevel/model_6_long_12hmp_can_ar1/masks';
 
 % NOTE: in default LaBGAS file organization this is a model-specific dir in
 % rootdir/secondlevel/model_xxx, but you can obviously specify any dir here
