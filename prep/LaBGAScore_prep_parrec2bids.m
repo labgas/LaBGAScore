@@ -125,58 +125,124 @@ for sub = 1:size(sourcesubjdirs,1)
         subjBIDSdir = fullfile(BIDSdir, sourcesubjs{sub});
         
         dicm2nii(char(subjsourcedir),char(subjBIDSdir),1);
-        
+            
+        load(fullfile(subjBIDSdir,'dcmHeaders.mat'));
+
+        parrec_headers = fields(h);
+
         anatniilist = dir(fullfile(subjBIDSdir,'*_3DTFE_*.nii.gz')); % STUDY-SPECIFIC: THE NAMES OF YOUR STRUCTURAL PARRECS MAY DIFFER
             for i = 1:size(anatniilist,1)
-                sourceanatniiname = char(anatniilist(:).name);
+                sourceanatniiname = char(anatniilist(i).name);
                 BIDSanatniiname = char(strcat(sourcesubjs{sub},'_T1w.nii.gz'));
                 movefile(fullfile(subjBIDSdir,sourceanatniiname),fullfile(subjBIDSdir,'anat',BIDSanatniiname));
             end
-            
+
         anatjsonlist = dir(fullfile(subjBIDSdir,'*_3DTFE_*.json')); % STUDY-SPECIFIC: THE NAMES OF YOUR STRUCTURAL PARRECS MAY DIFFER
             for i = 1:size(anatjsonlist,1)
-                sourceanatjsonname = cellstr(char(anatjsonlist(:).name));
+                sourceanatjsonname = char(anatjsonlist(i).name);
                 anatjson = spm_jsonread(fullfile(subjBIDSdir,sourceanatjsonname));
                     anatjson.SeriesDescription = [];
                 spm_jsonwrite(fullfile(subjBIDSdir,sourceanatjsonname),anatjson);
                 BIDSanatjsonname = char(strcat(sourcesubjs{sub},'_T1w.json'));
                 movefile(fullfile(subjBIDSdir,sourceanatjsonname),fullfile(subjBIDSdir,'anat',BIDSanatjsonname));
             end
-            
+
         task1niilist1 = dir(fullfile(subjBIDSdir,'*_Exp1_*.nii.gz')); % STUDY-SPECIFIC: THE NAMES OF YOUR FUNCTIONAL PARRECS MAY DIFFER
         task1niilist2 = dir(fullfile(subjBIDSdir,'*_Exp2_*.nii.gz'));
         task1niilist = [task1niilist1;task1niilist2];
             for i = 1:size(task1niilist,1)
-                sourcetask1niiname = cellstr(char(task1niilist(:).name));
-                BIDStask1niiname = char(strcat(sourcesubjs{sub},'_task-food_images','_bold.nii.gz'));
-                movefile(fullfile(subjsourcedir,sourcetask1niiname),fullfile(subjBIDSdir,BIDStask1niiname));
+                runid = sprintf('_run-%d',i);
+                sourcetask1niiname = char(task1niilist(i).name);
+                BIDStask1niiname = char(strcat(sourcesubjs{sub},'_task-', task1name, runid, '_bold.nii.gz'));
+                movefile(fullfile(subjBIDSdir,sourcetask1niiname),fullfile(subjBIDSdir,'func',BIDStask1niiname));
             end
-            
+
         task1jsonlist1 = dir(fullfile(subjBIDSdir,'*_Exp1_*.json')); % STUDY-SPECIFIC: THE NAMES OF YOUR FUNCTIONAL PARRECS MAY DIFFER
         task1jsonlist2 = dir(fullfile(subjBIDSdir,'*_Exp2_*.json'));
         task1jsonlist = [task1jsonlist1;task1jsonlist2];
             for i = 1:size(task1jsonlist,1)
-                sourcetask1jsonname = cellstr(char(task1jsonlist(:).name));
-                BIDStask1jsonname = char(strcat(sourcesubjs{sub},'_task-food_images','_bold.json'));
-                movefile(fullfile(subjsourcedir,sourcetask1jsonname),fullfile(subjBIDSdir,BIDStask1jsonname));
+                runid = sprintf('_run-%d',i);
+                sourcetask1jsonname = char(task1jsonlist(i).name);
+
+                % the following is based on Chris Rorden's code 
+                % https://neurostars.org/t/deriving-slice-timing-order-from-philips-par-rec-and-console-information/17688
+
+                n_slices = h.(parrec_headers{size(anatjsonlist,1)+i}).LocationsInAcquisition;
+                TR = (h.(parrec_headers{size(anatjsonlist,1)+i}).RepetitionTime)/1000; % convert to seconds
+                last_slice_time = TR - TR/n_slices;
+
+                switch slice_scan_order_exam_card
+                    case 'FH' % ascending
+                        slice_times = linspace(0, last_slice_time, n_slices); 
+                    case 'HF' % descending
+                        slice_times = flip(linspace(0, last_slice_time, n_slices));
+                    case 'interleaved'
+                        order = [1:2:n_slices 2:2:n_slices]; 
+                        slice_times = linspace(0, last_slice_time, n_slices); 
+                        slice_times(order) = slice_times;
+                    otherwise
+                        error('\nWrong option "%s" specified in slice_scan_order_exam_card variable, check your exam card and choose between "FH", HF", or "interleaved"\n',slice_scan_order_exam_card)
+                end
+
+                task1json = spm_jsonread(fullfile(subjBIDSdir,sourcetask1jsonname));
+                    task1json.SeriesDescription = [];
+                    task1json.PhaseEncodingDirection = 'j-'; % TO BE CHECKED!
+                    task1json.TaskName = task1name;
+                    task1json.SliceTiming = slice_times;
+                spm_jsonwrite(fullfile(subjBIDSdir,sourcetask1jsonname),task1json);
+
+                BIDStask1jsonname = char(strcat(sourcesubjs{sub},'_task-', task1name , runid, '_bold.json'));
+
+                movefile(fullfile(subjBIDSdir,sourcetask1jsonname),fullfile(subjBIDSdir,'func',BIDStask1jsonname));
             end
-            
+
         task2niilist1 = dir(fullfile(subjBIDSdir,'*_Exp3_*.nii.gz')); % STUDY-SPECIFIC: THE NAMES OF YOUR FUNCTIONAL PARRECS MAY DIFFER
         task2niilist2 = dir(fullfile(subjBIDSdir,'*_Exp4_*.nii.gz'));
         task2niilist = [task2niilist1;task2niilist2];
             for i = 1:size(task2niilist,1)
-                sourcetask2niiname = cellstr(char(task2niilist(:).name));
-                BIDStask2niiname = char(strcat(sourcesubjs{sub},'_task-FID','_bold.nii.gz'));
-                movefile(fullfile(subjsourcedir,sourcetask2niiname),fullfile(subjBIDSdir,BIDStask2niiname));
+                runid = sprintf('_run-%d',i);
+                sourcetask2niiname = char(task2niilist(i).name);
+                BIDStask2niiname = char(strcat(sourcesubjs{sub},'_task-', task2name, runid, '_bold.nii.gz'));
+                movefile(fullfile(subjBIDSdir,sourcetask2niiname),fullfile(subjBIDSdir,'func',BIDStask2niiname));
             end
-            
+
         task2jsonlist1 = dir(fullfile(subjBIDSdir,'*_Exp3_*.json')); % STUDY-SPECIFIC: THE NAMES OF YOUR FUNCTIONAL PARRECS MAY DIFFER
         task2jsonlist2 = dir(fullfile(subjBIDSdir,'*_Exp4_*.json')); 
         task2jsonlist = [task2jsonlist1;task2jsonlist2];
             for i = 1:size(task2jsonlist,1)
-                sourcetask2jsonname = cellstr(char(task2jsonlist(:).name));
-                BIDStask2jsonname = char(strcat(sourcesubjs{sub},'_task-FID','_bold.json'));
-                movefile(fullfile(subjsourcedir,sourcetask2jsonname),fullfile(subjBIDSdir,BIDStask2jsonname));
+                runid = sprintf('_run-%d',i);
+                sourcetask2jsonname = char(task2jsonlist(i).name);
+
+                % the following is based on Chris Rorden's code 
+                % https://neurostars.org/t/deriving-slice-timing-order-from-philips-par-rec-and-console-information/17688
+
+                n_slices = h.(parrec_headers{size(anatjsonlist,1)+size(task1jsonlist,1)+i}).LocationsInAcquisition;
+                TR = (h.(parrec_headers{size(anatjsonlist,1)+size(task1jsonlist,1)+i}).RepetitionTime)/1000; % convert to seconds
+                last_slice_time = TR - TR/n_slices;
+
+                switch slice_scan_order_exam_card
+                    case 'FH' % ascending
+                        slice_times = linspace(0, last_slice_time, n_slices); 
+                    case 'HF' % descending
+                        slice_times = flip(linspace(0, last_slice_time, n_slices));
+                    case 'interleaved'
+                        order = [1:2:n_slices 2:2:n_slices]; 
+                        slice_times = linspace(0, last_slice_time, n_slices); 
+                        slice_times(order) = slice_times;
+                    otherwise
+                        error('\nWrong option "%s" specified in slice_scan_order_exam_card variable, check your exam card and choose between "FH", HF", or "interleaved"\n',slice_scan_order_exam_card)
+                end
+
+                task2json = spm_jsonread(fullfile(subjBIDSdir,sourcetask2jsonname));
+                    task2json.SeriesDescription = [];
+                    task2json.PhaseEncodingDirection = 'j-'; % TO BE CHECKED!
+                    task2json.TaskName = task2name;
+                    task2json.SliceTiming = slice_times;
+                spm_jsonwrite(fullfile(subjBIDSdir,sourcetask2jsonname),task2json);
+
+                BIDStask2jsonname = char(strcat(sourcesubjs{sub},'_task-', task2name, runid, '_bold.json'));
+
+                movefile(fullfile(subjBIDSdir,sourcetask2jsonname),fullfile(subjBIDSdir,'func',BIDStask2jsonname));
             end
         
     else
