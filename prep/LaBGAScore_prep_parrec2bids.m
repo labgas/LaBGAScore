@@ -27,8 +27,8 @@
 % date: August, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_prep_parrec2bids.m           v1.0
-% last modified: 2022/08/11
+% @(#)% LaBGAScore_prep_parrec2bids.m           v1.1
+% last modified: 2022/08/16
 %
 %
 %% STUDY-SPECIFIC OPTIONS AND SETTINGS
@@ -38,8 +38,28 @@ nr_sess = 2; % number of sessions for each subject
 task1name = 'food_images'; % names of task(s)
 task2name = 'FID';
 slice_scan_order_exam_card = 'FH'; % get this info from your exam card, other options are 'HF', and 'interleaved'
+fold_over_direction_exam_card = 'AP'; % other options unknown, but this is standard on MR8
+fat_shift_direction_exam_card = 'P'; % other option 'A';
 
 
+%% DETERMINE PHASEENCODINGDIRECTION FOR JSON FILES FROM INFO ABOVE
+%--------------------------------------------------------------------------
+
+if strcmpi(fold_over_direction_exam_card,'AP')
+    if strcmpi(fat_shift_direction_exam_card,'P')
+        phase_encoding_string = 'j';
+    elseif strcmpi(fat_shift_direction_exam_card,'A')
+        phase_encoding_string = 'j-';
+    else
+        error('\nWrong option "%s" specified in fat_shift_direction_exam_card variable, check your exam card and choose between "A", or "P"\n',fat_shift_direction_exam_card)
+    end
+
+else
+    error('\nUnknown option "%s" specified in fold_over_direction_exam_card variable, currently only "AP" is implemented, check with your MR physicist before proceeding\n',fold_over_direction_exam_card)
+
+end
+                    
+                    
 %% DEFINE DIRECTORIES AND ADD CODE DIR TO MATLAB PATH
 %--------------------------------------------------------------------------
 
@@ -83,17 +103,22 @@ end
 
 for sub = 1:size(sourcesubjdirs,1)
     
-    mkdir(BIDSdir,sourcesubjs{sub});
     subjBIDSdir = fullfile(BIDSdir,sourcesubjs{sub});
+    
+    if ~exist(subjBIDSdir,'dir')
+        mkdir(subjBIDSdir);
+    end
     
         if nr_sess > 1
             
             for sess = 1:nr_sess
                 sessid = sprintf('ses-%d',sess);
-                mkdir(subjBIDSdir,sessid);
                 subjsessdir = fullfile(subjBIDSdir,sessid);
-                mkdir(subjsessdir,'anat');
-                mkdir(subjsessdir,'func');
+                if ~exist(subjsessdir,'dir')
+                    mkdir(subjsessdir);
+                    mkdir(subjsessdir,'anat');
+                    mkdir(subjsessdir,'func');
+                end
             end
             
         end
@@ -186,7 +211,7 @@ for sub = 1:size(sourcesubjdirs,1)
 
                 task1json = spm_jsonread(fullfile(subjBIDSdir,sourcetask1jsonname));
                     task1json.SeriesDescription = [];
-                    task1json.PhaseEncodingDirection = 'j-'; % TO BE CHECKED!
+                    task1json.PhaseEncodingDirection = phase_encoding_string;
                     task1json.TaskName = task1name;
                     task1json.SliceTiming = slice_times;
                 spm_jsonwrite(fullfile(subjBIDSdir,sourcetask1jsonname),task1json);
@@ -235,7 +260,7 @@ for sub = 1:size(sourcesubjdirs,1)
 
                 task2json = spm_jsonread(fullfile(subjBIDSdir,sourcetask2jsonname));
                     task2json.SeriesDescription = [];
-                    task2json.PhaseEncodingDirection = 'j-'; % TO BE CHECKED!
+                    task2json.PhaseEncodingDirection = phase_encoding_string;
                     task2json.TaskName = task2name;
                     task2json.SliceTiming = slice_times;
                 spm_jsonwrite(fullfile(subjBIDSdir,sourcetask2jsonname),task2json);
@@ -316,7 +341,7 @@ for sub = 1:size(sourcesubjdirs,1)
                     
                     task1json = spm_jsonread(fullfile(subjBIDSsessdir,sourcetask1jsonname));
                         task1json.SeriesDescription = [];
-                        task1json.PhaseEncodingDirection = 'j-'; % TO BE CHECKED!
+                        task1json.PhaseEncodingDirection = phase_encoding_string;
                         task1json.TaskName = task1name;
                         task1json.SliceTiming = slice_times;
                     spm_jsonwrite(fullfile(subjBIDSsessdir,sourcetask1jsonname),task1json);
@@ -365,7 +390,7 @@ for sub = 1:size(sourcesubjdirs,1)
                     
                     task2json = spm_jsonread(fullfile(subjBIDSsessdir,sourcetask2jsonname));
                         task2json.SeriesDescription = [];
-                        task2json.PhaseEncodingDirection = 'j-'; % TO BE CHECKED!
+                        task2json.PhaseEncodingDirection = phase_encoding_string;
                         task2json.TaskName = task2name;
                         task2json.SliceTiming = slice_times;
                     spm_jsonwrite(fullfile(subjBIDSsessdir,sourcetask2jsonname),task2json);
