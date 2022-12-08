@@ -27,8 +27,8 @@
 % date: August, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_prep_parrec2bids.m           v1.1
-% last modified: 2022/08/16
+% @(#)% LaBGAScore_prep_parrec2bids.m           v1.2
+% last modified: 2022/12/07
 %
 %
 %% STUDY-SPECIFIC OPTIONS AND SETTINGS
@@ -288,7 +288,7 @@ for sub = 1:size(sourcesubjdirs,1)
             anatniilist = dir(fullfile(subjBIDSsessdir,'*_3DTFE_*.nii.gz')); % STUDY-SPECIFIC: THE NAMES OF YOUR STRUCTURAL PARRECS MAY DIFFER
                 for i = 1:size(anatniilist,1)
                     sourceanatniiname = char(anatniilist(i).name);
-                    BIDSanatniiname = char(strcat(sourcesubjs{sub},'_T1w.nii.gz'));
+                    BIDSanatniiname = char(strcat(sourcesubjs{sub},'_',sessid,'_T1w.nii.gz'));
                     movefile(fullfile(subjBIDSsessdir,sourceanatniiname),fullfile(subjBIDSsessdir,'anat',BIDSanatniiname));
                 end
             
@@ -298,7 +298,7 @@ for sub = 1:size(sourcesubjdirs,1)
                     anatjson = spm_jsonread(fullfile(subjBIDSsessdir,sourceanatjsonname));
                         anatjson.SeriesDescription = [];
                     spm_jsonwrite(fullfile(subjBIDSsessdir,sourceanatjsonname),anatjson);
-                    BIDSanatjsonname = char(strcat(sourcesubjs{sub},'_T1w.json'));
+                    BIDSanatjsonname = char(strcat(sourcesubjs{sub},'_',sessid,'_T1w.json'));
                     movefile(fullfile(subjBIDSsessdir,sourceanatjsonname),fullfile(subjBIDSsessdir,'anat',BIDSanatjsonname));
                 end
 
@@ -308,7 +308,7 @@ for sub = 1:size(sourcesubjdirs,1)
                 for i = 1:size(task1niilist,1)
                     runid = sprintf('_run-%d',i);
                     sourcetask1niiname = char(task1niilist(i).name);
-                    BIDStask1niiname = char(strcat(sourcesubjs{sub},'_task-', task1name, runid, '_bold.nii.gz'));
+                    BIDStask1niiname = char(strcat(sourcesubjs{sub},'_',sessid,'_task-', task1name, runid, '_bold.nii.gz'));
                     movefile(fullfile(subjBIDSsessdir,sourcetask1niiname),fullfile(subjBIDSsessdir,'func',BIDStask1niiname));
                 end
 
@@ -357,7 +357,7 @@ for sub = 1:size(sourcesubjdirs,1)
                 for i = 1:size(task2niilist,1)
                     runid = sprintf('_run-%d',i);
                     sourcetask2niiname = char(task2niilist(i).name);
-                    BIDStask2niiname = char(strcat(sourcesubjs{sub},'_task-', task2name, runid, '_bold.nii.gz'));
+                    BIDStask2niiname = char(strcat(sourcesubjs{sub},'_',sessid,'_task-', task2name, runid, '_bold.nii.gz'));
                     movefile(fullfile(subjBIDSsessdir,sourcetask2niiname),fullfile(subjBIDSsessdir,'func',BIDStask2niiname));
                 end
 
@@ -395,7 +395,7 @@ for sub = 1:size(sourcesubjdirs,1)
                         task2json.SliceTiming = slice_times;
                     spm_jsonwrite(fullfile(subjBIDSsessdir,sourcetask2jsonname),task2json);
                     
-                    BIDStask2jsonname = char(strcat(sourcesubjs{sub},'_task-', task2name, runid, '_bold.json'));
+                    BIDStask2jsonname = char(strcat(sourcesubjs{sub},'_',sessid,'_task-', task2name, runid, '_bold.json'));
                     
                     movefile(fullfile(subjBIDSsessdir,sourcetask2jsonname),fullfile(subjBIDSsessdir,'func',BIDStask2jsonname));
                 end
