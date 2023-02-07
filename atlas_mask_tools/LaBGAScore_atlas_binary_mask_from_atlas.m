@@ -20,8 +20,8 @@
 % date:   KU Leuven, July, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_binary_mask_from_atlas.m         v1.2       
-% last modified: 2022/07/26
+% @(#)% LaBGAScore_atlas_binary_mask_from_atlas.m         v1.3       
+% last modified: 2023/02/07
 
 
 % Define maskname and directory where mask will be written
@@ -91,6 +91,6 @@ mask = fmri_mask_image(combined_atlas);
 write(mask, 'fname', fullfile(maskdir,[maskname,'.nii'])); % writes to .nii file
 
 savefilenamedata = fullfile(maskdir,[maskname,'.mat']); % saves fmri_mask_image object as .mat file
-save(savefilenamedata, 'mask', '-v7.3');
+save(savefilenamedata, 'combined_atlas', 'mask', '-v7.3');
 fprintf('\nSaved mask\n');
 
