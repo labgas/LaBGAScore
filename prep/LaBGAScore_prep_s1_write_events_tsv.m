@@ -40,8 +40,8 @@
 % date:   December, 2021
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s1_write_events_tsv.m         v1.2        
-% last modified: 2022/04/21
+% @(#)% LaBGAScore_prep_s1_write_events_tsv.m         v1.3        
+% last modified: 2023/01/05
 
 
 %% DEFINE DIRECTORIES, SUBJECTS, RUNS, CONDITIONS, AND IMPORT OPTIONS
@@ -84,7 +84,7 @@ if ~isempty(subjs2write)
     [C,ia,~] = intersect(sourcesubjs,subjs2write);
     
     if ~isequal(C',subjs2write)
-        error('\nsubject %s present in subjs2smooth not present in %s, please check before proceeding',subjs2smooth{~ismember(subjs2smooth,C)},derivdir);
+        error('\nsubject %s present in subjs2write not present in %s, please check before proceeding',subjs2write{~ismember(subjs2write,C)},derivdir);
     
     else
         
