@@ -180,8 +180,8 @@
 % date:   March, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.3
-% last modified: 2022/06/03
+% @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.4
+% last modified: 2023/05/05
 
 
 %% CREATE LABGAS_OPTIONS STRUCTURE
@@ -235,11 +235,6 @@ LaBGAScore_prep_s0_define_directories;
 % STUDY-SPECIFIC: names are defaults, only change number
 
 rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
-
-% define rootdir for Github repos
-% MACHINE-SPECIFIC: change to your local path if not working on LaBGAS server
-
-githubrootdir = '/data/master_github_repos';
 
 
 %% CREATE CANLAB DSGN STRUCTURE
