@@ -67,7 +67,7 @@ analysis_name = 'xclass_acc';
 
 if ~exist('rootdir','var') || ~exist('githubrootdir','var')
     warning('\nrootdir and/or githubrootdir variable not found in Matlab workspace, running LaBGAScore_prep_s0_define_directories before proceeding')
-    ery_4a_prep_s0_define_directories;
+    LaBGAScore_prep_s0_define_directories;
     cd(rootdir);
 else
     cd(rootdir);
@@ -78,7 +78,7 @@ end
 
 if ~exist('DSGN','var')
     warning('\nDSGN variable not found in Matlab workspace, running LaBGAScore_firstlevel_s1_options_dsgn_struct.m before proceeding')
-    ery_4a_firstlevel_m6r_s1_options_dsgn_struct;
+    LaBGAScore_s1_options_dsgn_struct;
 end
 
 % check whether LaBGAScore_firstlevel_s0_a_set_up_paths_always_run_first.m has been run
@@ -86,7 +86,7 @@ end
 
 if ~exist('htmlsavedir','var')
     warning('\nDSGN variable not found in Matlab workspace, running LaBGAScore_s0_a_set_up_paths_always_run_first.m before proceeding')
-    ery_4a_secondlevel_m6r_s0_a_set_up_paths_always_run_first;
+    a_set_up_paths_always_run_first;
 end
 
 % get first level dir info
