@@ -196,7 +196,7 @@ switch input_data
             conn_subj = connmatlist(n).name(5:14);
             connsubjs{n} = conn_subj;
             
-            idx_names = contains(names,brain_regions_table.Var2);
+            idx_names = contains(names,brain_regions_table.Var3);
             roi_signal = cell2mat(data(idx_names));
             
             roi_signals{n} = roi_signal;
