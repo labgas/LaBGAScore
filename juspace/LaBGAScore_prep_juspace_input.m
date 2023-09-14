@@ -108,8 +108,22 @@ if ~isfolder(juspaceresultsdir)
     mkdir(juspaceresultsdir);
 end
 
+for cond = 1:size(DAT.conditions,2)
+    if ~isfolder(fullfile(juspaceresultsdir,DAT.conditions{cond}))
+        mkdir(fullfile(juspaceresultsdir,DAT.conditions{cond}));
+    end
+end
+
+for cont = 1:size(DAT.contrastnames,2)
+    if ~isfolder(fullfile(juspaceresultsdir,DAT.contrastnames{cont}))
+        mkdir(fullfile(juspaceresultsdir,DAT.contrastnames{cont}));
+    end
+end
+
 for sub = 1:size(firstsubjs,1)
-mkdir(fullfile(juspaceinputdir,firstsubjs{sub}));
+    if ~isfolder(fullfile(juspaceinputdir,firstsubjs{sub}))
+        mkdir(fullfile(juspaceinputdir,firstsubjs{sub}));
+    end
 end
 
 
