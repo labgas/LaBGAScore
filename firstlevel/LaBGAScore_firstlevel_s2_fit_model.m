@@ -292,18 +292,15 @@ for sub=1:size(derivsubjs,1)
         
         % move fmriprep noisefile and smoothed image into subdir if needed
         rundirlist = dir(rundir);
-        rundirlist = [rundirlist(:).name];
+        rundirlist = rundirlist(~[rundirlist(:).isdir]');
             if isempty(rundirlist)
                 copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
-            elseif ~contains(rundirlist,fmriprep_noisefiles{run})
-                copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
-            end
-
-            if isempty(rundirlist)
                 copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
                 gunzip(fullfile(rundir,derivimgs{run}));
                 delete(fullfile(rundir,derivimgs{run}));
-            elseif ~contains(rundirlist,derivimgs{run})
+            elseif ~contains([rundirlist.name],fmriprep_noisefiles{run})
+                copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
+            elseif ~contains([rundirlist.name],derivimgs{run})
                 copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
                 gunzip(fullfile(rundir,derivimgs{run}));
                 delete(fullfile(rundir,derivimgs{run}));
@@ -527,10 +524,10 @@ for sub=1:size(derivsubjs,1)
         cat_conds = categories(cat_conds);
         cat_trial_type = cellstr(unique(O.trial_type));
 
-            if ~isequal(cat_trial_type,cat_conds)
-                error('\nconditions in DSGN structure do not match conditions in %s, please check before proceeding',fmriprep_noisefiles{run})
+            if sum(contains(cat_conds,cat_trial_type)) ~= size(cat_conds,1)
+                error('\nconditions in %s include conditions in DSGN structure, please check before proceeding',fmriprep_noisefiles{run})
             else 
-                warning('\nconditions in DSGN structure match conditions in %s, continuing',fmriprep_noisefiles{run})
+                warning('\nconditions in %s include conditions in DSGN structure, continuing',fmriprep_noisefiles{run})
             end
             
         % omit trials that coincide with spikes if that option is chosen
@@ -555,10 +552,9 @@ for sub=1:size(derivsubjs,1)
             for trial = 1:size(O.trial_type,1)
                 cond = 1;
                 while cond < size(DSGN.conditions{run},2) + 1
-                    switch O.trial_type(trial)
-                        case DSGN.conditions{run}{cond}
-                                cond_struct{cond}.onset{1} = [cond_struct{cond}.onset{1},O.onset(trial)];
-                                cond_struct{cond}.duration{1} = [cond_struct{cond}.duration{1},O.duration(trial)];
+                    if contains(DSGN.conditions{run}{cond},char(O.trial_type(trial)))
+                            cond_struct{cond}.onset{1} = [cond_struct{cond}.onset{1},O.onset(trial)];
+                            cond_struct{cond}.duration{1} = [cond_struct{cond}.duration{1},O.duration(trial)];
                     end
                 cond = cond + 1;
                 end
@@ -714,8 +710,7 @@ for sub=1:size(derivsubjs,1)
                 for trial = 1:size(O.trial_type,1)
                     pmod = 1;
                     while pmod < size(DSGN.pmods{run},2) + 1
-                        switch O.trial_type(trial)
-                            case DSGN.conditions{run}{pmod}
+                        if contains(DSGN.conditions{run}{cond},char(O.trial_type(trial))) % changed from original script to allow different condition names in different runs, to be tested
                                cond_struct{pmod}.pmod.param{1} = [cond_struct{pmod}.pmod.param{1},O.pmod(trial)];
                                pmod_demean_run_struct{pmod}.pmod.param{1} = [pmod_demean_run_struct{pmod}.pmod.param{1},O.pmod_demean_run(trial)];
                                pmod_demean_cond_struct{pmod}.pmod.param{1} = [pmod_demean_cond_struct{pmod}.pmod.param{1},O.pmod_demean_cond(trial)];
