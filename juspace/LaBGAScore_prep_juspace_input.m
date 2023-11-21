@@ -126,15 +126,23 @@ for sub = 1:size(firstsubjs,1)
     end
 end
 
+target = fmri_data(fullfile(firstsubjdirs{1},'con_0001.nii'),'noverbose'); % space of functional images to resample to
+voxelsize_target = abs(diag(target.volInfo.mat(1:3, 1:3)))';
+
 
 % ATLAS PREP WORK
 
-if exist('atlasname_glm','var') && ~isempty(atlasname_glm) && exist(atlasname_glm, 'file')
+if exist('atlasname_glm','var') && ~isempty(atlasname_glm)
 
     if contains(atlasname_glm,'.mat')
         
         load(atlasname_glm);
         [~, atlasname_short] = fileparts(atlasname_glm);
+        
+        voxelsize_atlas = abs(diag(combined_atlas.volInfo.mat(1:3, 1:3)))';
+            if ~isequal(voxelsize_atlas,voxelsize_target)
+                combined_atlas = resample_space(combined_atlas,target);
+            end
         
         combined_atlas.atlas_name = atlasname_short;
         combined_atlas.image_names = [atlasname_short '.mat'];
@@ -148,9 +156,14 @@ if exist('atlasname_glm','var') && ~isempty(atlasname_glm) && exist(atlasname_gl
 
         combined_atlas = load_atlas(atlasname_glm);
         
-        if contains(atlasname_glm,'canlab2023')
+        voxelsize_atlas = abs(diag(combined_atlas.volInfo.mat(1:3, 1:3)))';
+            if ~isequal(voxelsize_atlas,voxelsize_target)
+                combined_atlas = resample_space(combined_atlas,target);
+            end
+        
+            if contains(atlasname_glm,'canlab2023')
                 combined_atlas = combined_atlas.threshold(0.25); % only keep probability values > 0.25
-        end
+            end
         
         combined_atlas.atlas_name = atlasname_glm;
         combined_atlas.image_names = [atlasname_glm '.nii'];
@@ -158,7 +171,7 @@ if exist('atlasname_glm','var') && ~isempty(atlasname_glm) && exist(atlasname_gl
         
         write(combined_atlas,'fname',fullfile(juspaceatlasdir,[atlasname_glm '.nii']),'overwrite');
         
-        fprintf('\nUse custom-made atlas %s in JuSpace\n\n', atlasname_glm);
+        fprintf('\nUse custom atlas %s in JuSpace\n\n', atlasname_glm);
 
     else
 
@@ -180,21 +193,24 @@ clear mask
 if exist('maskname_glm','var') && ~isempty(maskname_glm) && exist(maskname_glm, 'file')
 
     mask_img = fmri_mask_image(maskname_glm,'noverbose');
-    target = fmri_data(fullfile(firstsubjdirs{1},'con_0001.nii'),'noverbose'); % resample to space of functional images
-    voxelsize_target = abs(diag(target.volInfo.mat(1:3, 1:3)))';
     voxelsize_glmmask = abs(diag(mask_img.volInfo.mat(1:3, 1:3)))';
     
-    if ~isequal(voxelsize_glmmask,voxelsize_cat_obj)
+    if ~isequal(voxelsize_glmmask,voxelsize_target)
         mask2write = resample_space(mask_img,target);
-        mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+        mask2write.dat(mask2write.dat > 0) = 1; % (re-)binarize mask after resampling to get rid of border effects
     else
         mask2write = mask_img;
-        mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+        if any(unique(mask2write.dat) ~= 1)
+            mask2write.dat(mask2write.dat > 0) = 1; % binarize mask if needed
+        end
     end
     
-    maskname_final = [maskname_glm(1:end-4) '_binary'];
-    [~, maskname_short] = fileparts(maskname_final);
+    [~, maskname_short] = fileparts(maskname_glm);
+        if contains(maskname_short,'nii') % was .nii.gz file
+            [~,maskname_short] = fileparts(maskname_short);
+        end
     mask = fullfile(juspacemaskdir,[maskname_short '.nii']);
+    
     write(mask2write,'fname',mask,'overwrite');
     
     fprintf('\nMasking con images with custom mask %s \n\n', maskname_short);
@@ -203,21 +219,24 @@ else
     
     default_mask = which('gm_mask_canlab2023_coarse_fmriprep20_0_25.nii');
     mask_img = fmri_mask_image(default_mask,'noverbose');
-    target = fmri_data(fullfile(firstsubjdirs{1},'con_0001.nii'),'noverbose'); % resample to space of functional images
-    voxelsize_target = abs(diag(target.volInfo.mat(1:3, 1:3)))';
     voxelsize_default_mask = abs(diag(mask_img.volInfo.mat(1:3, 1:3)))';
     
-    if ~isequal(voxelsize_glmmask,voxelsize_cat_obj)
+    if ~isequal(voxelsize_glmmask,voxelsize_target)
         mask2write = resample_space(mask_img,target);
-        mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+        mask2write.dat(mask2write.dat > 0) = 1; % (re-)binarize mask after resampling to get rid of border effects
     else
         mask2write = mask_img;
-        mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+        if any(unique(mask2write.dat) ~= 1)
+            mask2write.dat(mask2write.dat > 0) = 1; % binarize mask if needed
+        end
     end
     
-    maskname_final = [default_mask(1:end-4) '_binary'];
-    [~, maskname_short] = fileparts(maskname_final);
+    [~, maskname_short] = fileparts(default_mask);
+        if contains(maskname_short,'nii') % was .nii.gz file
+            [~,maskname_short] = fileparts(maskname_short);
+        end
     mask = fullfile(juspacemaskdir,[maskname_short '.nii']);
+    
     write(mask2write,'fname',mask,'overwrite');
     
     fprintf('\nMasking con images with default mask %s \n\n', maskname_short);
@@ -268,12 +287,18 @@ for c = 1:kc
     juspaceparts = strsplit(juspaceinputdir,'/');
     newstr2 = [juspaceparts{end-4} '/' juspaceparts{end-3} '/' juspaceparts{end-2} '/' juspaceparts{end-1} '/' juspaceparts{end}];
     cat_obj_2write.fullpath = replace(cat_obj_2write.fullpath,newstr,newstr2);
-    cat_obj_2write.fullpath = replace(cat_obj_2write.fullpath,['con_000' num2str(c)],DAT.conditions{c});
+    
+        if c < 10
+            cat_obj_2write.fullpath = replace(cat_obj_2write.fullpath,['con_000' num2str(c)],DAT.conditions{c});
+        else
+            cat_obj_2write.fullpath = replace(cat_obj_2write.fullpath,['con_00' num2str(c)],DAT.conditions{c});
+        end
+        
     cat_obj_2write.fullpath = char(cat_obj_2write.fullpath);
     
     for i = 1:size(cat_obj_2write.fullpath,1)
         obj_2write = get_wh_image(cat_obj_2write,i);
-        write(obj_2write)
+        write(obj_2write);
     end
     
 end % for loop over contrasts
