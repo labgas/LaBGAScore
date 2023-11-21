@@ -37,9 +37,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_juspace_input.m         v1.0
+% LaBGAScore_prep_juspace_input.m         v2.0
 %
-% last modified: 2023/08/24
+% last modified: 2023/11/21
 %
 %
 %% PREP WORK
@@ -148,6 +148,10 @@ if exist('atlasname_glm','var') && ~isempty(atlasname_glm) && exist(atlasname_gl
 
         combined_atlas = load_atlas(atlasname_glm);
         
+        if contains(atlasname_glm,'canlab2023')
+                combined_atlas = combined_atlas.threshold(0.25); % only keep probability values > 0.25
+        end
+        
         combined_atlas.atlas_name = atlasname_glm;
         combined_atlas.image_names = [atlasname_glm '.nii'];
         combined_atlas.fullpath = which([atlasname_glm '.nii']);
@@ -177,8 +181,16 @@ if exist('maskname_glm','var') && ~isempty(maskname_glm) && exist(maskname_glm, 
 
     mask_img = fmri_mask_image(maskname_glm,'noverbose');
     target = fmri_data(fullfile(firstsubjdirs{1},'con_0001.nii'),'noverbose'); % resample to space of functional images
-    mask2write = resample_space(mask_img,target);
-    mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+    voxelsize_target = abs(diag(target.volInfo.mat(1:3, 1:3)))';
+    voxelsize_glmmask = abs(diag(mask_img.volInfo.mat(1:3, 1:3)))';
+    
+    if ~isequal(voxelsize_glmmask,voxelsize_cat_obj)
+        mask2write = resample_space(mask_img,target);
+        mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+    else
+        mask2write = mask_img;
+        mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+    end
     
     maskname_final = [maskname_glm(1:end-4) '_binary'];
     [~, maskname_short] = fileparts(maskname_final);
@@ -189,11 +201,19 @@ if exist('maskname_glm','var') && ~isempty(maskname_glm) && exist(maskname_glm, 
     
 else
     
-    default_mask = which('gray_matter_mask_sparse.img');
-    mask_image = fmri_mask_image(default_mask,'noverbose');
+    default_mask = which('gm_mask_canlab2023_coarse_fmriprep20_0_25.nii');
+    mask_img = fmri_mask_image(default_mask,'noverbose');
     target = fmri_data(fullfile(firstsubjdirs{1},'con_0001.nii'),'noverbose'); % resample to space of functional images
-    mask2write = resample_space(mask_img,target);
-    mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+    voxelsize_target = abs(diag(target.volInfo.mat(1:3, 1:3)))';
+    voxelsize_default_mask = abs(diag(mask_img.volInfo.mat(1:3, 1:3)))';
+    
+    if ~isequal(voxelsize_glmmask,voxelsize_cat_obj)
+        mask2write = resample_space(mask_img,target);
+        mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+    else
+        mask2write = mask_img;
+        mask2write.dat(mask2write.dat > 0) = 1; % binarize mask
+    end
     
     maskname_final = [default_mask(1:end-4) '_binary'];
     [~, maskname_short] = fileparts(maskname_final);
