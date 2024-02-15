@@ -1,8 +1,15 @@
-%% LaBGAScore_atlas_binary_mask_from_atlas.m
+%% LaBGAScore_atlas_binary_mask_from_atlas_ROI.m
+%
 %
 % This script creates a binary mask by combining regions from one or more
 % atlases, and automatically saves the fmri_mask_image, and .nii versions
 % of it in maskdir of your dataset
+%
+% There are options to save the original atlas object created by
+% select_atlas_subset (with one index for each individual parcel merged to
+% create your mask), or an atlas object created from the fmri_mask_image
+% object after merging the original parcels, i.e. with one index for the
+% entire mask
 % 
 % USAGE
 %
@@ -14,29 +21,65 @@
 % CANlab's CanlabCore and Neuroimaging_Pattern_Masks Github repos on your Matlab path
 % if needed, clone from https://github.com/canlab
 %
+% OPTIONS
+%
+% save_original_atlas_obj = true/false        saves original atlas object (i.e. BEFORE merging selected parcels into one fmri_mask_image object, hence one index per parcel) 
+%                                               useful/needed if you want to label your parcel- or voxel-wise analyses with the labels included in your mask
+%
+% save_merged_atlas_obj = true/false          saves merged atlas object (i.e. AFTER merging selected parcels into one fmri_mask_image object, hence one index for the entire mask)
+%                                               useful/needed if you want to extract roi averages 
+%
+% singleroi = true/false                      set to true if you are writing a mask/roi with one single contiguous region
+%
 %__________________________________________________________________________
 %
 % authors: Aleksandra Budzinska, Lukas Van Oudenhove
 % date:   KU Leuven, July, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_binary_mask_from_atlas.m         v1.3       
-% last modified: 2023/02/07
+% @(#)% LaBGAScore_atlas_binary_mask_from_atlas.m         v2.0       
+% last modified: 2024/02/15
+
+
+% Set options
+% -------------------------------------------------------------------------
+
+save_original_atlas_obj = false;
+save_merged_atlas_obj = true;
+single_roi = true;
 
 
 % Define maskname and directory where mask will be written
 %--------------------------------------------------------------------------
 
-maskname = 'ery_4a_m6_mask_all_regions';
-maskdir = '/data/proj_erythritol/proj_erythritol_4a/secondlevel/model_6_long_12hmp_can_ar1/masks';
+ery_4b_prep_s0_define_directories;
+ery_4b_secondlevel_m1m_s0_a_set_up_paths_always_run_first;
 
-% NOTE: in default LaBGAS file organization this is a model-specific dir in
-% rootdir/secondlevel/model_xxx, but you can obviously specify any dir here
+modelname = 'ery_4b_m1m';
+
+if single_roi
+
+    roiname = 'reward_lateral_OFC_L';
+    maskname = [modelname '_mask_' roiname];
+    
+else
+    
+    maskname_short = 'mask_reward_all_regions';
+    maskname = [modelname '_' maskname_short];
+    
+end
 
 
 % Load atlas of your choice
 %--------------------------------------------------------------------------
-canlab = load_atlas('canlab2018'); % you get a CANlab atlas object
+
+atlasname1 = 'canlab2018';
+atlas1 = load_atlas(atlasname1); % you get a CANlab atlas object
+
+%atlasname2 = 'cit168';
+%atlas2 = load_atlas(atlasname2);
+
+% ...
 
 % NOTE: you can not only load CANlab atlases using keywords as in this example,
 % but any atlas you like by creating a new atlas object from a .nii atlas image, 
@@ -44,46 +87,106 @@ canlab = load_atlas('canlab2018'); % you get a CANlab atlas object
 % see help atlas for adding labels etc
 
 
-% Select regions you want to include from the selected atlas 
+% Select regions you want to include from the first atlas 
 %--------------------------------------------------------------------------
-canlab_subset = select_atlas_subset(canlab, {'Ctx_p24pr_L','Ctx_p24pr_R','Ctx_33pr_L','Ctx_33pr_R','Ctx_a24pr_L','Ctx_a24pr_R','Ctx_p32pr_L','Ctx_p32pr_R','Ctx_a24_L','Ctx_a24_R','Ctx_d32_L','Ctx_d32_R','Ctx_8BM_L','Ctx_8BM_R','Ctx_p32_L','Ctx_p32_R','Ctx_10r_L','Ctx_10r_R','Ctx_47m_L','Ctx_47m_R','Ctx_10d_L','Ctx_10d_R','Ctx_a47r_L','Ctx_a47r_R','Ctx_a10p_L','Ctx_a10p_R','Ctx_10pp_L','Ctx_10pp_R','Ctx_11l_L','Ctx_11l_R','Ctx_13l_L','Ctx_13l_R','Ctx_OFC_L','Ctx_OFC_R','Ctx_47s_L','Ctx_47s_R','Ctx_52_L','Ctx_52_R','Ctx_PFcm_L','Ctx_PFcm_R','Ctx_PoI2_L','Ctx_PoI2_R','Ctx_FOP4_L','Ctx_FOP4_R','Ctx_MI_L','Ctx_MI_R','Ctx_Pir_L','Ctx_Pir_R','Ctx_AVI_L','Ctx_AVI_R','Ctx_AAIC_L','Ctx_AAIC_R','Ctx_FOP1_L','Ctx_FOP1_R','Ctx_FOP3_L','Ctx_FOP3_R','Ctx_FOP2_L','Ctx_FOP2_R','Ctx_25_L','Ctx_25_R','Ctx_s32_L','Ctx_s32_R','Ctx_pOFC_L','Ctx_pOFC_R','Ctx_PoI1_L','Ctx_PoI1_R','Ctx_Ig_L','Ctx_Ig_R','Ctx_FOP5_L','Ctx_FOP5_R','Ctx_p10p_L','Ctx_p10p_R','Ctx_PI_L','Ctx_PI_R','Ctx_a32pr_L','Ctx_a32pr_R','Ctx_p24_L','Ctx_p24_R','Thal_VPM','Bstem_PAG','Bstem_SC_R','Bstem_SC_L','Bstem_IC_R','IC_L','Dorsal_raphe_DR','Median_raphe_MR_R','pbn_R','pbn_L','lc_R','lc_L','rvm_R','nrm','dmnx_nts_R','dmnx_nts_L','ncf_R','ncf_L','ncs_B6_B8','nrp_B5','nuc_ambiguus_R','medullary_raphe','spinal_trigeminal_R','spinal_trigeminal_L','CA2_Hippocampus_','Amygdala_CM_','DG_Hippocampus_','Amygdala_SF_','CA3_Hippocampus_','Amygdala_AStr_','Amygdala_LB_','CA1_Hippocampus_','Subiculum'});
+
+labels1 = {'Ctx_47m_L','Ctx_a47r_L','Ctx_47s_L'};
+atlas1_subset = select_atlas_subset(atlas1, labels1);
 
 % NOTE: you can also use the numbers rather than the labels of regions to
 % select as a vector
 % see help atlas.select_atlas_subset
 
+% NOTE: the code commented out below is for the case where you want to
+% combine parcels from different atlases, which is deprecated since we will
+% use the excellent canlab2023 atlas from now on
 
-% Load and select the regions from another atlas (e.g. subcortical) like above
-%--------------------------------------------------------------------------
-subcortical = load_atlas('cit168'); % you get a CANlab atlas object
-subcortical_subset = select_atlas_subset(subcortical, {'Put','Cau','NAC','BST_SLEA','GPe','GPi','SNc','RN','SNr','PBP','VTA','VeP','Hythal','STN'}); % still a CANlab atlas object
+
+% Select regions you want to include from the second atlas
+% -------------------------------------------------------------------------
+%labels2 = {};
+%atlas2_subset = select_atlas_subset(atlas2, labels2); % still a CANlab atlas object
 
 
 % Change data type of probability maps if needed
-%--------------------------------------------------------------------------
+% -------------------------------------------------------------------------
 
-% NOTE: Before merging the atlases, make sure that they have the same type of variables (look at the probability_maps. E.g. single/sparse double)
+% NOTE: Before merging the atlases, make sure that they have the same type of variables (look at the probability_maps. e.g. single/sparse double)
 % This command converts probability_maps property variable type from single to double, and then to sparse double - may not be needed for all atlases
 
-subcortical_subset.probability_maps = double(subcortical_subset.probability_maps);
-subcortical_subset.probability_maps = sparse(subcortical_subset.probability_maps);
+%atlas2_subset.probability_maps = double(atlas2_subset.probability_maps);
+%atlas2_subset.probability_maps = sparse(atlas2_subset.probability_maps);
 
 
 % Merge the atlases
-%--------------------------------------------------------------------------
+% -------------------------------------------------------------------------
 
-combined_atlas = merge_atlases(subcortical_subset, canlab_subset); 
+%combined_atlas = merge_atlases(atlas1_subset, atlas2_subset); 
 
 % NOTE: merge_atlases function automatically resamples the space of the second to the first, and adds consecutive labels
 
 
 % Convert the atlas object to a CANlab fmri_mask_image object
-%--------------------------------------------------------------------------
+% -------------------------------------------------------------------------
 
-mask = fmri_mask_image(combined_atlas);
+mask = fmri_mask_image(atlas1_subset);
+mask.volInfo_descrip = maskname;
 
 % NOTE: this automatically binarizes the mask!
+% TO BE CHECKED IF THIS IS ALSO THE CASE FOR PROBABILISTIC ATLASES
 
+
+% Create/save atlas objects according to options
+% -------------------------------------------------------------------------
+
+if save_original_atlas_obj
+    
+    combined_atlas = atlas1_subset; % later scripts required a variable 'combined_atlas' in .mat file, comment this out if you have more than 1 subset
+    
+    if single_roi
+        
+        combined_atlas.atlas_name = roiname;
+        
+    else
+        
+        combined_atlas.atlas_name = maskname_short;
+        
+    end
+    
+end
+
+if save_merged_atlas_obj
+    
+    if single_roi 
+        
+        roi_atlas = atlas(mask);
+        
+        roi_atlas.atlas_name = roiname;
+        roi_atlas.labels = {labels1};
+        roi_atlas.label_descriptions = {roiname};
+        
+    else
+        
+        fprintf('\n');
+        warning('option to save merged atlas object not yet implemented for multiple non-contiguous rois');
+        fprintf('\n');
+        
+% NOTE: the code below may work but needs to be tested thoroughly before it
+% can possibly be implemented!
+% Alternative would be to define each rois as a separate atlas subset in
+% the code above, convert them all to fmri_mask_image objects, then to
+% region objects - this could all be looped. 
+% Finally, those region objects can be concatenated and converted into a
+% single atlas object using region2atlas().
+%
+%         roi_region = region(mask);
+%         roi_atlas = 
+%         roi_atlas.atlas_name = maskname_short;
+%         roi_atlas.label_descriptions = cell(1,1); % to add appropriate labels and their descriptions here in case multiple non-contiguous rois are included in the mask/atlas, each roi would need to be defined as a separate subset above
+        
+    end
+    
+end
 
 % Save your binarized mask in maskdir
 %--------------------------------------------------------------------------
@@ -91,6 +194,25 @@ mask = fmri_mask_image(combined_atlas);
 write(mask, 'fname', fullfile(maskdir,[maskname,'.nii'])); % writes to .nii file
 
 savefilenamedata = fullfile(maskdir,[maskname,'.mat']); % saves fmri_mask_image object as .mat file
-save(savefilenamedata, 'combined_atlas', 'mask', '-v7.3');
-fprintf('\nSaved mask\n');
 
+if save_original_atlas_obj && save_merged_atlas_obj
+    
+    save(savefilenamedata, 'combined_atlas','roi_atlas','mask', '-v7.3');
+    fprintf('\nSaved mask & atlas objects\n');
+    
+elseif save_original_atlas_obj && ~save_merged_atlas_obj
+    
+    save(savefilenamedata, 'combined_atlas','mask', '-v7.3');
+    fprintf('\nSaved mask & atlas object\n');
+    
+elseif ~save_original_atlas_obj && save_merged_atlas_obj
+    
+    save(savefilenamedata, 'roi_atlas','mask', '-v7.3');
+    fprintf('\nSaved mask & atlas object\n');
+    
+else 
+    
+    save(savefilenamedata, 'mask', '-v7.3');
+    fprintf('\nSaved mask\n');
+    
+end
