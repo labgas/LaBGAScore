@@ -103,8 +103,8 @@
 % date:   March, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.3
-% last modified: 2022/05/29
+% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.4
+% last modified: 2024/03/04
 
 
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN
@@ -907,7 +907,7 @@ for sub=1:size(derivsubjs,1)
     %% FIT FIRST LEVEL MODEL
     
     fprintf('\nRunning on subject directory %s\n',DSGN.subjects{sub});
-    canlab_glm_subject_levels(DSGN,'subjects',DSGN.subjects(sub),'overwrite','nolinks','noreview');
+    canlab_glm_subject_levels_old(DSGN,'subjects',DSGN.subjects(sub),'overwrite','nolinks','noreview'); % LVO changed to _old version of canlab function as this script causes errors with Bogdan's new version of it, as that changed handling of missing onset and duration files
     
             if isfield(DSGN,'singletrials')
             
