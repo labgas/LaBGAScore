@@ -36,8 +36,8 @@
 % date:   KU Leuven, July, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.0       
-% last modified: 2024/02/21
+% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.1       
+% last modified: 2024/03/11
 
 
 %% SET OPTION, DEFINE DIRS, AND SPECIFY MODEL AND ROI SET NAMES
@@ -45,11 +45,13 @@
 
 save_original_roi_atlas_obj = true;
 
-bit_rew_prep_s0_define_directories;
-bit_rew_secondlevel_m1m_s0_a_set_up_paths_always_run_first;
+% STUDY- AND MODEL-SPECIFIC SCRIPTS/VARS
 
-modelname = 'bit_rew_m1m';
-roi_set_name = 'reward_regions';
+LaBGAScore_prep_s0_define_directories;
+a_set_up_paths_always_run_first;
+
+roi_modelname = 'bit_rew_m1m';          % prefix which will be added to names of saved roi files which will be written in model-specific maskdir
+roi_set_name = 'reward_regions';        % descriptive name for set of rois which will be included in filename
 
 
 %% LOAD ATLAS(ES)
@@ -316,7 +318,7 @@ roi_atlases_flat = [roi_atlases1_flat,roi_atlases2_flat,roi_atlases3_flat];
 % Save your roi atlas objects in maskdir
 %--------------------------------------------------------------------------
 
-savefilenamedata = fullfile(maskdir,[modelname '_rois_' roi_set_name '.mat']); % saves cell array with roi atlas objects as .mat file
+savefilenamedata = fullfile(maskdir,[roi_modelname '_rois_' roi_set_name '.mat']); % saves cell array with roi atlas objects as .mat file
 
 if save_original_roi_atlas_obj
     
