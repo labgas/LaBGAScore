@@ -102,7 +102,7 @@ spm('defaults','FMRI')
 
 empty_cells = @(x)isempty(x);
 
-for sub = 9 %1:size(derivsubjs,1)
+for sub = 1:size(derivsubjs,1)
     
     
     clear matlabbatch
