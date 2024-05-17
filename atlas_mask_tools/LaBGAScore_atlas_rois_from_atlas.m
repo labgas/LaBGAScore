@@ -28,6 +28,8 @@
 %
 %                                               flat roi atlas objects (i.e. AFTER merging selected parcels into one roi atlas object, hence one index for the entire roi)
 %                                               will always be saved as they are needed to extract roi averages using functionality in prep_3a script
+%
+% write_roi2nii = true/false                    writes .nii files for each of the flat roi atlas objects, which can be useful for some purposes
 %                                               
 %
 %__________________________________________________________________________
@@ -36,14 +38,15 @@
 % date:   KU Leuven, July, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.1       
-% last modified: 2024/03/11
+% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.2       
+% last modified: 2024/05/17
 
 
-%% SET OPTION, DEFINE DIRS, AND SPECIFY MODEL AND ROI SET NAMES
+%% SET OPTIONS, DEFINE DIRS, AND SPECIFY MODEL AND ROI SET NAMES
 % -------------------------------------------------------------------------
 
 save_original_roi_atlas_obj = true;
+write_roi2nii = true;
 
 % STUDY- AND MODEL-SPECIFIC SCRIPTS/VARS
 
@@ -331,4 +334,54 @@ else
     fprintf('\nSaved roi atlas objects\n');
     
 end
+
+if write_roi2nii
+    
+    for r = 1:size(roi_atlases_flat,2)
+        
+        saveroinamedata = fullfile(maskdir,[roi_atlases_flat{r}.atlas_name '.nii']);
+        write(roi_atlases_flat{r},'fname',saveroinamedata);
+        clear saveroinamedata
+        
+    end
+    
+end
+
+
+% Create montage of ROIs
+%--------------------------------------------------------------------------
+
+roi_atlas = roi_atlases_flat{1};
+roi_atlas.atlas_name = 'combined_roi_atlas';
+roi_atlas.labels{1} = roi_atlases_flat{1}.atlas_name;
+      
+roi = 2;
+    
+    while roi < (size(roi_atlases_flat,2) + 1)
+        
+        roi_atlas = merge_atlases(roi_atlas, roi_atlases_flat{roi},'noreplace');
+%           LVO: whether or not 'noreplace' option is chosen or not should
+%           not matter if all regions are from same atlas
+
+        roi_atlas.labels{roi} = roi_atlases_flat{roi}.atlas_name;
+        
+        roi = roi+1;
+        
+    end
+    
+cmap2cell = scn_standard_colors(size(roi_atlas.labels,2));
+cmap2 = zeros(size(roi_atlas.labels,2),3);
+
+    for color = 1:size(cmap2cell,2)
+        cmap2(color,:) = cmap2cell{color};
+    end
+
+figure;
+o2 = canlab_results_fmridisplay([], 'compact');
+o2 = addblobs(o2, atlas2region(roi_atlas),'indexmap',cmap2,'interp','nearest');
+o2 = title_montage(o2, 5, 'atlas used for extraction of roi averages');
+set(gcf,'WindowState','maximized');
+drawnow,snapnow;
+
+clear o2
 
