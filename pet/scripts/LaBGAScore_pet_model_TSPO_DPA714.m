@@ -1,4 +1,4 @@
-% LaBGAScore_pet_model_TSPO_DPA714.m
+% LaBGAScore_pet_s2_model_TSPO_DPA714.m
 %
 % assumptions: 
 %	    Data are organized according to BIDS.
@@ -37,15 +37,18 @@
 %                         LaBGAScore_pet_preprocess_data
 %                         built in check for enough frames after
 %                         logan_start_time (LVO)
+%          May 2024       further adaptations to fit LaBGAS file organization (LVO)
+%                         built in more options for automatic subject and ROI definition (LVO)
+%                         fixed bug in writing of summary excel table for VOI results (LVO)
 %
 % THIS IS RESEARCH SOFTWARE
 %__________________________________________________________________________
-% @(#)LCN12_PET_TSPO_DPA714.m        v0.4         last modified: 2024/03/22
+% @(#)LCN12_PET_TSPO_DPA714.m        v0.5         last modified: 2024/05/31
 
 clear
 close all
 
-discoverie_prep_s0_define_directories;
+LaBGAScore_prep_s0_define_directories;
 
 maindir           = BIDSdir; % directory where the folders of each subject can  be found
 sessiondir        = ''; % if empty, we assume that there is no folder session and the folders anat and pet are directly under the subject folder
@@ -65,6 +68,22 @@ firstlevelpetdir = fullfile(rootdir,'firstlevel',['pet_' infostring_tracer]);
     if ~exist(firstlevelpetdir,'dir')
         mkdir(firstlevelpetdir);
     end
+secondlevelpetdir = fullfile(rootdir,'secondlevel',['pet_' infostring_tracer]);
+    if ~exist(secondlevelpetdir,'dir')
+        mkdir(secondlevelpetdir);
+    end
+secondlevelpetmaskdir = fullfile(secondlevelpetdir,'masks');
+    if ~exist(secondlevelpetmaskdir,'dir')
+        mkdir(secondlevelpetmaskdir);
+    end   
+secondlevelpetresultsdir = fullfile(secondlevelpetdir,'results');
+    if ~exist(secondlevelpetresultsdir,'dir')
+        mkdir(secondlevelpetresultsdir);
+    end  
+secondlevelpetroidir = fullfile(secondlevelpetmaskdir,'rois');
+    if ~exist(secondlevelpetroidir,'dir')
+        mkdir(secondlevelpetroidir);
+    end 
 
 % Lukas' code to automate selection of subjects who have a pet dir in BIDS
 % USE THIS FOR ANALYZING ALL PET SUBJECTS AT ONCE
@@ -87,48 +106,64 @@ firstlevelpetdir = fullfile(rootdir,'firstlevel',['pet_' infostring_tracer]);
 % 
 % if ~isequal(SUBJECTS,{dir_derivpet(:).name}')
 %     error('#subjects with PET data in BIDS and derivatives subdatasets does not match, please preprocess all subjects before proceeding');
-% end
+% end;
+
+% Lukas' code to automate selection of subjects in derivatives/pet
+% USE THIS FOR ANALYZING ALL PET SUBJECTS AT ONCE WITHOUT CHECKING CONSISTENCY BETWEEN BIDS AND DERIVATIVES SUBDATASETS
+dir_derivpet = dir(fullfile(derivpetdir,'sub-*'));
+SUBJECTS = {dir_derivpet(:).name}';
 
 % Patrick's code to enter subjects manually
 % USE THIS FOR ANALYZING SELECTED SUBJECTS
-SUBJECTS = {
+% SUBJECTS = {
 % subjectdir
 % 'sub-KUL048'
-'sub-KUL061'
+% 'sub-KUL061'
 % 'sub-KUL102'
 % 'sub-KUL102B'
 % 'sub-KUL117'
-};
+% };
 
-outputfile_excel_region_based = fullfile(firstlevelpetdir,['results_' infostring_tracer 'VOIS.xls']);
+outputfile_excel_region_based = fullfile(secondlevelpetresultsdir,['results_' infostring_tracer '_VOIS.xlsx']);
 
 go_input = 1; % 1 if we require an input function, 0 else
-region_based_analysis = 0; % if 1, we expect that  you have specified a number of regions and the analysis will be performed in these regions
+region_based_analysis = 1; % if 1, we expect that  you have specified a number of regions and the analysis will be performed in these regions
 voxel_based_analysis  = 1; % if 1, we perform a voxel based modelling
 figures_on   = 1; % if 1 and if region_based_analysis = 1, we show the figures for each region and pause. You need to hit a key to proceed.
 save_figures = 1; % if 1 and if region_based_analysis = 1, we save the figures to file and pausing of figures is overruled.
 additional_smooth_parametric = 8; % kernel size in mm; isotropic Gaussian 3D smoothing; additional smoothing (if a voxel based analysis is needed)
 
 % list of VOIS in MNI space; 
-% LUKAS TO DO: adapt after VOIS have been decided on, ideally writing
-% individual VOI images from canlab atlas/mask object created with
-% LaBGAScore scripts
-VOIS = { 
-    % full name (extensions .img or .nii)            short name of the VOI
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_ant_cingulate.img'        'ant cingulate'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_composite_cortical.img'   'composite cortical'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_frontal.img'              'frontal'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_lat_temporal.img'         'lat temporal'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_med_temporal.img'         'med temporal'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_nucl_caudatus.img'        'nucl caudatus'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_occipital.img'            'occipital'     
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_parietal.img'             'parietal'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_post_cingulate.img'       'post cingulate'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_putamen.img'              'putamen'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_striatum.img'             'striatum'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_thalamus.img'             'thalamus'
-    'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_whole_cerebellum.img'     'whole cerebellum'
-    };
+
+% Lukas' code to select all ROIs from secondlevel/pet/masks/rois
+
+dir_secondlevelpetroidir = dir(fullfile(secondlevelpetroidir,'*.nii'));
+
+VOIS = cell(size(dir_secondlevelpetroidir,1),2);
+
+for roi = 1:size(VOIS,1)
+    VOIS{roi,1} = fullfile(dir_secondlevelpetroidir(roi).folder,dir_secondlevelpetroidir(roi).name);
+    VOIS{roi,2} = dir_secondlevelpetroidir(roi).name(1:end-4);
+end
+
+% Patrick's code to specify paths to ROIs manually
+
+% VOIS = { 
+%     % full name (extensions .img or .nii)            short name of the VOI
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_ant_cingulate.img'        'ant cingulate'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_composite_cortical.img'   'composite cortical'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_frontal.img'              'frontal'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_lat_temporal.img'         'lat temporal'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_med_temporal.img'         'med temporal'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_nucl_caudatus.img'        'nucl caudatus'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_occipital.img'            'occipital'     
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_parietal.img'             'parietal'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_post_cingulate.img'       'post cingulate'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_putamen.img'              'putamen'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_striatum.img'             'striatum'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_thalamus.img'             'thalamus'
+%     'C:\DATA\ATLAS\VOIS_preclinAD\resl_to_wmc1_SPM12_aal_whole_cerebellum.img'     'whole cerebellum'
+%     };
 
 %------------- GENERAL SETTINGS -------------------------------------------
 logan_start_time   = 31; % in min (ref Van Weehaeghe et al. J Nucl Med. 2020 Apr;61(4):604-607)
@@ -449,8 +484,21 @@ for subj = 1:nr_subjects
     fprintf(fid,'++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n\n');
     fclose(fid);
 end
+
 % save the results for the region based analysis
 if region_based_analysis == 1
-   xlswrite(outputfile_excel_region_based,results_region_based_VD,'VD');
-   xlswrite(outputfile_excel_region_based,results_region_based_error,'error');   
+    
+    % LVO: xlswrite function is deprecated in Matlab and threw an error 
+%    xlswrite(outputfile_excel_region_based,results_region_based_VD,'VD');
+%    xlswrite(outputfile_excel_region_based,results_region_based_error,'error');   
+
+    fortable_VD = results_region_based_VD(2:end,:);
+    table_results_region_based_VD = cell2table(fortable_VD);
+    table_results_region_based_VD.Properties.VariableNames = results_region_based_VD(1,:);
+    writetable(table_results_region_based_VD, outputfile_excel_region_based, 'Sheet', 'VD');
+    
+    fortable_error = results_region_based_error(2:end,:);
+    table_results_region_based_error = cell2table(fortable_error);
+    table_results_region_based_error.Properties.VariableNames = results_region_based_error(1,:);
+    writetable(table_results_region_based_error, outputfile_excel_region_based, 'Sheet', 'error');
 end

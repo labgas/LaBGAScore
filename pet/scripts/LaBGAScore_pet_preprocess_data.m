@@ -1,4 +1,4 @@
-% discoverie_pet_s1_preprocess_data.m
+% LaBGAScore_pet_s1_preprocess_data.m
 %
 % assumptions:
 %   Data-organisation:
@@ -52,15 +52,16 @@
 %          March 2024   adapted to work with standard LaBGAS file
 %                       organization (LVO)
 %                       adapted to move output to derivatives
+%          May 2024     temp bug fix in copying code line 163- (LVO), currently does not copy anat, batch and tmp folders to derivatives, should be adapted to do this
 %
 % THIS IS RESEARCH SOFTWARE
 %__________________________________________________________________________
-% @(#)LCN12_PET_preprocess_data.m       v0.13     last modified: 2024/03/15
+% @(#)LCN12_PET_preprocess_data.m       v0.14     last modified: 2024/05/30
 
 clear
 close all
 
-LaBGAScore_prep_s0_define_directories; % change to study-specific script
+LaBGAScore_prep_s0_define_directories;
 
 maindir           = BIDSdir; % directory where the folders of each subject can  be found
 sessiondir        = ''; % if empty, we assume that there is no folder session and the folders anat and pet are directly under the subject folder
@@ -71,31 +72,28 @@ infostring_frames = 'frames'; % in the folder pet, we assume a .m file name "sub
 
 % Lukas' code to automate selection of subjects who have a pet dir in BIDS
 % USE THIS FOR PREPROCESSING ALL PET SUBJECTS AT ONCE
-dir_BIDS = dir(fullfile(BIDSdir,'sub-*'));
-
-petsubcounter = 1;
-
-for sub = 1:size(dir_BIDS,1)
-    BIDSsubdir = fullfile(BIDSdir,dir_BIDS(sub).name);
-    dir_BIDSsubdir = dir(BIDSsubdir);
-    if contains([dir_BIDSsubdir(:).name],'pet')
-        SUBJECTS{petsubcounter,1} = dir_BIDS(sub).name;
-        petsubcounter = petsubcounter + 1;
-    else
-        continue
-    end
-end
+% dir_BIDS = dir(fullfile(BIDSdir,'sub-TSPOHC*'));
+% 
+% petsubcounter = 1;
+% 
+% for sub = 1:size(dir_BIDS,1)
+%     BIDSsubdir = fullfile(BIDSdir,dir_BIDS(sub).name);
+%     dir_BIDSsubdir = dir(BIDSsubdir);
+%     if contains([dir_BIDSsubdir(:).name],'pet')
+%         SUBJECTS{petsubcounter,1} = dir_BIDS(sub).name;
+%         petsubcounter = petsubcounter + 1;
+%     else
+%         continue
+%     end
+% end
 
 % Patrick's code to enter subjects manually
 % USE THIS FOR PREPROCESSING SELECTED SUBJECTS
-% SUBJECTS = {
-% subjectdir
-% 'sub-KUL048'
-% 'sub-KUL059'
-% 'sub-KUL102'
-% 'sub-KUL102B'
-% 'sub-KUL117'
-% };
+SUBJECTS = {
+% 'sub-TSPOHC008'
+'sub-TSPOHC017'
+% 'sub-TSPOHC027'
+};
 
 % maindir           = 'C:\DATA\LAURE\NAV'; % directory where the folders of each subject can  be found
 % sessiondir        = 'ses-01'; % if empty, we assume that there is no folder session and the folders anat and pet are directly under the subject folder
@@ -175,8 +173,10 @@ for subj = 1:nr_subjects
         mkdir(subjectderivpetdir);
     end
     cd(dir_pet);
-    for i = 3:size(list_pet2copy,1)
-        movefile(fullfile(list_pet2copy(i).folder,list_pet2copy(i).name),subjectderivpetdir);
+    for i = 1:size(list_pet2copy,1)
+        if list_pet2copy(i).isdir == false
+            movefile(fullfile(list_pet2copy(i).folder,list_pet2copy(i).name),subjectderivpetdir);
+        end
     end
     matfile2copy = dir(fullfile(list_pet2copy(i).folder,'*.mat'));
     movefile(fullfile(matfile2copy.folder,matfile2copy.name),subjectderivpetdir);
