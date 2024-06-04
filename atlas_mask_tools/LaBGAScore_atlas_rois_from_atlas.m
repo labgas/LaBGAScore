@@ -38,8 +38,8 @@
 % date:   KU Leuven, July, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.2       
-% last modified: 2024/05/17
+% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.3       
+% last modified: 2024/06/03
 
 
 %% SET OPTIONS, DEFINE DIRS, AND SPECIFY MODEL AND ROI SET NAMES

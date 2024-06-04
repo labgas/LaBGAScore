@@ -42,8 +42,8 @@
 % date:   KU Leuven, July, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_binary_mask_from_atlas.m         v3.0       
-% last modified: 2024/02/21
+% @(#)% LaBGAScore_atlas_binary_mask_from_atlas.m         v3.1       
+% last modified: 2024/06/03
 
 
 % Set options
