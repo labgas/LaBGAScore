@@ -60,7 +60,7 @@ roi_set_name = 'reward_regions';        % descriptive name for set of rois which
 %% LOAD ATLAS(ES)
 %--------------------------------------------------------------------------
 
-atlasname1 = 'canlab2023_fine_2mm';
+atlasname1 = 'canlab2024_fine_2mm';
 atlas1 = load_atlas(atlasname1); % CANlab atlas object
 
 %atlasname2 = 'cit168';
@@ -77,7 +77,7 @@ atlas1 = load_atlas(atlasname1); % CANlab atlas object
 %% SELECT REGIONS TO BE INCLUDED AT THE LOWEST LEVEL OF GRANULARITY
 %--------------------------------------------------------------------------
 
-% NOTE: this is level 'labels_4' in canlab2023
+% NOTE: this is level 'labels_4' in canlab2024
 
 granularity1 = 'labels_4';
 labels1 = {{'insula_anterior','insula_operculum'},{'VStriatum'},{'CAU'},{'PUT'}}; % cell array of cell arrays grouping labels that should be joined into one ROI
@@ -155,7 +155,7 @@ clear roi_counter
 %% SELECT REGIONS TO BE INCLUDED AT THE INTERMEDIATE LEVEL OF GRANULARITY
 %--------------------------------------------------------------------------
 
-% NOTE: this is level 'labels_3' in canlab2023
+% NOTE: this is level 'labels_3' in canlab2024
 
 granularity2 = 'labels_3';
 labels2 = {{'vmPFC'},{'Hythal'},{'VTA_PBP'}}; % cell array of cell arrays grouping labels that should be joined into one ROI
@@ -232,7 +232,7 @@ clear roi_counter
 %% SELECT REGIONS TO BE INCLUDED AT THE HIGHEST LEVEL OF GRANULARITY
 %--------------------------------------------------------------------------
 
-% NOTE: this is level 'labels_2' in canlab2023
+% NOTE: this is level 'labels_2' in canlab2024
 
 granularity3 = 'labels_2';
 labels3 = {{'Ctx_47m_L','Ctx_a47r_L','Ctx_47s_L','Ctx_47m_R','Ctx_a47r_R','Ctx_47s_R'},{'Ctx_a10p_L','Ctx_10pp_L','Ctx_11l_L','Ctx_13l_L','Ctx_OFC_L','Ctx_a10p_R','Ctx_10pp_R','Ctx_11l_R','Ctx_13l_R','Ctx_OFC_R'}}; % cell array of cell arrays grouping labels that should be joined into one ROI

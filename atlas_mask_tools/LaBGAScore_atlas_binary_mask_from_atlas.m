@@ -78,7 +78,7 @@ end
 % Load atlas of your choice
 %--------------------------------------------------------------------------
 
-atlasname1 = 'canlab2023_fine_2mm';
+atlasname1 = 'canlab2024_fine_2mm';
 atlas1 = load_atlas(atlasname1); % you get a CANlab atlas object
 
 %atlasname2 = 'cit168';
@@ -99,7 +99,7 @@ atlas1 = load_atlas(atlasname1); % you get a CANlab atlas object
 labels1 = {'insula_anterior','insula_operculum','Hippocampal_Formation','Amygdala','VStriatum','CAU','PUT','GP'};
 
 atlas1_subset = select_atlas_subset(atlas1, labels1, 'labels_4');
-atlas1_subset = atlas1_subset.threshold(0.20); % canlab2023 is a probabilistic atlas
+atlas1_subset = atlas1_subset.threshold(0.20); % canlab2024 is a probabilistic atlas
 
 atlas1_subset_flat = select_atlas_subset(atlas1, labels1, 'labels_4', 'flatten');
 atlas1_subset_flat = atlas1_subset_flat.threshold(0.20);
@@ -116,7 +116,7 @@ atlas1_subset_flat = atlas1_subset_flat.threshold(0.20);
 labels2 = {'vmPFC','Hythal','VTA_PBP','PAG','SN','LC+','Parabrachial'};
 
 atlas2_subset = select_atlas_subset(atlas1, labels2, 'labels_3');
-atlas2_subset = atlas2_subset.threshold(0.20); % canlab2023 is a probabilistic atlas
+atlas2_subset = atlas2_subset.threshold(0.20); % canlab2024 is a probabilistic atlas
 
 atlas2_subset_flat = select_atlas_subset(atlas1, labels2, 'labels_3', 'flatten');
 atlas2_subset_flat = atlas2_subset_flat.threshold(0.20);
@@ -128,10 +128,10 @@ atlas2_subset_flat = atlas2_subset_flat.threshold(0.20);
 labels3 = {'Ctx_47m_L','Ctx_a47r_L','Ctx_47s_L','Ctx_47m_R','Ctx_a47r_R','Ctx_47s_R','Ctx_a10p_L','Ctx_10pp_L','Ctx_11l_L','Ctx_13l_L','Ctx_OFC_L','Ctx_a10p_R','Ctx_10pp_R','Ctx_11l_R','Ctx_13l_R','Ctx_OFC_R'};
 
 atlas3_subset = select_atlas_subset(atlas1, labels3, 'labels_2');
-atlas3_subset = atlas3_subset.threshold(0.20); % canlab2023 is a probabilistic atlas
+atlas3_subset = atlas3_subset.threshold(0.20); % canlab2024 is a probabilistic atlas
 
 atlas3_subset_flat = select_atlas_subset(atlas1, labels3, 'labels_2','flatten');
-atlas3_subset_flat = atlas3_subset_flat.threshold(0.20); % canlab2023 is a probabilistic atlas
+atlas3_subset_flat = atlas3_subset_flat.threshold(0.20); % canlab2024 is a probabilistic atlas
 
 
 % Change data type of probability maps if needed
