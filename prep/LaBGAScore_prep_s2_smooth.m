@@ -47,8 +47,8 @@
 % date:   November, 2021
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s2_smooth.m         v1.1       
-% last modified: 2022/03/15
+% @(#)% LaBGAScore_prep_s2_smooth.m         v1.2       
+% last modified: 2024/06/11
 
 
 %% SET SMOOTHING OPTIONS, AND SUBJECTS
@@ -71,7 +71,7 @@ LaBGAScore_prep_s0_define_directories;
 if ~isempty(subjs2smooth)
     [C,ia,~] = intersect(derivsubjs,subjs2smooth);
     
-    if ~isequal(C,subjs2smooth)
+    if ~isequal(C,subjs2smooth')
         error('\n subject %s defined in subjs2smooth not present in %s, please check before proceeding',subjs2smooth{~ismember(subjs2smooth,C)},derivdir);
     else
         
