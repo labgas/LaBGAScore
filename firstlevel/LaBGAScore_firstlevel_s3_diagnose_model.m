@@ -23,9 +23,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s3_diagnose_model.m         v1.3   
+% LaBGAScore_firstlevel_s3_diagnose_model.m         v1.4   
 %
-% last modified: 2023/03/24
+% last modified: 2024/08/07
 %
 %
 %% VIFS AND DESIGN
@@ -45,6 +45,13 @@ if LaBGAS_options.display.plotmontages
     load(fullfile(subjfirstdir,'SPM.mat'));
 
     tmapnames = dir(fullfile(subjfirstdir,'spmT_*.nii'));
+    
+        if isfield(DSGN,'singletrials')
+            if ~isempty(DSGN.singletrials)
+                tmapnames = tmapnames(1:size(DSGN.contrastnames,2));
+            end
+        end
+    
     tmapspaths = cell(1,size(tmapnames,1));
     tmapsobj = cell(1,size(tmapnames,1));
     montages = cell(1,size(tmapnames,1));

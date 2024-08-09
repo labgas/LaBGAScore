@@ -99,17 +99,18 @@
 %
 %__________________________________________________________________________
 %
-% authors: Lukas Van Oudenhove
-% date:   March, 2022
+% authors: Lukas Van Oudenhove, Lixin Qiu
+% date:   March, 2022 -
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.4
-% last modified: 2024/03/04
+% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.5
+% last modified: 2024/08/08
 
 
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN
 
 % check whether LaBGAScore_firstlevel_s1_options_dsgn_struct has been run
+
 % STUDY-SPECIFIC: replace LaBGAScore with name of study-specific script in code below
 
 if ~exist('DSGN','var')
@@ -221,6 +222,7 @@ cd(rootdir);
 
 firstlist = dir(fullfile(firstmodeldir,'sub-*'));
 firstsubjs = cellstr(char(firstlist(:).name));
+firstsubjdirs = cell(size(firstsubjs,1),1);
 
     for firstsub = 1:size(firstsubjs,1)
         firstsubjdirs{firstsub,1} = fullfile(firstlist(firstsub).folder,firstlist(firstsub).name);
@@ -230,14 +232,26 @@ firstsubjs = cellstr(char(firstlist(:).name));
 %% LOOP OVER SUBJECTS
 %--------------------------------------------------------------------------
 
+if isfield(LaBGAS_options,'subjs2analyze')
+    
+    if ~isempty(LaBGAS_options.subjs2analyze)
+        
+        derivsubjs = LaBGAS_options.subjs2analyze';
+        
+    end
+    
+end
+
 for sub=1:size(derivsubjs,1)
     
     %% DEFINE SUBJECT LEVEL DIRS & FILENAMES
     
-    subjderivdir = fullfile(derivsubjdirs{sub},'func');
-    subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
-    subjfirstdir = firstsubjdirs{sub};
-    
+    % define subject-specific dirs
+    subjderivdir = fullfile(derivdir,derivsubjs{sub},'func');
+    subjBIDSdir = fullfile(BIDSdir,derivsubjs{sub},'func');
+    subjfirstdir = fullfile(DSGN.modeldir,derivsubjs{sub});
+
+    % create image and noisefile lists
     BIDSimgs = dir(fullfile(subjBIDSdir,'*bold.nii.gz'));
     BIDSimgs = {BIDSimgs(:).name}';
     BIDSidx = ~contains(BIDSimgs,'rest'); % omit resting state scan if it exists
@@ -281,6 +295,7 @@ for sub=1:size(derivsubjs,1)
             warning('\nnumbers of raw images, preprocessed images, noise, and events files match for %s, continuing',derivsubjs{sub});
         end
 
+        
     %% LOOP OVER RUNS: CREATE NOISE REGRESSORS, ONSETS, DURATIONS, AND PARAMETRIC MODULATORS
     
     for run=1:size(fmriprep_noisefiles,1)
@@ -300,7 +315,7 @@ for sub=1:size(derivsubjs,1)
                 delete(fullfile(rundir,derivimgs{run}));
             elseif ~contains([rundirlist.name],fmriprep_noisefiles{run})
                 copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
-            elseif ~contains([rundirlist.name],derivimgs{run})
+            elseif ~contains([rundirlist.name],derivimgs{run}(1:end-3))
                 copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
                 gunzip(fullfile(rundir,derivimgs{run}));
                 delete(fullfile(rundir,derivimgs{run}));
@@ -907,9 +922,10 @@ for sub=1:size(derivsubjs,1)
     %% FIT FIRST LEVEL MODEL
     
     fprintf('\nRunning on subject directory %s\n',DSGN.subjects{sub});
+%     canlab_glm_subject_levels(DSGN,'subjects',DSGN.subjects{sub},'overwrite','nolinks','noreview');
     canlab_glm_subject_levels_old(DSGN,'subjects',DSGN.subjects(sub),'overwrite','nolinks','noreview'); % LVO changed to _old version of canlab function as this script causes errors with Bogdan's new version of it, as that changed handling of missing onset and duration files
     
-            if isfield(DSGN,'singletrials')
+        if isfield(DSGN,'singletrials')
             
             load(fullfile(subjfirstdir,'SPM.mat'));
             betas = SPM.xX.name;

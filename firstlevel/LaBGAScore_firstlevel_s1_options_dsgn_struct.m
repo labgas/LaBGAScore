@@ -1,4 +1,4 @@
-%%% LaBGAScore_firstlevel_s1_options_dsgn_struct.m
+%% LaBGAScore_firstlevel_s1_options_dsgn_struct.m
 %
 % This script sets the options and creates a CANlab-style DSGN structure
 % variable, which are used by the subsequent script in the standard LaBGAS
@@ -66,8 +66,6 @@
 %
 %   cell array of subjects in derivdir you want to analyze, empty cell array
 %   if you want to loop over all subjects
-%   NOTE: THIS OPTION IS NOT YET IMPLEMENTED IN THE NEXT SCRIPT, HENCE LEAVE
-%           CELL ARRAY EMPTY OR COMMENT OUT FOR NOW
 %
 %
 % SPIKE OPTIONS
@@ -180,8 +178,8 @@
 % date:   March, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.4
-% last modified: 2023/05/05
+% @(#)% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.5
+% last modified: 2024/08/08
 
 
 %% CREATE LABGAS_OPTIONS STRUCTURE
@@ -195,7 +193,7 @@ LaBGAS_options.mandatory.vif_thresh=2;
 LaBGAS_options.movement_reg_quadratic = true; % change to false if you don't want to add quadratic terms for movement parameters and their first-order derivatives
 
 % OPTIONAL
-LaBGAS_options.subjs2analyze = {}; % enter subjects separated by comma if you only want to analyze selected subjects e.g. {'sub-01','sub-02'}; THIS IS NOT YET FULLY IMPLEMENTED HENCE LEAVE CELL ARRAY EMPTY OR COMMENT OUT OR DO NOT SPECIFY FIELD AT ALL
+LaBGAS_options.subjs2analyze = sort{}; % enter subjects separated by comma if you only want to analyze selected subjects e.g. sort({'sub-01','sub-02'}); leave cell array empty or comment out to loop over all subjects
 
 % SPIKE OPTIONS
 LaBGAS_options.spikes.dvars_threshold = 2; % REQUIRED if spike_def = 'CANlab'
@@ -207,7 +205,7 @@ LaBGAS_options.display.plotmontages = true; % NOT RECOMMENDED TO TURN OFF
 LaBGAS_options.display.input_threshold = 0.005;
 LaBGAS_options.display.thresh_type = 'unc';
 LaBGAS_options.display.k = 25;
-LaBGAS_options.display.mask = which('gray_matter_mask_sparse.img');
+LaBGAS_options.display.mask = which('gm_mask_canlab2023_coarse_fmriprep20_0_20.nii');
 
 % THE ABOVE OPTIONS CAN BE CONSIDERED LABGAS DEFAULTS, BUT MAY BE
 % STUDY-SPECIFIC, SO DISCUSS WITH LUKAS IF IN DOUBT!
@@ -236,6 +234,10 @@ LaBGAScore_prep_s0_define_directories;
 
 rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
 
+% define rootdir for Github repos
+
+githubrootdir = '/data/master_github_repos';
+
 
 %% CREATE CANLAB DSGN STRUCTURE
 %--------------------------------------------------------------------------    
@@ -247,13 +249,13 @@ rundirnames = {'run-1';'run-2';'run-3';'run-4';'run-5';'run-6'};
         if ~isfield(LaBGAS_options,'subjs2analyze')
             DSGN.subjects = derivsubjdirs';
         elseif ~isempty(LaBGAS_options.subjs2analyze)
-            [C,~,~] = intersect(derivsubjs,LaBGAS_options.mandatory.subjs2analyze);
-            if ~isequal(C',LaBGAS_options.mandatory.subjs2analyze)
-                error('\n subject %s defined in LaBGAS_options.mandatory.subjs2analyze not present in %s, please check before proceeding',LaBGAS_options.mandatory.subj2analyze{~ismember(LaBGAS_options.mandatory.subjs2analyze,C)},derivdir);
+            [C,~,~] = intersect(derivsubjs,LaBGAS_options.subjs2analyze);
+            if ~isequal(C',LaBGAS_options.subjs2analyze)
+                error('\n subject %s defined in LaBGAS_options.subjs2analyze not present in %s, please check before proceeding',LaBGAS_options.subj2analyze{~ismember(LaBGAS_options.subjs2analyze,C)},derivdir);
             else
-                DSGN.subjects = cell(1,size(LaBGAS_options.mandatory.subjs2analyze,2));
+                DSGN.subjects = cell(1,size(LaBGAS_options.subjs2analyze,2));
                     for sub = 1:size(DSGN.subjects,2)
-                        DSGN.subjects{sub} = fullfile(derivdir,LaBGAS_options.mandatory.subjs2analyze{sub});
+                        DSGN.subjects{sub} = fullfile(derivdir,LaBGAS_options.subjs2analyze{sub});
                     end
             end
         else
