@@ -70,7 +70,7 @@
 %   ADAPTED:
 %       Melina Hehl (KUL/UHasselt, 2023-02-19)
 %       melina.hehl@kuleuven.be
-%       --> Adapted to fit BIDS structure with .sdat and .spar files
+%       --> Adapted to fit BIDS structure with Philips .sdat and .spar files
 %       --> Adapted to fit unedited PRESS data from Philips
 %       (see markings with %MH 2023-02-19)
 %
@@ -79,13 +79,17 @@
 %       --> Adapted to fit LaBGAS file organization and integrated in workflow
 %       --> Removed hardcoding where possible
 %       (see markings with %LVO 2024-02-16)
+%
+%       Lukas Van Oudenhove (KU Leuven, 2024-10-24)
+%       --> Adapted to fit BIDS structure with Philips SDAT/SREF & GE .7 file
+%       (see markings with %LVO 2024-10-24)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% DEFINE SOME VARS & PREP WORK %%%%%%
 
 %LVO 2024-02-16
 
-rootdir = '/data/proj_moodbugs/proj_moodbugs_wp2';
+rootdir = '/data/proj_cfs';
 
 BIDSdir = fullfile(rootdir,'BIDS');
 
@@ -95,7 +99,7 @@ derivdir = fullfile(derivrootdir,'fmriprep');
 
 derivospreydir = fullfile(derivrootdir,'osprey');
 
-voxelname = 'LINS';
+voxelname = 'pACC';
 
 acq_type = 'press';
 
@@ -161,7 +165,7 @@ opts.SubSpecAlignment.mets = 'L2Norm';          % OPTIONS:    - 'L2Norm' (defaul
 % opts.ECC.mm                = [0 1];
 
 
-opts.ECC.raw                = 0;                % OPTIONS:    - '1' (default) %MH 2023-02-19 (Philips PRESS is already ECC!)
+opts.ECC.raw                = 1;                % OPTIONS:    - '1' (default) %MH 2023-02-19 (Philips PRESS is already ECC!)
 opts.ECC.mm                = 1;                 %             - '0' (no)
                                                 %             - [] array
 
@@ -170,7 +174,7 @@ opts.ECC.mm                = 1;                 %             - '0' (no)
 opts.saveLCM                = 1;                % OPTIONS:    - 0 (no, default)
                                                 %             - 1 (yes)
 % Save jMRUI-exportable files for each spectrum?
-opts.savejMRUI              = 1;                % OPTIONS:    - 0 (no, default)
+opts.savejMRUI              = 0;                % OPTIONS:    - 0 (no, default)
                                                 %             - 1 (yes)
 
 % Save processed spectra in vendor-specific format (SDAT/SPAR, RDA, P)?
@@ -255,18 +259,19 @@ for kk = 1:length(subs)
 
         % Specify metabolite data
         % (MANDATORY)
-        dir_metabolite    = dir([subs(kk).folder filesep subs(kk).name filesep 'mrs' filesep subs(kk).name '_acq-' voxelnames{vv} acq_type '_svs.SDAT']); %MH 2023-02-19 AND %LVO 2024-02-16
-            if isempty(dir_metabolite)
+        dir_metabolite = dir([subs(kk).folder filesep subs(kk).name filesep 'mrs' filesep subs(kk).name '_acq-' voxelname acq_type '.7']); %MH 2023-02-19 AND %LVO 2024-02-16
+            if isempty(dir_metabolite) %LVO 2024-10-24
                 continue
+            else
+                files(counter) = {[dir_metabolite(end).folder filesep dir_metabolite(end).name]};
             end
-        files(counter)    = {[dir_metabolite(end).folder filesep dir_metabolite(end).name]};
 
         % Specify water reference data for eddy-current correction (same sequence as metabolite data!)
         % (OPTIONAL)
         % Leave empty for GE P-files (.7) - these include water reference data by
         % default.
-        dir_ref    = dir([subs(kk).folder filesep subs(kk).name filesep 'mrs' filesep subs(kk).name '_acq-' voxelnames{vv} acq_type '_ref.SDAT']);  %MH 2023-02-19 AND %LVO 2024-02-16
-        files_ref(counter)  = {[dir_ref(end).folder filesep dir_ref(end).name]};
+%         dir_ref    = dir([subs(kk).folder filesep subs(kk).name filesep 'mrs' filesep subs(kk).name '_acq-' voxelname acq_type '_ref.SDAT']);  %MH 2023-02-19 AND %LVO 2024-02-16
+%         files_ref(counter)  = {[dir_ref(end).folder filesep dir_ref(end).name]};
 
         % Specify water data for quantification (e.g. short-TE water scan)
         % (OPTIONAL)
@@ -282,7 +287,7 @@ for kk = 1:length(subs)
         % Link to DICOM (*.dcm) folders for GE data
         % NOTE: choose this option to use spm routines to perform segmentation (Osprey default) %LVO 2024-02-16
         % files_nii(counter)  = {[subs(kk).folder filesep subs(kk).name filesep 'anat' filesep subs(kk).name '_T1w.nii']']};
-        files_nii(counter)  = {[subs(kk).folder filesep subs(kk).name filesep 'anat' filesep subs(kk).name '_T1w.nii.gz']}; %LVO 2024-02-16 changed to .nii.gz
+%         files_nii(counter)  = {[subs(kk).folder filesep subs(kk).name filesep 'anat' filesep subs(kk).name '_T1w.nii.gz']}; %LVO 2024-02-16 changed to .nii.gz
 
         % External segmentation results
         % (OPTIONAL)
@@ -296,9 +301,9 @@ for kk = 1:length(subs)
 
         % files_seg(counter)   = {{[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep '4D' sess(ll).name '_T1w.nii.gz']}};
 
-        files_seg(counter)   = {{[derivsubjdirs{kk} filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-GM_probseg.nii.gz']],...
-                                 [derivsubjdirs{kk} filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-WM_probseg.nii.gz']],...
-                                 [derivsubjdirs{kk} filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-CSF_probseg.nii.gz']]}}; %LVO 2024-02-16 adapted to fmriprep output & LaBGAS file organization
+        files_seg(counter)   = {{[derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-GM_probseg.nii.gz']],...
+                                 [derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-WM_probseg.nii.gz']],...
+                                 [derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-CSF_probseg.nii.gz']]}}; %LVO 2024-02-16 adapted to fmriprep output & LaBGAS file organization
 
         counter = counter + 1;
 
@@ -314,7 +319,7 @@ end % for loop subjects %LVO 2024-02-16
 % the number of included groups. If no group is supplied the data will be
 % treated as one group. (You can always use the direct path)
 
-file_stat = fullfile(derivospreydir, voxelname, 'stat.csv');
+file_stat = fullfile(derivospreydir, voxelname, 'stat_GE.csv');
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -325,7 +330,7 @@ file_stat = fullfile(derivospreydir, voxelname, 'stat.csv');
 
 % Specify output folder (you can always use the direct path)
 % (MANDATORY)
-outputFolder = fullfile(derivospreydir, voxelname);
+outputFolder = fullfile(derivospreydir, voxelname, 'GE');
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

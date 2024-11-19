@@ -1,4 +1,4 @@
-%% LaBGAScore_mrs_run_osprey.m
+%% LaBGAScore_mrs_run_osprey_Philips.m
 %
 %
 % *USAGE*
@@ -34,10 +34,19 @@
 %   (Please keep in mind that final BIDS would require .nii.gz + .json files
 %   for MRS data).
 %
+% 3. If you have a dataset where part of the subjects were scanned on
+%       Philips and another part on GE (for example MR8 and PET/MR in
+%       LaBGAS case), two different scripts need to be used to
+%       analyze those subgroups, calling job files with suffix _Philips and 
+%       _GE, respectively, since the eddy current correction option opts.ECC.raw 
+%       needs to be set differently for both scanners
+%
 %
 % *OPTION*
 %
 % whole_analysis = true/false               true runs entire analysis at once, false runs step by step
+%
+% scanner = 'Philips'/'GE'                  brand of scanner on which data were acquired
 %
 %
 % -------------------------------------------------------------------------
@@ -46,13 +55,15 @@
 %
 % adapted to LaBGAS file organization and looped over voxels by Lukas Van Oudenhove
 %
+% included option to define scanner type and grab the correct jobfile
+%
 % date: KU Leuven, February, 2024
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_mrs_run_osprey.m                        v1.2
+% LaBGAScore_mrs_run_osprey_Philips.m                        v1.4
 %
-% last modified: 2024/06/05
+% last modified: 2024/11/20
 %
 %
 %% SET OPTIONS & VARIABLES
@@ -60,15 +71,17 @@
 
 whole_analysis = true;
 
-study_prefix = 'moodbugs2';                     % prefix used for all scripts in this study
+scanner = 'Philips';
 
-voxelnames = {'LINS';'RINS'};                   % cell array with voxel names IN THE SAME ORDER AS THEY WERE ACQUIRED!
+study_prefix = 'cfs';                           % prefix used for all scripts in this study
+
+voxelnames = {'pACC'};                          % cell array with voxel names IN THE SAME ORDER AS THEY WERE ACQUIRED!
 
 acq_type = 'press';                             % type of MRS sequence (will be used in 'acq-' label as 'acq-[vox1][Acq_type]')
 
 quant_method = 'TissCorrWaterScaled';           % quantification method
 
-nr_sess = 2;                                    % number of sessions in experiment
+nr_sess = 1;                                    % number of sessions in experiment
 
 
 %% GET PATHS
@@ -96,7 +109,7 @@ derivsubjs = cellstr(char(derivlist.name));
 if isequal(sourcesubjs,BIDSsubjs,derivsubjs)
     warning('\nnumbers and names of subjects in %s, %s, and %s match - good to go',sourcedir,BIDSdir,derivdir);
 else
-    error('\nnumbers and names of subjects in %s, %s, and %s do not match - please check before proceeding and make sure all your subjects in the BIDS subdataset are preprocessed',sourcedir,BIDSdir,derivdir);
+    warning('\nnumbers and names of subjects in %s, %s, and %s do not match - please check before proceeding and make sure all your subjects in the BIDS subdataset are preprocessed',sourcedir,BIDSdir,derivdir);
 end
 
 
@@ -104,8 +117,12 @@ end
 
 sessions = ones(size(BIDSlist,1),1);
 
-for s = 2:nr_sess
-    sessions = [sessions; s.*ones(size(BIDSlist,1),1)];
+if nr_sess > 1
+
+    for s = 2:nr_sess
+        sessions = [sessions; s.*ones(size(BIDSlist,1),1)];
+    end
+    
 end
 
 table_stat = table();
@@ -117,10 +134,14 @@ idx = ones(height(table_stat),1);
 
 for i = 1:size(BIDSlist,1)
     for j = 1:nr_sess
-        mrsfiles = dir(fullfile(BIDSlist(i).folder,BIDSlist(i).name,['ses-0' num2str(j)],'mrs'));
+        if nr_sess > 1
+            mrsfiles = dir(fullfile(BIDSlist(i).folder,BIDSlist(i).name,['ses-0' num2str(j)],'mrs'));
+        else
+            mrsfiles = dir(fullfile(BIDSlist(i).folder,BIDSlist(i).name,'mrs')); 
+        end
         mrsfiles(1:2)  = [];
-        if isempty(mrsfiles)
-            idx(((i-1)*2)+j) = 0;
+        if isempty(mrsfiles) || contains(mrsfiles(1).name,'.7')
+            idx(((i-1)*nr_sess)+j) = 0;
         end
         clear mrsfiles
     end
@@ -144,7 +165,7 @@ derivospreydir = fullfile(derivrootdir,'osprey');
                 mkdir(derivospreyvoxeldirs{d});
             end
             
-        files_stat{d} = fullfile(derivospreyvoxeldirs{d}, 'stat.csv');
+        files_stat{d} = fullfile(derivospreyvoxeldirs{d}, ['stat_' scanner '.csv']);
         writetable(table_stat,files_stat{d});
             
     end
@@ -166,7 +187,15 @@ cd(fullfile(derivrootdir,'fmriprep'));
 
 cd(BIDSdir);
 
-! git annex unannex sub-*/ses-*/anat/*_T1w.nii.gz
+if nr_sess > 1
+
+    ! git annex unannex sub-*/ses-*/anat/*_T1w.nii.gz
+
+else 
+    
+    ! git annex unannex sub-*/anat/*_T1w.nii.gz
+    
+end
 
 cd(rootdir);
 
@@ -177,9 +206,18 @@ cd(rootdir);
 % RUN ANALYSIS
 
 for v = 1:size(voxelnames,1)
+            
+        if nr_sess > 1
 
-    jobFileLocation = fullfile(codedir,'mrs',[study_prefix '_mrs_s0_osprey_jobfile_' voxelnames{v} '.m']);
+            jobFileLocation = fullfile(codedir,'mrs',[study_prefix '_mrs_s0_osprey_jobfile_' voxelnames{v} '_' scanner '.m']);
 
+        else
+
+            jobFileLocation = fullfile(codedir,'mrs',[study_prefix '_mrs_s0_osprey_single_sess_jobfile_' voxelnames{v} '_' scanner '.m']);
+
+        end
+        
+        
         if whole_analysis
 
             MRSCont = RunOspreyJob(jobFileLocation); 
@@ -202,7 +240,7 @@ for v = 1:size(voxelnames,1)
 
 % PATHS TO OSPREY RESULTS TSV FILES
 
-dir_OspreyResults = fullfile(derivospreydir, voxelnames{v});
+dir_OspreyResults = fullfile(derivospreydir, voxelnames{v}, scanner);
 path_subjects   = fullfile(dir_OspreyResults, 'subject_names_and_excluded.tsv');
 path_quantify   = fullfile(dir_OspreyResults, 'QuantifyResults', 'A_tCr_Voxel_1_Basis_1.tsv');
 path_QM         = fullfile(dir_OspreyResults, 'QM_processed_spectra.tsv');
@@ -215,7 +253,7 @@ secondlevelmrsvoxeldir = fullfile(secondlevelmrsdir,voxelnames{v});
         mkdir(secondlevelmrsvoxeldir);
     end
 
-path_result = fullfile(secondlevelmrsvoxeldir, ['OspreyTestResults_' voxelnames{v} '.xlsx']);
+path_result = fullfile(secondlevelmrsvoxeldir, ['OspreyTestResults_' voxelnames{v} '_' scanner '.xlsx']);
 
 
 % READ RESULTS TSV FILES

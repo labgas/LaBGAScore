@@ -70,7 +70,7 @@
 %   ADAPTED:
 %       Melina Hehl (KUL/UHasselt, 2023-02-19)
 %       melina.hehl@kuleuven.be
-%       --> Adapted to fit BIDS structure with .sdat and .spar files
+%       --> Adapted to fit BIDS structure with Philips .sdat and .spar files
 %       --> Adapted to fit unedited PRESS data from Philips
 %       (see markings with %MH 2023-02-19)
 %
@@ -79,13 +79,17 @@
 %       --> Adapted to fit LaBGAS file organization and integrated in workflow
 %       --> Removed hardcoding where possible
 %       (see markings with %LVO 2024-02-16)
+%
+%       Lukas Van Oudenhove (KU Leuven, 2024-10-24)
+%       --> Adapted to fit BIDS structure with Philips SDAT/SREF & GE .7 file
+%       (see markings with %LVO 2024-10-24)
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% DEFINE SOME VARS & PREP WORK %%%%%%
 
 %LVO 2024-02-16
 
-rootdir = '/data/proj_moodbugs/proj_moodbugs_wp2';
+rootdir = '/data/proj_cfs';
 
 BIDSdir = fullfile(rootdir,'BIDS');
 
@@ -95,7 +99,7 @@ derivdir = fullfile(derivrootdir,'fmriprep');
 
 derivospreydir = fullfile(derivrootdir,'osprey');
 
-voxelname = 'LINS';
+voxelname = 'pACC';
 
 acq_type = 'press';
 
@@ -170,7 +174,7 @@ opts.ECC.mm                = 1;                 %             - '0' (no)
 opts.saveLCM                = 1;                % OPTIONS:    - 0 (no, default)
                                                 %             - 1 (yes)
 % Save jMRUI-exportable files for each spectrum?
-opts.savejMRUI              = 1;                % OPTIONS:    - 0 (no, default)
+opts.savejMRUI              = 0;                % OPTIONS:    - 0 (no, default)
                                                 %             - 1 (yes)
 
 % Save processed spectra in vendor-specific format (SDAT/SPAR, RDA, P)?
@@ -249,70 +253,60 @@ subs       = dir(data_folder);
 subs(1:2)  = [];
 subs       = subs([subs.isdir]);
 subs       = subs(contains({subs.name},'sub'));
-% subs(end)  = []; % comment out later
 counter    = 1;
 
 for kk = 1:length(subs)
 
-        % Loop over sessions
-        sess        = dir([subs(kk).folder filesep subs(kk).name]);
-        sess(1:2)   = [];
-        sess        = sess([sess.isdir]);
-        sess        = sess(contains({sess.name},'ses'));
+        % Specify metabolite data
+        % (MANDATORY)
+        dir_metabolite = dir([subs(kk).folder filesep subs(kk).name filesep 'mrs' filesep subs(kk).name '_acq-' voxelname acq_type '_svs.SDAT']); %MH 2023-02-19 AND %LVO 2024-02-16
+            if isempty(dir_metabolite) %LVO 2024-10-24
+                continue
+            else
+                files(counter) = {[dir_metabolite(end).folder filesep dir_metabolite(end).name]};
+            end
 
-        for ll = 1:length(sess)
-            % Loop over sessions %LVO 2024-02-16
+        % Specify water reference data for eddy-current correction (same sequence as metabolite data!)
+        % (OPTIONAL)
+        % Leave empty for GE P-files (.7) - these include water reference data by
+        % default.
+        dir_ref    = dir([subs(kk).folder filesep subs(kk).name filesep 'mrs' filesep subs(kk).name '_acq-' voxelname acq_type '_ref.SDAT']);  %MH 2023-02-19 AND %LVO 2024-02-16
+        files_ref(counter)  = {[dir_ref(end).folder filesep dir_ref(end).name]};
 
-            % Specify metabolite data
-            % (MANDATORY)
-            dir_metabolite    = dir([sess(ll).folder filesep sess(ll).name filesep 'mrs' filesep subs(kk).name '_' sess(ll).name '_acq-' voxelname acq_type '_svs.SDAT']); %MH 2023-02-19 AND %LVO 2024-02-16
-                if isempty(dir_metabolite)
-                    continue
-                end
-            files(counter)    = {[dir_metabolite(end).folder filesep dir_metabolite(end).name]};
+        % Specify water data for quantification (e.g. short-TE water scan)
+        % (OPTIONAL)
+        files_w     = {};
 
-            % Specify water reference data for eddy-current correction (same sequence as metabolite data!)
-            % (OPTIONAL)
-            % Leave empty for GE P-files (.7) - these include water reference data by
-            % default.
-            dir_ref    = dir([sess(ll).folder filesep sess(ll).name filesep 'mrs' filesep subs(kk).name '_' sess(ll).name '_acq-' voxelname acq_type '_ref.SDAT']);  %MH 2023-02-19 AND %LVO 2024-02-16
-            files_ref(counter)  = {[dir_ref(end).folder filesep dir_ref(end).name]};
+        % Specify metabolite-nulled data for quantification
+        % (OPTIONAL)
+        files_mm     = {};
 
-            % Specify water data for quantification (e.g. short-TE water scan)
-            % (OPTIONAL)
-            files_w     = {};
+        % Specify T1-weighted structural imaging data
+        % (OPTIONAL)
+        % Link to single NIfTI (*.nii) files for Siemens and Philips data
+        % Link to DICOM (*.dcm) folders for GE data
+        % NOTE: choose this option to use spm routines to perform segmentation (Osprey default) %LVO 2024-02-16
+        % files_nii(counter)  = {[subs(kk).folder filesep subs(kk).name filesep 'anat' filesep subs(kk).name '_T1w.nii']']};
+%         files_nii(counter)  = {[subs(kk).folder filesep subs(kk).name filesep 'anat' filesep subs(kk).name '_T1w.nii.gz']}; %LVO 2024-02-16 changed to .nii.gz
 
-            % Specify metabolite-nulled data for quantification
-            % (OPTIONAL)
-            files_mm     = {};
+        % External segmentation results
+        % (OPTIONAL)
+        % Link to NIfTI (*.nii or *.nii.gz) files with segmentation results
+        % Add supply gray matter, white matter, and CSF as 1 x 3 cell within a
+        % cell array  or a single 4D file in the same order supplied as 1 x 1 cell;
+        % NOTE: choose this option to use fmriprep segmentation files available in derivatives subdataset %LVO 2024-02-16
+        % files_seg(counter)   = {{[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c1' sess(ll).name '_T1w.nii.gz'],...
+        %                           [sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c2' sess(ll).name '_T1w.nii.gz'],...
+        %                           [sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c3' sess(ll).name '_T1w.nii.gz']}};
 
-            % Specify T1-weighted structural imaging data
-            % (OPTIONAL)
-            % Link to single NIfTI (*.nii) files for Siemens and Philips data
-            % Link to DICOM (*.dcm) folders for GE data
-            % NOTE: choose this option to use spm routines to perform segmentation (Osprey default) %LVO 2024-02-16
-            % files_nii(counter)  = {[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep sess(ll).name '_T1w.nii']};
-%             files_nii(counter)  = {[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name '_' sess(ll).name '_T1w.nii.gz']}; %LVO 2024-02-16 changed to .nii.gz
+        % files_seg(counter)   = {{[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep '4D' sess(ll).name '_T1w.nii.gz']}};
 
-            % External segmentation results
-            % (OPTIONAL)
-            % Link to NIfTI (*.nii or *.nii.gz) files with segmentation results
-            % Add supply gray matter, white matter, and CSF as 1 x 3 cell within a
-            % cell array  or a single 4D file in the same order supplied as 1 x 1 cell;
-            % NOTE: choose this option to use fmriprep segmentation files available in derivatives subdataset %LVO 2024-02-16
-            % files_seg(counter)   = {{[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c1' sess(ll).name '_T1w.nii.gz'],...
-            %                           [sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c2' sess(ll).name '_T1w.nii.gz'],...
-            %                           [sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c3' sess(ll).name '_T1w.nii.gz']}};
+        files_seg(counter)   = {{[derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-GM_probseg.nii.gz']],...
+                                 [derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-WM_probseg.nii.gz']],...
+                                 [derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-CSF_probseg.nii.gz']]}}; %LVO 2024-02-16 adapted to fmriprep output & LaBGAS file organization
 
-            % files_seg(counter)   = {{[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep '4D' sess(ll).name '_T1w.nii.gz']}};
+        counter = counter + 1;
 
-            files_seg(counter)   = {{[derivsubjdirs{kk} filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-GM_probseg.nii.gz']],...
-                                     [derivsubjdirs{kk} filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-WM_probseg.nii.gz']],...
-                                     [derivsubjdirs{kk} filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-CSF_probseg.nii.gz']]}}; %LVO 2024-02-16 adapted to fmriprep output & LaBGAS file organization
-
-            counter = counter + 1;
-
-        end % for loop sessions %LVO 2024-02-16
 
 end % for loop subjects %LVO 2024-02-16
 
@@ -325,7 +319,7 @@ end % for loop subjects %LVO 2024-02-16
 % the number of included groups. If no group is supplied the data will be
 % treated as one group. (You can always use the direct path)
 
-file_stat = fullfile(derivospreydir, voxelname, 'stat.csv');
+file_stat = fullfile(derivospreydir, voxelname, 'stat_Philips.csv');
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -336,7 +330,7 @@ file_stat = fullfile(derivospreydir, voxelname, 'stat.csv');
 
 % Specify output folder (you can always use the direct path)
 % (MANDATORY)
-outputFolder = fullfile(derivospreydir, voxelname);
+outputFolder = fullfile(derivospreydir, voxelname, 'Philips');
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

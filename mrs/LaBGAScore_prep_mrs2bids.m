@@ -34,25 +34,27 @@
 %
 % adapted to LaBGAS file organization by Lukas Van Oudenhove
 %
+% adapted to work with both Philips and GE file formats by LVO
+%
 % date: KU Leuven, February, 2024
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_mrs2bids.m                        v1.0
+% LaBGAScore_prep_mrs2bids.m                        v1.1
 %
-% last modified: 2024/02/12
+% last modified: 2024/10/25
 %
 %
 %% GET PATHS AND DEFINE VOXEL NAMES
 % -------------------------------------------------------------------------
 
-moodbugs2_prep_s0_define_directories;
+LaBGAScore_prep_s0_define_directories; % STUDY-SPECIFIC
 
-voxelnames = {'LINS';'RINS'};   % cell array with voxel names IN THE SAME ORDER AS THEY WERE ACQUIRED!
+voxelnames = {'pACC'};   % cell array with voxel names IN THE SAME ORDER AS THEY WERE ACQUIRED!
 
 acq_type = 'press';             % type of MRS sequence (will be used in 'acq-' label as 'acq-[vox1][Acq_type]')
 
-nr_sess = 2;                    % number of sessions in experiment
+nr_sess = 1;                    % number of sessions in experiment
 
 
 %% READ IN SUBJECT LIST FROM SOURCEDATA AND WRITE IN BIDSDIR
@@ -150,29 +152,59 @@ for sub = 1:size(sourcesubjdirs,1)
         mrs_subjBIDSdir = mrs_BIDSsubjdirs{sub};
         actlist = dir(fullfile(mrs_subjsourcedir,'*_act.*'));
         reflist = dir(fullfile(mrs_subjsourcedir,'*_ref.*'));
+        plist = dir(fullfile(mrs_subjsourcedir,'P*.7'));
         
-            if size(actlist,2) > size(voxelnames,1)*4 || size(reflist,2) > size(voxelnames,1)*4
+            if size(actlist,1) > size(voxelnames,1)*4 || size(reflist,1) > size(voxelnames,1)*4
                 error('\nnumber of MRS files should be the same as number of voxelnames (times 4) for subject #%d\n', sub)
+            end
+            
+            if size(plist,1) > size(voxelnames,1)
+                error('\nnumber of MRS files should be the same as number of voxelnames for subject #%d\n', sub)
+            end
+            
+            if size(actlist,1) == 0 && size(plist,1) == 0                
+               warning('\nno MRS files found for subject #%d, skipping this subject\n', sub) 
+               continue
             end
         
             for m = 1:size(voxelnames,1)
                 
                 voxelname = voxelnames{m};
                 
-                for n = 1:size(actlist,1)
-                    sourceactname = char(actlist(n).name);
-                    sourceactnameparts = strsplit(sourceactname,'.');
-                    sourceactext = sourceactnameparts{end};
-                    BIDSactname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_svs.',sourceactext));
-                    copyfile(fullfile(mrs_subjsourcedir,sourceactname),fullfile(mrs_subjBIDSdir,BIDSactname));
-                end
+                if size(actlist,1) > 0 % Philips data
                 
-                for o = 1:size(reflist,1)
-                    sourcerefname = char(reflist(o).name);
-                    sourcerefnameparts = strsplit(sourcerefname,'.');
-                    sourcerefext = sourcerefnameparts{end};
-                    BIDSrefname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
-                    copyfile(fullfile(mrs_subjsourcedir,sourcerefname),fullfile(mrs_subjBIDSdir,BIDSrefname));
+                    for n = 1:size(actlist,1)
+                        sourceactname = char(actlist(n).name);
+                        sourceactnameparts = strsplit(sourceactname,'.');
+                        sourceactext = sourceactnameparts{end};
+                        BIDSactname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_svs.',sourceactext));
+                        if ~exist(fullfile(mrs_subjBIDSdir,BIDSactname),'file')
+                            copyfile(fullfile(mrs_subjsourcedir,sourceactname),fullfile(mrs_subjBIDSdir,BIDSactname));
+                        end
+                    end
+
+                    for o = 1:size(reflist,1)
+                        sourcerefname = char(reflist(o).name);
+                        sourcerefnameparts = strsplit(sourcerefname,'.');
+                        sourcerefext = sourcerefnameparts{end};
+                        BIDSrefname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
+                        if ~exist(fullfile(mrs_subjBIDSdir,BIDSrefname),'file')
+                            copyfile(fullfile(mrs_subjsourcedir,sourcerefname),fullfile(mrs_subjBIDSdir,BIDSrefname));
+                        end
+                    end
+                    
+                elseif size(plist,1) > 0 % GE data
+                    
+                    for p = 1:size(plist,1)
+                        sourcepname = char(plist(p).name);
+                        sourcepnameparts = strsplit(sourcepname,'.');
+                        sourcepext = sourcepnameparts{end};
+                        BIDSpname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'.',sourcepext));
+                        if ~exist(fullfile(mrs_subjBIDSdir,BIDSpname),'file')
+                            copyfile(fullfile(mrs_subjsourcedir,sourcepname),fullfile(mrs_subjBIDSdir,BIDSpname));
+                        end
+                    end
+                   
                 end
                 
                 clear voxelname
@@ -189,29 +221,59 @@ for sub = 1:size(sourcesubjdirs,1)
             mrs_subjBIDSdir = fullfile(BIDSsubjdirs{sub},sessid,'mrs');
             actlist = dir(fullfile(mrs_subjsourcedir,'*_act.*'));
             reflist = dir(fullfile(mrs_subjsourcedir,'*_ref.*'));
+            plist = dir(fullfile(mrs_subjsourecedir','P*.7'));
         
             if size(actlist,1) > size(voxelnames,1)*4 || size(reflist,1) > size(voxelnames,1)*4
-                error('\nnumber of MRS files should be the same as number of voxelnames (time 4) for subject #%d session #%d\n', sub, sess)
+                error('\nnumber of MRS files should be the same as number of voxelnames (times 4) for subject #%d session #%d\n', sub, sess)
+            end
+            
+            if size(plist,2) > size(voxelnames,1)
+                error('\nnumber of MRS files should be the same as number of voxelnames for subject #%d session #d\n', sub, sess)
+            end
+            
+            if size(actlist,2) == 0 && size(plist,2) == 0                
+               warning('\nno MRS files found for subject #%d session #d, skipping this session\n', sub, sess) 
+               continue
             end
         
             for m = 1:size(voxelnames,1)
                 
                 voxelname = voxelnames{m};
                 
-                for n = 1:size(actlist,1)
-                    sourceactname = char(actlist(n).name);
-                    sourceactnameparts = strsplit(sourceactname,'.');
-                    sourceactext = sourceactnameparts{end};
-                    BIDSactname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_svs.',sourceactext));
-                    copyfile(fullfile(mrs_subjsourcedir,sourceactname),fullfile(mrs_subjBIDSdir,BIDSactname));
-                end
+                if size(actlist,2) > 0 % Philips data
                 
-                for o = 1:size(reflist,1)
-                    sourcerefname = char(reflist(o).name);
-                    sourcerefnameparts = strsplit(sourcerefname,'.');
-                    sourcerefext = sourcerefnameparts{end};
-                    BIDSrefname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
-                    copyfile(fullfile(mrs_subjsourcedir,sourcerefname),fullfile(mrs_subjBIDSdir,BIDSrefname));
+                    for n = 1:size(actlist,1)
+                        sourceactname = char(actlist(n).name);
+                        sourceactnameparts = strsplit(sourceactname,'.');
+                        sourceactext = sourceactnameparts{end};
+                        BIDSactname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_svs.',sourceactext));
+                        if ~exist(fullfile(mrs_subjBIDSdir,BIDSactname),'file')
+                            copyfile(fullfile(mrs_subjsourcedir,sourceactname),fullfile(mrs_subjBIDSdir,BIDSactname));
+                        end
+                    end
+
+                    for o = 1:size(reflist,1)
+                        sourcerefname = char(reflist(o).name);
+                        sourcerefnameparts = strsplit(sourcerefname,'.');
+                        sourcerefext = sourcerefnameparts{end};
+                        BIDSrefname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
+                        if ~exist(fullfile(mrs_subjBIDSdir,BIDSrefname),'file')
+                            copyfile(fullfile(mrs_subjsourcedir,sourcerefname),fullfile(mrs_subjBIDSdir,BIDSrefname));
+                        end
+                    end
+                    
+                elseif size(plist,2) > 0 % GE data
+                    
+                    for p = 1:size(plist,1)
+                        sourcepname = char(plist(n).name);
+                        sourcepnameparts = strsplit(sourcepname,'.');
+                        sourcepext = sourcepnameparts{end};
+                        BIDSpname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'.',sourcepext));
+                        if ~exist(fullfile(mrs_subjBIDSdir,BIDSpname),'file')
+                            copyfile(fullfile(mrs_subjsourcedir,sourcepname),fullfile(mrs_subjBIDSdir,BIDSpname));
+                        end
+                    end
+                   
                 end
                 
                 clear voxelname
