@@ -59,23 +59,29 @@ function go = LCN12_PET_preprocessing(dir_pet,infostring_tracer,infostring_PET,i
 %       in the subdirectory dir_anat the warped segmnentations of the MRI
 %           coregistered to the PET are written
 %
-% author: Patrick Dupont, Lukas Van Oudenhove
+% authors: Patrick Dupont, Lukas Van Oudenhove
 % date: July 2023
 % history: Nov 2023: we now use the LCN12_realign_dy_PET function for the
 %                    realignment which works better for tracer which change
-%                    their distribution too much over time. 
+%                    their distribution too much over time.
 %          Mar 2024: made small edits to allow gzipped images to be used (LVO)
 %                    added a line of bash code unannexing .nii files to prevent 
 %                    writing permission issues on the LaBGAS server (LVO)
+%          Dec 2024: we mask the dy PET first for extracerebral activity
+%                    mainly in regions which can move with respect to the 
+%                    brain (such as the neck) 
 %
 % THIS IS RESEARCH SOFTWARE
 %__________________________________________________________________________
-% @(#)LCN12_PET_preprocessing      v0.3           last modified: 2024/03/14
+% @(#)LCN12_PET_preprocessing      v1.0           last modified: 2024/12/05
  
 %------------- GENERAL SETTINGS -------------------------------------------
 % limits for head movement
 threshold_translation = 6; % maximum overall movement in mm
 threshold_rotation    = 6; % maximum overall rotation in degrees
+
+kernel = [2 2 2]; % for the dilation of the mask
+
 %++++ END OF SETTINGS - DO NOT CHANGE BELOW THIS LINE +++++++++++++++++++++
 
 % determine the path of the prior data of SPM
@@ -153,13 +159,16 @@ if go == 1
    end
 
    cd(dir_pet)
-   ! git annex unannex *.nii
+   ! git annex unannex *.nii*
+   % LVO edit to avoid writing permission issues if file is git annexed on
+   % LaBGAS server
    filelist = dir([subjectname '*' infostring_PET '*.nii']);
    if size(filelist,1) ~= 1
       fprintf('ERROR subject %s: expecting a single PET image (3D or 4D) in the directory PET \n',subjectname);
       fprintf(fid,'ERROR subject %s: expecting a single PET image (3D or 4D) in the directory PET \n',subjectname);
       go = 0;
    else
+      % filename_PET = filelist(1).name;
       Vref = spm_vol(filelist(1).name);
       if size(Vref,1) ~= nr_frames
          fprintf('ERROR subject %s: expecting %i frames but only %i found \n',subjectname,nr_frames,size(Vref,1));
@@ -172,10 +181,10 @@ if go == 1
       end
    end
 end
-    
+
 % check if the structural T1w MRI is found
 cd(dir_anat)
-filelist = dir([subjectname '*_T1w.nii*']); % Lukas' edit to accommodate .nii.gz files
+filelist = dir([subjectname '*_T1w.nii*']); % LVO edit to accommodate .nii.gz files
 if size(filelist,1) ~= 1
    fprintf('ERROR subject %s: no or more than one structural scan found \n',subjectname);
    fprintf(fid,'ERROR subject %s: no or more than one structural scan found \n',subjectname);
@@ -184,74 +193,40 @@ else
    filename  = filelist(1).name;
    T1w_image = fullfile(dir_anat2,filename);
    copyfile(fullfile(dir_anat,filename),T1w_image);
-   if contains(T1w_image,'.gz')
+      if contains(T1w_image,'.gz') % LVO edit to accommodate .nii.gz files
        gunzip(T1w_image);
        delete(T1w_image);
        T1w_image = T1w_image(1,1:end-3);
-   end
+      end
    fprintf(fid,'T1w filename = %s \n',T1w_image); 
 end
 
 if go ~= 1
    fprintf('not all data are found for subject %s. Skipping this subject \n',subjectname); 
    fprintf(fid,'not all data are found for subject %s. Skipping this subject \n',subjectname); 
-else % all data are found
+else
+   % calculate sum5min (filename_sum5min) or take the first frame
+   % (filename_frame1)
+   if go_dynamic_from_injection ~= 1
+      source_image = [PET_filename ',1'];
+   else % all data are found
+      % make sum image of the first 5 min 
+      img5min = zeros(Vref(1).dim(1),Vref(1).dim(2),Vref(1).dim(3));
+      for i = 1:frame_5min
+          [img,~] = LCN12_read_image([PET_filename ',' num2str(i)],Vref(1));
+          img5min = img5min + img;
+      end
+      filename_sum5min = fullfile(dir_tmp,'PETsum5min.nii');
+      LCN12_write_image(img5min,filename_sum5min,'sum first 5 min',Vref(1).dt(1),Vref(1));        
+      source_image = filename_sum5min;
+   end
    %  initialize SPM
    fprintf('...initializing SPM \n');
    spm_jobman('initcfg')
-   figure(1)
-   % realign the PET data
-   cd(dir_pet)
-   fprintf(fid,'\n');
-   fprintf(fid,'Realignment started: %s \n',datetime('now'));
-   LCN12_realign_dy_PET(PET_filename,fullfile(dir_pet,frame_definition_file),threshold_translation,threshold_rotation);
-   fprintf(fid,'Realignment ended at: %s\n',datetime('now'));
-
-   % excluded frames
-   [~,name,~] = fileparts(PET_filename);
-   cd(dir_pet)
-   tmp = load(['excluded_frames_' name '.mat'],'excluded_frames');
-   excluded_frames = tmp(1).excluded_frames;
-   fprintf('excluded frames PET based on excess head movement = ');
-   fprintf(fid,'excluded frames PET based on excess head movement = ');
-   for i = 1:length(excluded_frames)
-       fprintf(fid,'%i ',excluded_frames(i)); 
-       fprintf('%i ',excluded_frames(i)); 
-   end
-   fprintf(fid,'\n');
-   fprintf('\n');
-   fprintf('If excluded frames are present, evaluate if data are still reliable! \n');
-   fprintf(fid,'If excluded frames are present, evaluate if data are still reliable! \n');
-   
-   % calculate a mean image
-   if go_dynamic_from_injection ~= 1 % we will calculate the mean image excluding excluded frames
-      filelist = cell(nr_frames,1);
-      for i = 1:nr_frames
-          filelist{i,1} = [PET_filename ',' num2str(i)];
-      end        
-      index_ok = setdiff(1:nr_frames,excluded_frames);
-      filelist_ok = filelist(index_ok);
-      matlabbatch = {};
-      matlabbatch{1}.spm.spatial.realign.write.data = filelist_ok;
-      matlabbatch{1}.spm.spatial.realign.write.roptions.which = [0 1];
-      matlabbatch{1}.spm.spatial.realign.write.roptions.interp = 4;
-      matlabbatch{1}.spm.spatial.realign.write.roptions.wrap = [0 0 0];
-      matlabbatch{1}.spm.spatial.realign.write.roptions.mask = 1;
-      matlabbatch{1}.spm.spatial.realign.write.roptions.prefix = 'r';
-      % run batchfile
-      spm_jobman('run',matlabbatch)
-      filename_mean = fullfile(dir_pet,['mean' name '.nii']);
-   end
-   
-   % coregister the PET and MRI
-   %+++++++++++++++++++++++++++
+   % +++++++++++++++++++++++++++++
+   % coregister the PET and MRI  +
+   % +++++++++++++++++++++++++++++
    ref_image = T1w_image;
-   if go_dynamic_from_injection ~= 1
-      source_image = filename_mean;
-   else
-      filename_sum5min = fullfile(dir_tmp,'PETsum5min.nii');
-      source_image = filename_sum5min;
-   end
    filelist = cell(nr_frames,1);
    for i = 1:nr_frames
        filelist{i,1} = [PET_filename ',' num2str(i)];
@@ -273,7 +248,6 @@ else % all data are found
    % run batchfile
    spm_jobman('run',matlabbatch)
    fprintf(fid,'Coregistration ended at: %s\n',datetime('now'));
-
    cd(dir_anat2)
    % segment the MRI (which will also generate the warping to MNI)
    %++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -321,7 +295,93 @@ else % all data are found
    % run batchfile
    spm_jobman('run',matlabbatch)
    fprintf(fid,'Segmentation ended at: %s\n',datetime('now'));
-        
+   % apply the inverse deformation field to the mask_ICV.nii (in spm12\tpm)
+   mask_filename_MNI = fullfile(spm_pth_priors,'mask_ICV.nii');
+   [pth,filename,~] = fileparts(T1w_image);
+   inverse_deformation_field = fullfile(pth,['iy_' filename '.nii']);
+   fprintf('...applying the inverse warping to mask_ICV.nii for subject %s\n',subjectname);
+   matlabbatch = {};
+   matlabbatch{1}.spm.spatial.normalise.write.subj.def = cellstr(inverse_deformation_field);
+   matlabbatch{1}.spm.spatial.normalise.write.subj.resample = cellstr(mask_filename_MNI);
+   % matlabbatch{1}.spm.spatial.normalise.write.woptions.bb = [-Inf -Inf -Inf % using -Inf to Inf leads to a problem in the y direction since part of the mask was cut
+   %                                                            Inf  Inf  Inf];
+   matlabbatch{1}.spm.spatial.normalise.write.woptions.bb = [-100 -150 -100
+                                                              100  100  100];
+   matlabbatch{1}.spm.spatial.normalise.write.woptions.vox = [2 2 2];
+   matlabbatch{1}.spm.spatial.normalise.write.woptions.interp = 1;
+   matlabbatch{1}.spm.spatial.normalise.write.woptions.prefix = 'ptspace_';
+   cd(dir_batch)
+   save batch_warping_mask2patientspace matlabbatch
+   cd(dir_tmp)
+   fprintf(fid,'\n');
+   fprintf(fid,'Warping mask to patient space started at: %s \n',datetime('now'));
+   % run batchfile
+   spm_jobman('run',matlabbatch)
+   fprintf(fid,'Warping mask to patient space ended at: %s\n',datetime('now'));
+   % move the file to the correct directory
+   movefile(fullfile(spm_pth_priors,'ptspace_mask_ICV.nii'),fullfile(dir_tmp,'ptspace_mask_ICV.nii'));
+   % read the PET data after virtually warping them to the MRI patient
+   % space
+   [dydata,Vref] = LCN12_read_image(PET_filename);
+   % read the warped mask in patient space
+   filename_mask_patient_space = fullfile(dir_tmp,'ptspace_mask_ICV.nii');
+   mask = LCN12_read_image(fullfile(filename_mask_patient_space),Vref(1));
+   % dilate the mask in patient space to ensure that the whole brain is part of it
+   mask_dilated = LCN_3Dimage_dilate(double(mask > 0),kernel);
+   % write it to file
+   LCN12_write_image(mask_dilated,fullfile(dir_tmp,'Dptspace_mask_ICV.nii'),'dilated mask',Vref(1).dt(1),Vref(1));
+   % apply the dilated mask to remove non-brain voxels and save it
+   [~,name,~] = fileparts(PET_filename);
+   outputfilename_PET_masked = fullfile(dir_tmp,['masked_' name '.nii']);
+   % Vout = struct([]);
+   for i = 1:nr_frames
+       Vout(i)   = struct('fname', outputfilename_PET_masked,...
+                          'dim',   Vref(i).dim(1:3),...
+                          'dt',    Vref(i).dt,...
+                          'mat',   Vref(i).mat,...
+                          'descrip', 'nonbrain voxels to zero', ...
+                          'n',       [i 1]);
+       spm_write_vol(Vout(i),dydata(:,:,:,i).*(mask_dilated > 0));
+   end
+   % realign the masked PET data
+   cd(dir_pet)
+   fprintf(fid,'\n');
+   fprintf(fid,'Realignment started: %s \n',datetime('now'));
+   LCN12_realign2_dy_PET(outputfilename_PET_masked,PET_filename,filename_sum5min,frame_5min,threshold_translation,threshold_rotation);
+   fprintf(fid,'Realignment ended at: %s\n',datetime('now'));   
+   % excluded frames
+   cd(dir_pet)
+   tmp = load(['excluded_frames_' name '.mat'],'excluded_frames');
+   excluded_frames = tmp(1).excluded_frames;
+   fprintf('excluded frames PET based on excess head movement = ');
+   fprintf(fid,'excluded frames PET based on excess head movement = ');
+   for i = 1:length(excluded_frames)
+       fprintf(fid,'%i ',excluded_frames(i)); 
+       fprintf('%i ',excluded_frames(i)); 
+   end
+   fprintf(fid,'\n');
+   fprintf('\n');
+   fprintf('If excluded frames are present, evaluate if data are still reliable! \n');
+   fprintf(fid,'If excluded frames are present, evaluate if data are still reliable! \n');
+   % calculate a mean image
+   if go_dynamic_from_injection ~= 1 % we will calculate the mean image excluding excluded frames
+      filelist = cell(nr_frames,1);
+      for i = 1:nr_frames
+          filelist{i,1} = [PET_filename ',' num2str(i)];
+      end        
+      index_ok = setdiff(1:nr_frames,excluded_frames);
+      filelist_ok = filelist(index_ok);
+      matlabbatch = {};
+      matlabbatch{1}.spm.spatial.realign.write.data = filelist_ok;
+      matlabbatch{1}.spm.spatial.realign.write.roptions.which = [0 1];
+      matlabbatch{1}.spm.spatial.realign.write.roptions.interp = 4;
+      matlabbatch{1}.spm.spatial.realign.write.roptions.wrap = [0 0 0];
+      matlabbatch{1}.spm.spatial.realign.write.roptions.mask = 1;
+      matlabbatch{1}.spm.spatial.realign.write.roptions.prefix = 'r';
+      % run batchfile
+      spm_jobman('run',matlabbatch)
+      % filename_mean = fullfile(dir_pet,['mean' name '.nii']);
+   end
    % apply the warping parameters to the PET data
    %+++++++++++++++++++++++++++++++++++++++++++++
    [pth,filename,~] = fileparts(T1w_image);
@@ -342,7 +402,6 @@ else % all data are found
    % run batchfile
    spm_jobman('run',matlabbatch)
    fprintf(fid,'Warping PET ended at: %s\n',datetime('now'));
-    
    % apply the warping parameters to the GM and WM images
    %+++++++++++++++++++++++++++++++++++++++++++++++++++++   
    fprintf('...creating the warping batchfile for subject %s\n',subjectname);
