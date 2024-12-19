@@ -47,16 +47,17 @@
 %               
 % author: Patrick Dupont, Lukas Van Oudenhove
 % date: September 2023
-% history: October 2023 cleaning code
-%                       taking into account the naming of the pet folder
-%          March 2024   adapted to work with standard LaBGAS file
-%                       organization (LVO)
-%                       adapted to move output to derivatives
-%          May 2024     temp bug fix in copying code line 163- (LVO), currently does not copy anat, batch and tmp folders to derivatives, should be adapted to do this
+% history: October 2023     cleaning code
+%                           taking into account the naming of the pet folder
+%          March 2024       adapted to work with standard LaBGAS file
+%                           organization (LVO)
+%                           adapted to move output to derivatives
+%          May 2024         temp bug fix in copying code line 163- (LVO), currently does not copy anat, batch and tmp folders to derivatives, should be adapted to do this
+%          December 2024    permanently fixed the above bug
 %
 % THIS IS RESEARCH SOFTWARE
 %__________________________________________________________________________
-% @(#)LCN12_PET_preprocess_data.m       v0.14     last modified: 2024/05/30
+% @(#)LCN12_PET_preprocess_data.m       v0.15     last modified: 2024/12/19
 
 clear
 close all
@@ -174,9 +175,7 @@ for subj = 1:nr_subjects
     end
     cd(dir_pet);
     for i = 1:size(list_pet2copy,1)
-        if list_pet2copy(i).isdir == false
-            movefile(fullfile(list_pet2copy(i).folder,list_pet2copy(i).name),subjectderivpetdir);
-        end
+        movefile(fullfile(list_pet2copy(i).folder,list_pet2copy(i).name),subjectderivpetdir);
     end
     matfile2copy = dir(fullfile(list_pet2copy(i).folder,'*.mat'));
     movefile(fullfile(matfile2copy.folder,matfile2copy.name),subjectderivpetdir);
