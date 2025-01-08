@@ -36,13 +36,15 @@
 %
 % adapted to work with both Philips and GE file formats by LVO
 %
+% debugged and added deidentification by LVO
+%
 % date: KU Leuven, February, 2024
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_mrs2bids.m                        v1.2
+% LaBGAScore_prep_mrs2bids.m                        v1.3
 %
-% last modified: 2025/01/07
+% last modified: 2025/01/08
 %
 %
 %% GET PATHS AND DEFINE VOXEL NAMES
@@ -177,14 +179,19 @@ for sub = 1:size(sourcesubjdirs,1)
                 
                     actlist_voxel = actlist(1+voxelcounter*2:2+voxelcounter*2,:);
                     reflist_voxel = reflist(1+voxelcounter*2:2+voxelcounter*2,:);
+                    
+                    cd(mrs_subjsourcedir);
+                    PhilipsDeIdentify;
+                    cd(rootdir);
                 
                     for n = 1:size(actlist_voxel,1)
                         sourceactname = char(actlist_voxel(n).name);
                         sourceactnameparts = strsplit(sourceactname,'.');
                         sourceactext = sourceactnameparts{end};
+                        sourceactname_noID = [sourceactnameparts{1} '_noID.' sourceactext];
                         BIDSactname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_svs.',sourceactext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSactname),'file')
-                            copyfile(fullfile(mrs_subjsourcedir,sourceactname),fullfile(mrs_subjBIDSdir,BIDSactname));
+                            movefile(fullfile(mrs_subjsourcedir,sourceactname_noID),fullfile(mrs_subjBIDSdir,BIDSactname));
                         end
                     end
 
@@ -192,9 +199,10 @@ for sub = 1:size(sourcesubjdirs,1)
                         sourcerefname = char(reflist_voxel(o).name);
                         sourcerefnameparts = strsplit(sourcerefname,'.');
                         sourcerefext = sourcerefnameparts{end};
+                        sourcerefname_noID = [sourcerefnameparts{1} '_noID.' sourcerefext];
                         BIDSrefname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSrefname),'file')
-                            copyfile(fullfile(mrs_subjsourcedir,sourcerefname),fullfile(mrs_subjBIDSdir,BIDSrefname));
+                            movefile(fullfile(mrs_subjsourcedir,sourcerefname_noID),fullfile(mrs_subjBIDSdir,BIDSrefname));
                         end
                     end
                     
@@ -202,13 +210,21 @@ for sub = 1:size(sourcesubjdirs,1)
                     
                 elseif size(plist,1) > 0 % GE data
                     
+                    voxelcounter = m;
+                    plist_voxel = plist(m);
+                    
+                    cd(mrs_subjsourcedir);
+                    GEDeIdentify;
+                    cd(rootdir);
+                    
                     for p = 1:size(plist,1)
                         sourcepname = char(plist(p).name);
                         sourcepnameparts = strsplit(sourcepname,'.');
                         sourcepext = sourcepnameparts{end};
+                        sourcepname_noID = [sourcepnameparts{1} '_noID.' sourcepext];
                         BIDSpname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'.',sourcepext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSpname),'file')
-                            copyfile(fullfile(mrs_subjsourcedir,sourcepname),fullfile(mrs_subjBIDSdir,BIDSpname));
+                            movefile(fullfile(mrs_subjsourcedir,sourcepname_noID),fullfile(mrs_subjBIDSdir,BIDSpname));
                         end
                     end
                     
@@ -253,14 +269,19 @@ for sub = 1:size(sourcesubjdirs,1)
 
                     actlist_voxel = actlist(1+voxelcounter*2:2+voxelcounter*2,:);
                     reflist_voxel = reflist(1+voxelcounter*2:2+voxelcounter*2,:);
+                    
+                    cd(mrs_subjsourcedir);
+                    PhilipsDeIdentify;
+                    cd(rootdir);
                 
                     for n = 1:size(actlist_voxel,1)
                         sourceactname = char(actlist_voxel(n).name);
                         sourceactnameparts = strsplit(sourceactname,'.');
                         sourceactext = sourceactnameparts{end};
+                        sourceactname_noID = [sourceactnameparts{1} '_noID.' sourceactext];
                         BIDSactname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_svs.',sourceactext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSactname),'file')
-                            copyfile(fullfile(mrs_subjsourcedir,sourceactname),fullfile(mrs_subjBIDSdir,BIDSactname));
+                            movefile(fullfile(mrs_subjsourcedir,sourceactname_noID),fullfile(mrs_subjBIDSdir,BIDSactname));
                         end
                     end
 
@@ -268,9 +289,10 @@ for sub = 1:size(sourcesubjdirs,1)
                         sourcerefname = char(reflist_voxel(o).name);
                         sourcerefnameparts = strsplit(sourcerefname,'.');
                         sourcerefext = sourcerefnameparts{end};
+                        sourcerefname_noID = [sourcerefnameparts{1} '_noID.' sourcerefext];
                         BIDSrefname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSrefname),'file')
-                            copyfile(fullfile(mrs_subjsourcedir,sourcerefname),fullfile(mrs_subjBIDSdir,BIDSrefname));
+                            movefile(fullfile(mrs_subjsourcedir,sourcerefname_noID),fullfile(mrs_subjBIDSdir,BIDSrefname));
                         end
                     end
                     
@@ -278,13 +300,21 @@ for sub = 1:size(sourcesubjdirs,1)
                     
                 elseif size(plist,1) > 0 % GE data
                     
+                    voxelcounter = m;
+                    plist_voxel = plist(m);
+                    
+                    cd(mrs_subjsourcedir);
+                    GEDeIdentify;
+                    cd(rootdir);
+                    
                     for p = 1:size(plist,1)
                         sourcepname = char(plist(n).name);
                         sourcepnameparts = strsplit(sourcepname,'.');
                         sourcepext = sourcepnameparts{end};
+                        sourcepname_noID = [sourcepnameparts{1} '_noID.' sourcepext];
                         BIDSpname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'.',sourcepext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSpname),'file')
-                            copyfile(fullfile(mrs_subjsourcedir,sourcepname),fullfile(mrs_subjBIDSdir,BIDSpname));
+                            movefile(fullfile(mrs_subjsourcedir,sourcepname_noID),fullfile(mrs_subjBIDSdir,BIDSpname));
                         end
                     end
                     

@@ -12,9 +12,6 @@
 % The derivatives & secondlevel subdatasets should be created using datalad commands
 % prior to running this script. If this is not the case, it will error out.
 %
-% Preprocessing of structural (and functional) MRI scans needs to be done
-% using fmriprep before running this script, as it uses the segmentations
-%
 %
 % *NOTES*
 % 
@@ -44,8 +41,6 @@
 %
 % *OPTION*
 %
-% whole_analysis = true/false               true runs entire analysis at once, false runs step by step
-%
 % scanner = 'Philips'/'GE'                  brand of scanner on which data were acquired
 %
 %
@@ -61,15 +56,13 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_mrs_run_osprey_GE.m                        v1.4
+% LaBGAScore_mrs_run_osprey_GE.m                        v1.5
 %
-% last modified: 2024/11/20
+% last modified: 2025/01/08
 %
 %
 %% SET OPTIONS & VARIABLES
 % -------------------------------------------------------------------------
-
-whole_analysis = true;
 
 scanner = 'GE';
 
@@ -181,9 +174,9 @@ secondlevelmrsdir = fullfile(secondleveldir,'mrs');
         mkdir(secondlevelmrsdir);
     end
     
-cd(fullfile(derivrootdir,'fmriprep'));
-
-! git annex unannex sub-*/anat/*res-2_label-*_probseg.nii.gz
+% cd(fullfile(derivrootdir,'fmriprep')); we no longer use fmriprep seg
+% 
+% ! git annex unannex sub-*/anat/*res-2_label-*_probseg.nii.gz
 
 cd(BIDSdir);
 
@@ -217,25 +210,14 @@ for v = 1:size(voxelnames,1)
 
         end
         
-        
-        if whole_analysis
-
-            MRSCont = RunOspreyJob(jobFileLocation); 
-
-        else
-
-            MRSCont = OspreyJob(jobFileLocation); % Generate MRS container
-            MRSCont = OspreyLoad(MRSCont); % Load data into MRS container
-            MRSCont = OspreyProcess(MRSCont); % Process data
-            MRSCont = OspreyFit(MRSCont); % Linear-combination modelling
-            MRSCont = OspreyCoreg(MRSCont); % Coregistration module
-            MRSCont = OspreySeg(MRSCont); % Segmentation module
-            MRSCont = OspreyQuantify(MRSCont); % Quantification module
-            MRSCont = OspreyOverview(MRSCont); % Create visualization
-
-        end
-
-    clear jobFileLocation MRSCont
+        MRSCont = OspreyJob(jobFileLocation); % Generate MRS container
+        MRSCont = OspreyLoad(MRSCont); % Load data into MRS container
+        MRSCont = OspreyProcess(MRSCont); % Process data
+        MRSCont = OspreyFit(MRSCont); % Linear-combination modelling
+        MRSCont = OspreyCoreg(MRSCont); % Coregistration module
+        MRSCont = OspreySeg(MRSCont); % Segmentation module
+        MRSCont = OspreyQuantify(MRSCont); % Quantification module
+        MRSCont = OspreyOverview(MRSCont); % Create visualization
         
 
 % PATHS TO OSPREY RESULTS TSV FILES
@@ -269,6 +251,8 @@ results_QM.Properties.VariableNames = "QC." + results_QM.Properties.VariableName
 results_all = [results_subjects results_QM results_quantify];
 results_all.QuantificationMethod = repmat(quant_method, size(results_all, 1), 1); % MH 2024-02-01
 writetable(results_all, path_result);
+
+clear jobFileLocation MRSCont
 
 end
 

@@ -81,8 +81,13 @@
 %       (see markings with %LVO 2024-02-16)
 %
 %       Lukas Van Oudenhove (KU Leuven, 2024-10-24)
-%       --> Adapted to fit BIDS structure with Philips SDAT/SREF & GE .7 file
+%       --> Adapted to fit BIDS structure with Philips SDAT/SREF files
 %       (see markings with %LVO 2024-10-24)
+%
+%       Lukas Van Oudenhove & Melina Hehl (KU Leuven, 2025-01-08)
+%       --> Made changes to perform segmentation afresh using spm routines
+%       as using existing fmriprep segmentations caused dimensionality
+%       errors
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% DEFINE SOME VARS & PREP WORK %%%%%%
@@ -165,7 +170,7 @@ opts.SubSpecAlignment.mets = 'L2Norm';          % OPTIONS:    - 'L2Norm' (defaul
 % opts.ECC.mm                = [0 1];
 
 
-opts.ECC.raw                = 0;                % OPTIONS:    - '1' (default) %MH 2023-02-19 (Philips PRESS is already ECC!)
+opts.ECC.raw                = 0;                % OPTIONS:    - '1' (default) %MH 2023-02-19 (Philips PRESS is already ECC)
 opts.ECC.mm                = 1;                 %             - '0' (no)
                                                 %             - [] array
 
@@ -287,23 +292,27 @@ for kk = 1:length(subs)
         % Link to DICOM (*.dcm) folders for GE data
         % NOTE: choose this option to use spm routines to perform segmentation (Osprey default) %LVO 2024-02-16
         % files_nii(counter)  = {[subs(kk).folder filesep subs(kk).name filesep 'anat' filesep subs(kk).name '_T1w.nii']']};
-%         files_nii(counter)  = {[subs(kk).folder filesep subs(kk).name filesep 'anat' filesep subs(kk).name '_T1w.nii.gz']}; %LVO 2024-02-16 changed to .nii.gz
+        files_nii(counter)  = {[subs(kk).folder filesep subs(kk).name filesep 'anat' filesep subs(kk).name '_T1w.nii.gz']}; %LVO 2024-02-16 changed to .nii.gz
 
         % External segmentation results
         % (OPTIONAL)
         % Link to NIfTI (*.nii or *.nii.gz) files with segmentation results
         % Add supply gray matter, white matter, and CSF as 1 x 3 cell within a
         % cell array  or a single 4D file in the same order supplied as 1 x 1 cell;
-        % NOTE: choose this option to use fmriprep segmentation files available in derivatives subdataset %LVO 2024-02-16
-        % files_seg(counter)   = {{[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c1' sess(ll).name '_T1w.nii.gz'],...
-        %                           [sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c2' sess(ll).name '_T1w.nii.gz'],...
-        %                           [sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c3' sess(ll).name '_T1w.nii.gz']}};
 
-        % files_seg(counter)   = {{[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep '4D' sess(ll).name '_T1w.nii.gz']}};
-
-        files_seg(counter)   = {{[derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-GM_probseg.nii.gz']],...
-                                 [derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-WM_probseg.nii.gz']],...
-                                 [derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-CSF_probseg.nii.gz']]}}; %LVO 2024-02-16 adapted to fmriprep output & LaBGAS file organization
+%         files_seg(counter)   = {{[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c1' sess(ll).name '_T1w.nii.gz'],...
+%                                   [sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c2' sess(ll).name '_T1w.nii.gz'],...
+%                                   [sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep 'c3' sess(ll).name '_T1w.nii.gz']}};
+% 
+%         files_seg(counter)   = {{[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep '4D' sess(ll).name '_T1w.nii.gz']}};
+% 
+%         files_seg(counter)   = {{[derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-GM_probseg.nii.gz']],...
+%                                  [derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-WM_probseg.nii.gz']],...
+%                                  [derivdir filesep subs(kk).name filesep 'anat' filesep [subs(kk).name '_space-MNI152NLin2009cAsym_res-2_label-CSF_probseg.nii.gz']]}}; %LVO 2024-02-16 adapted to fmriprep output & LaBGAS file organization
+%
+%             LVO 2024-02-16 adapted to fmriprep output & LaBGAS file
+%             organization, but this failed due to different dimensions of
+%             segmentation and coregistration mask
 
         counter = counter + 1;
 
