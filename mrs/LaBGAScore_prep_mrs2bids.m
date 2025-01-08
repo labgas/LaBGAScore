@@ -40,9 +40,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_mrs2bids.m                        v1.1
+% LaBGAScore_prep_mrs2bids.m                        v1.2
 %
-% last modified: 2024/10/25
+% last modified: 2025/01/07
 %
 %
 %% GET PATHS AND DEFINE VOXEL NAMES
@@ -172,9 +172,14 @@ for sub = 1:size(sourcesubjdirs,1)
                 voxelname = voxelnames{m};
                 
                 if size(actlist,1) > 0 % Philips data
+                    
+                    voxelcounter = m-1;
                 
-                    for n = 1:size(actlist,1)
-                        sourceactname = char(actlist(n).name);
+                    actlist_voxel = actlist(1+voxelcounter*2:2+voxelcounter*2,:);
+                    reflist_voxel = reflist(1+voxelcounter*2:2+voxelcounter*2,:);
+                
+                    for n = 1:size(actlist_voxel,1)
+                        sourceactname = char(actlist_voxel(n).name);
                         sourceactnameparts = strsplit(sourceactname,'.');
                         sourceactext = sourceactnameparts{end};
                         BIDSactname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_svs.',sourceactext));
@@ -183,8 +188,8 @@ for sub = 1:size(sourcesubjdirs,1)
                         end
                     end
 
-                    for o = 1:size(reflist,1)
-                        sourcerefname = char(reflist(o).name);
+                    for o = 1:size(reflist_voxel,1)
+                        sourcerefname = char(reflist_voxel(o).name);
                         sourcerefnameparts = strsplit(sourcerefname,'.');
                         sourcerefext = sourcerefnameparts{end};
                         BIDSrefname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
@@ -192,6 +197,8 @@ for sub = 1:size(sourcesubjdirs,1)
                             copyfile(fullfile(mrs_subjsourcedir,sourcerefname),fullfile(mrs_subjBIDSdir,BIDSrefname));
                         end
                     end
+                    
+                    clear voxelname actlist_voxel reflist_voxel
                     
                 elseif size(plist,1) > 0 % GE data
                     
@@ -204,10 +211,10 @@ for sub = 1:size(sourcesubjdirs,1)
                             copyfile(fullfile(mrs_subjsourcedir,sourcepname),fullfile(mrs_subjBIDSdir,BIDSpname));
                         end
                     end
+                    
+                    clear voxelname
                    
-                end
-                
-                clear voxelname
+                end         
                 
             end % for loop voxels
             
@@ -240,10 +247,15 @@ for sub = 1:size(sourcesubjdirs,1)
                 
                 voxelname = voxelnames{m};
                 
-                if size(actlist,2) > 0 % Philips data
+                if size(actlist,1) > 0 % Philips data
                 
-                    for n = 1:size(actlist,1)
-                        sourceactname = char(actlist(n).name);
+                    voxelcounter = m-1;
+
+                    actlist_voxel = actlist(1+voxelcounter*2:2+voxelcounter*2,:);
+                    reflist_voxel = reflist(1+voxelcounter*2:2+voxelcounter*2,:);
+                
+                    for n = 1:size(actlist_voxel,1)
+                        sourceactname = char(actlist_voxel(n).name);
                         sourceactnameparts = strsplit(sourceactname,'.');
                         sourceactext = sourceactnameparts{end};
                         BIDSactname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_svs.',sourceactext));
@@ -252,8 +264,8 @@ for sub = 1:size(sourcesubjdirs,1)
                         end
                     end
 
-                    for o = 1:size(reflist,1)
-                        sourcerefname = char(reflist(o).name);
+                    for o = 1:size(reflist_voxel,1)
+                        sourcerefname = char(reflist_voxel(o).name);
                         sourcerefnameparts = strsplit(sourcerefname,'.');
                         sourcerefext = sourcerefnameparts{end};
                         BIDSrefname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
@@ -262,7 +274,9 @@ for sub = 1:size(sourcesubjdirs,1)
                         end
                     end
                     
-                elseif size(plist,2) > 0 % GE data
+                    clear voxelname actlist_voxel reflist_voxel
+                    
+                elseif size(plist,1) > 0 % GE data
                     
                     for p = 1:size(plist,1)
                         sourcepname = char(plist(n).name);
@@ -273,10 +287,10 @@ for sub = 1:size(sourcesubjdirs,1)
                             copyfile(fullfile(mrs_subjsourcedir,sourcepname),fullfile(mrs_subjBIDSdir,BIDSpname));
                         end
                     end
+                    
+                    clear voxelname
                    
                 end
-                
-                clear voxelname
                 
             end % for loop voxels
             
