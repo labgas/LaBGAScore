@@ -56,9 +56,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_mrs_run_osprey_GE.m                        v1.5
+% LaBGAScore_mrs_run_osprey_GE.m                        v1.6
 %
-% last modified: 2025/01/08
+% last modified: 2025/01/09
 %
 %
 %% SET OPTIONS & VARIABLES
@@ -95,14 +95,14 @@ sourcelist = dir(fullfile(sourcedir,'sub-*'));
 sourcesubjs = cellstr(char(sourcelist(:).name));
 BIDSlist = dir(fullfile(BIDSdir,'sub-*'));
 BIDSsubjs = cellstr(char(BIDSlist(:).name));
-derivlist = dir(fullfile(derivdir,'sub-*'));
-derivlist = derivlist([derivlist(:).isdir]);
-derivsubjs = cellstr(char(derivlist.name));
+% derivlist = dir(fullfile(derivdir,'sub-*'));
+% derivlist = derivlist([derivlist(:).isdir]);
+% derivsubjs = cellstr(char(derivlist.name));
 
-if isequal(sourcesubjs,BIDSsubjs,derivsubjs)
-    warning('\nnumbers and names of subjects in %s, %s, and %s match - good to go',sourcedir,BIDSdir,derivdir);
+if isequal(sourcesubjs,BIDSsubjs)
+    warning('\nnumbers and names of subjects in %s, and %s match - good to go',sourcedir,BIDSdir);
 else
-    warning('\nnumbers and names of subjects in %s, %s, and %s do not match - please check before proceeding and make sure all your subjects in the BIDS subdataset are preprocessed',sourcedir,BIDSdir,derivdir);
+    warning('\nnumbers and names of subjects in %s, and %s do not match - please check before proceeding and make sure all your subjects in the BIDS subdataset are preprocessed',sourcedir,BIDSdir);
 end
 
 
@@ -123,24 +123,31 @@ table_stat.subject = repmat(char(BIDSsubjs{:}),nr_sess,1);
 table_stat.session = sessions;
 table_stat = sortrows(table_stat,'subject');
 
-idx = ones(height(table_stat),1);
+idx = logical(ones(height(table_stat),1));
 
 for i = 1:size(BIDSlist,1)
     for j = 1:nr_sess
         if nr_sess > 1
-            mrsfiles = dir(fullfile(BIDSlist(i).folder,BIDSlist(i).name,['ses-0' num2str(j)],'mrs'));
+            mrsfiles = dir(fullfile(BIDSlist(i).folder,BIDSlist(i).name,['ses-0' num2str(j)],'mrs')); 
+            anatfiles = dir(fullfile(BIDSlist(i).folder,BIDSlist(i).name,['ses-0' num2str(j)],'anat')); 
         else
             mrsfiles = dir(fullfile(BIDSlist(i).folder,BIDSlist(i).name,'mrs')); 
+            anatfiles = dir(fullfile(BIDSlist(i).folder,BIDSlist(i).name,'anat')); 
         end
-        mrsfiles(1:2)  = [];
-        if isempty(mrsfiles) || ~contains(mrsfiles(1).name,'.7')
+        if ~isempty(mrsfiles)
+            mrsfiles(1:2)  = [];
+        end
+        if ~isempty(anatfiles)
+            anatfiles(1:2)  = [];
+        end
+        if isempty(mrsfiles) || ~contains(mrsfiles(1).name,'.7') || isempty(anatfiles)
             idx(((i-1)*nr_sess)+j) = 0;
         end
-        clear mrsfiles
+        clear mrsfiles anatfiles
     end
 end
 
-table_stat = table_stat(logical(idx),:);
+table_stat = table_stat(idx,:);
 
 
 derivospreydir = fullfile(derivrootdir,'osprey');
@@ -174,7 +181,7 @@ secondlevelmrsdir = fullfile(secondleveldir,'mrs');
         mkdir(secondlevelmrsdir);
     end
     
-% cd(fullfile(derivrootdir,'fmriprep')); we no longer use fmriprep seg
+% cd(fullfile(derivrootdir,'fmriprep')); LVO 2025-01-08: we no longer use fmriprep seg
 % 
 % ! git annex unannex sub-*/anat/*res-2_label-*_probseg.nii.gz
 
@@ -244,11 +251,13 @@ results_subjects    = readtable(path_subjects, "FileType","delimitedtext");
 results_quantify    = readtable(path_quantify, "FileType","delimitedtext");
 results_QM          = readtable(path_QM, "FileType","delimitedtext");
 results_QM.Properties.VariableNames = "QC." + results_QM.Properties.VariableNames; % MH add term "QC" to the results of the quality control
+table_name          = ['tables_Voxel_' num2str(v)]; % LVO 2025-01-09
+results_fractions   = MRSCont.seg.(table_name);
 
 
 % JOIN RESULTS TSV FILES AND WRITE TO EXCEL
 
-results_all = [results_subjects results_QM results_quantify];
+results_all = [results_subjects results_QM results_quantify results_fractions];
 results_all.QuantificationMethod = repmat(quant_method, size(results_all, 1), 1); % MH 2024-02-01
 writetable(results_all, path_result);
 

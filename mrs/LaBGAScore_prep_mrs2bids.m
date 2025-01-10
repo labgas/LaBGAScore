@@ -6,12 +6,27 @@
 % This script converts raw mrs data (as exported from Philips scanner and stored 
 % in sourcedata folder under standard LaBGAS file organization) to BIDS structure.
 %
+% MRS sourcedata need to be in a separate subfolder 'mrs', for example
+% (Philips data)
+% > sourcedata
+%   > sub-01
+%       > ses-01
+%           > mrs
+%               > [lukasvo]_act.sdat
+%               > [lukasvo]_act.spar
+%               > [lukasvo]_ref.sdat
+%               > [lukasvo]_ref.spar
+%
 % As is the standard, it should be run for the rootdir of the superdataset.
+%
+% You may want to run this script per section rather than in its entirety,
+% allowing you to check warnings which may be produced by the second
+% section before proceeding with actual BIDS conversion.
 %
 %
 % *NOTES*
 % 
-% 1. example of the BIDS structure this script creates:
+% 1. example of the BIDS structure this script creates (Philips data):
 %   > BIDS
 %       > sub-01
 %           > ses-01              
@@ -27,6 +42,9 @@
 %   (Please keep in mind that final BIDS would require .nii.gz + .json files
 %   for MRS data).
 %
+% 3. script now works with Philips and GE data, including mixed datasets
+% with MR8 (Philips) & PET/MR (GE) data
+%
 %
 % -------------------------------------------------------------------------
 %
@@ -38,13 +56,16 @@
 %
 % debugged and added deidentification by LVO
 %
+% had to turn deidentification back off as it was causing errors in
+% OspreyLoad
+%
 % date: KU Leuven, February, 2024
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_mrs2bids.m                        v1.3
+% LaBGAScore_prep_mrs2bids.m                        v1.4
 %
-% last modified: 2025/01/08
+% last modified: 2025/01/09
 %
 %
 %% GET PATHS AND DEFINE VOXEL NAMES
@@ -52,7 +73,7 @@
 
 LaBGAScore_prep_s0_define_directories; % STUDY-SPECIFIC
 
-voxelnames = {'pACC'};   % cell array with voxel names IN THE SAME ORDER AS THEY WERE ACQUIRED!
+voxelnames = {'pACC'};          % cell array with voxel names IN THE SAME ORDER AS THEY WERE ACQUIRED!
 
 acq_type = 'press';             % type of MRS sequence (will be used in 'acq-' label as 'acq-[vox1][Acq_type]')
 
@@ -82,18 +103,26 @@ end
 
 for sub = 1:size(sourcesubjdirs,1)
     
+    subjsourcedir = fullfile(sourcedir,sourcesubjs{sub});
     subjBIDSdir = fullfile(BIDSdir,sourcesubjs{sub});
     
     if ~exist(subjBIDSdir,'dir')
+        warning('\nno subject directory found in BIDS dataset for %s, creating %s, but please check sourcedata for this subject\n',sourcesubjs{sub},subjBIDSdir)
         mkdir(subjBIDSdir);
     end
     
     if nr_sess == 1
         
+        mrs_subjsourcedir = mrs_sourcesubjdirs{sub};
         mrs_subjBIDSdir = fullfile(BIDSdir,sourcesubjs{sub},'mrs');
     
-        if ~exist(mrs_subjBIDSdir,'dir')
+        if ~exist(mrs_subjBIDSdir,'dir') && exist(mrs_subjsourcedir,'dir')
+            fprintf('\nmrs sourcedata directory %s found, creating mrs BIDS directory %s\n',mrs_subjsourcedir,mrs_subjBIDSdir);
             mkdir(mrs_subjBIDSdir);
+        elseif exist(mrs_subjBIDSdir,'dir') && exist(mrs_subjsourcedir,'dir')
+            fprintf('\nmrs sourcedata directory %s found, mrs BIDS directory %s found, continuing\n',mrs_subjsourcedir,mrs_subjBIDSdir);
+        else
+            warning('\nno mrs sourcedata directory %s found, not creating mrs BIDS directory %s, please check subject %s\n',mrs_subjsourcedir,mrs_subjBIDSdir,sourcesubjs{sub})
         end
     
     elseif nr_sess > 1
@@ -102,15 +131,24 @@ for sub = 1:size(sourcesubjdirs,1)
                 
                 sessid = sprintf('ses-0%d',sess);
                 
-                subjsessdir = fullfile(subjBIDSdir,sessid);
-                mrs_subjsessdir = fullfile(subjBIDSdir,sessid,'mrs');
+                subjsourcesessdir = fullfile(subjsourcedir,sessid);
+                mrs_sourcesubjsessdir = fullfile(subjsourcedir,sessid,'mrs');
                 
-                if ~exist(subjsessdir,'dir')
-                    mkdir(subjsessdir);
+                subjBIDSsessdir = fullfile(subjBIDSdir,sessid);
+                mrs_BIDSsubjsessdir = fullfile(subjBIDSdir,sessid,'mrs');
+                
+                if ~exist(subjBIDSsessdir,'dir')
+                    warning('\nno session directory found in BIDS dataset for %s, creating %s, but please check sourcedata for this subject\n',sourcesubjs{sub},subjBIDSsessdir)
+                    mkdir(subjBIDSsessdir);
                 end
                 
-                if ~exist(mrs_subjsessdir,'dir')
-                    mkdir(mrs_subjsessdir);
+                if ~exist(mrs_BIDSsubjsessdir,'dir') && exist(mrs_sourcesubjsessdir,'dir')
+                    fprintf('\nmrs sourcedata directory %s found, creating mrs BIDS directory %s\n',mrs_sourcesubjsessdir,mrs_BIDSsubjsessdir);
+                    mkdir(mrs_BIDSsubjsessdir);
+                elseif exist(mrs_BIDSsubjsessdir,'dir') && exist(mrs_sourcesubjsessdir,'dir')
+                    fprintf('\nmrs sourcedata directory %s found, mrs BIDS directory %s found, continuing\n',mrs_sourcesubjsessdir,mrs_BIDSsubjsessdir);
+                else
+                    warning('\nno mrs sourcedata directory %s found, not creating mrs BIDS directory %s, please check subject %s\n',mrs_sourcesubjsessdir,mrs_BIDSsubjsessdir,sourcesubjs{sub})
                 end
                 
             end
@@ -157,16 +195,18 @@ for sub = 1:size(sourcesubjdirs,1)
         plist = dir(fullfile(mrs_subjsourcedir,'P*.7'));
         
             if size(actlist,1) > size(voxelnames,1)*4 || size(reflist,1) > size(voxelnames,1)*4
-                error('\nnumber of MRS files should be the same as number of voxelnames (times 4) for subject #%d\n', sub)
-            end
+                error('\nnumber of MRS sourcedata files should be the same as number of voxelnames (times 4) in %s\n', mrs_subjsourcedir)
             
-            if size(plist,1) > size(voxelnames,1)
-                error('\nnumber of MRS files should be the same as number of voxelnames for subject #%d\n', sub)
-            end
+            elseif size(plist,1) > size(voxelnames,1)
+                error('\nnumber of MRS sourcedata files should be the same as number of voxelnames in %s\n', mrs_subjsourcedir)
             
-            if size(actlist,1) == 0 && size(plist,1) == 0                
-               warning('\nno MRS files found for subject #%d, skipping this subject\n', sub) 
+            elseif isempty(actlist) && isempty(plist)                
+               warning('\nno MRS sourcedata files found in %s, skipping this subject\n', mrs_subjsourcedir) 
                continue
+               
+            else
+                fprintf('\nall good, performing BIDS conversion for %s\n',sourcesubjs{sub});
+                
             end
         
             for m = 1:size(voxelnames,1)
@@ -180,18 +220,19 @@ for sub = 1:size(sourcesubjdirs,1)
                     actlist_voxel = actlist(1+voxelcounter*2:2+voxelcounter*2,:);
                     reflist_voxel = reflist(1+voxelcounter*2:2+voxelcounter*2,:);
                     
-                    cd(mrs_subjsourcedir);
-                    PhilipsDeIdentify;
-                    cd(rootdir);
+%                     cd(mrs_subjsourcedir);
+%                     PhilipsDeIdentify;
+%                     cd(rootdir);
                 
                     for n = 1:size(actlist_voxel,1)
                         sourceactname = char(actlist_voxel(n).name);
                         sourceactnameparts = strsplit(sourceactname,'.');
                         sourceactext = sourceactnameparts{end};
-                        sourceactname_noID = [sourceactnameparts{1} '_noID.' sourceactext];
+%                         sourceactname_noID = [sourceactnameparts{1} '_noID.' sourceactext];
                         BIDSactname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_svs.',sourceactext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSactname),'file')
-                            movefile(fullfile(mrs_subjsourcedir,sourceactname_noID),fullfile(mrs_subjBIDSdir,BIDSactname));
+%                             movefile(fullfile(mrs_subjsourcedir,sourceactname_noID),fullfile(mrs_subjBIDSdir,BIDSactname));
+                            copyfile(fullfile(mrs_subjsourcedir,sourceactname),fullfile(mrs_subjBIDSdir,BIDSactname));
                         end
                     end
 
@@ -199,10 +240,11 @@ for sub = 1:size(sourcesubjdirs,1)
                         sourcerefname = char(reflist_voxel(o).name);
                         sourcerefnameparts = strsplit(sourcerefname,'.');
                         sourcerefext = sourcerefnameparts{end};
-                        sourcerefname_noID = [sourcerefnameparts{1} '_noID.' sourcerefext];
+%                         sourcerefname_noID = [sourcerefnameparts{1} '_noID.' sourcerefext];
                         BIDSrefname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSrefname),'file')
-                            movefile(fullfile(mrs_subjsourcedir,sourcerefname_noID),fullfile(mrs_subjBIDSdir,BIDSrefname));
+%                             movefile(fullfile(mrs_subjsourcedir,sourcerefname_noID),fullfile(mrs_subjBIDSdir,BIDSrefname));
+                            copyfile(fullfile(mrs_subjsourcedir,sourcerefname),fullfile(mrs_subjBIDSdir,BIDSrefname));
                         end
                     end
                     
@@ -213,18 +255,19 @@ for sub = 1:size(sourcesubjdirs,1)
                     voxelcounter = m;
                     plist_voxel = plist(m);
                     
-                    cd(mrs_subjsourcedir);
-                    GEDeIdentify;
-                    cd(rootdir);
+%                     cd(mrs_subjsourcedir);
+%                     GEDeIdentify;
+%                     cd(rootdir);
                     
                     for p = 1:size(plist,1)
-                        sourcepname = char(plist(p).name);
+                        sourcepname = char(plist_voxel(p).name);
                         sourcepnameparts = strsplit(sourcepname,'.');
                         sourcepext = sourcepnameparts{end};
-                        sourcepname_noID = [sourcepnameparts{1} '_noID.' sourcepext];
+%                         sourcepname_noID = [sourcepnameparts{1} '_noID.' sourcepext];
                         BIDSpname = char(strcat(sourcesubjs{sub},'_acq-',voxelname,acq_type,'.',sourcepext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSpname),'file')
-                            movefile(fullfile(mrs_subjsourcedir,sourcepname_noID),fullfile(mrs_subjBIDSdir,BIDSpname));
+%                             movefile(fullfile(mrs_subjsourcedir,sourcepname_noID),fullfile(mrs_subjBIDSdir,BIDSpname));
+                            copyfile(fullfile(mrs_subjsourcedir,sourcepname),fullfile(mrs_subjBIDSdir,BIDSpname));
                         end
                     end
                     
@@ -244,19 +287,21 @@ for sub = 1:size(sourcesubjdirs,1)
             mrs_subjBIDSdir = fullfile(BIDSsubjdirs{sub},sessid,'mrs');
             actlist = dir(fullfile(mrs_subjsourcedir,'*_act.*'));
             reflist = dir(fullfile(mrs_subjsourcedir,'*_ref.*'));
-            plist = dir(fullfile(mrs_subjsourecedir','P*.7'));
+            plist = dir(fullfile(mrs_subjsourecedir,'P*.7'));
         
             if size(actlist,1) > size(voxelnames,1)*4 || size(reflist,1) > size(voxelnames,1)*4
-                error('\nnumber of MRS files should be the same as number of voxelnames (times 4) for subject #%d session #%d\n', sub, sess)
-            end
+                error('\nnumber of MRS sourcedata files should be the same as number of voxelnames (times 4) in %s\n', mrs_subjsourcedir)
             
-            if size(plist,2) > size(voxelnames,1)
-                error('\nnumber of MRS files should be the same as number of voxelnames for subject #%d session #d\n', sub, sess)
-            end
+            elseif size(plist,2) > size(voxelnames,1)
+                error('\nnumber of MRS sourcedata files should be the same as number of voxelnames in %s\n', mrs_subjsourcedir)
             
-            if size(actlist,2) == 0 && size(plist,2) == 0                
-               warning('\nno MRS files found for subject #%d session #d, skipping this session\n', sub, sess) 
+            elseif isempty(actlist) && isempty(plist)                
+               warning('\nno MRS sourcedata files found in %s, skipping this session\n', mrs_subjsourcedir) 
                continue
+               
+            else
+               fprintf('\nall good, performing BIDS conversion for %s, %s\n',sourcesubjs{sub},sessid); 
+                
             end
         
             for m = 1:size(voxelnames,1)
@@ -270,18 +315,19 @@ for sub = 1:size(sourcesubjdirs,1)
                     actlist_voxel = actlist(1+voxelcounter*2:2+voxelcounter*2,:);
                     reflist_voxel = reflist(1+voxelcounter*2:2+voxelcounter*2,:);
                     
-                    cd(mrs_subjsourcedir);
-                    PhilipsDeIdentify;
-                    cd(rootdir);
+%                     cd(mrs_subjsourcedir);
+%                     PhilipsDeIdentify;
+%                     cd(rootdir);
                 
                     for n = 1:size(actlist_voxel,1)
                         sourceactname = char(actlist_voxel(n).name);
                         sourceactnameparts = strsplit(sourceactname,'.');
                         sourceactext = sourceactnameparts{end};
-                        sourceactname_noID = [sourceactnameparts{1} '_noID.' sourceactext];
+%                         sourceactname_noID = [sourceactnameparts{1} '_noID.' sourceactext];
                         BIDSactname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_svs.',sourceactext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSactname),'file')
-                            movefile(fullfile(mrs_subjsourcedir,sourceactname_noID),fullfile(mrs_subjBIDSdir,BIDSactname));
+%                             movefile(fullfile(mrs_subjsourcedir,sourceactname_noID),fullfile(mrs_subjBIDSdir,BIDSactname));
+                              copyfile(fullfile(mrs_subjsourcedir,sourceactname),fullfile(mrs_subjBIDSdir,BIDSactname));
                         end
                     end
 
@@ -289,10 +335,11 @@ for sub = 1:size(sourcesubjdirs,1)
                         sourcerefname = char(reflist_voxel(o).name);
                         sourcerefnameparts = strsplit(sourcerefname,'.');
                         sourcerefext = sourcerefnameparts{end};
-                        sourcerefname_noID = [sourcerefnameparts{1} '_noID.' sourcerefext];
+%                         sourcerefname_noID = [sourcerefnameparts{1} '_noID.' sourcerefext];
                         BIDSrefname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'_ref.',sourcerefext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSrefname),'file')
-                            movefile(fullfile(mrs_subjsourcedir,sourcerefname_noID),fullfile(mrs_subjBIDSdir,BIDSrefname));
+%                             movefile(fullfile(mrs_subjsourcedir,sourcerefname_noID),fullfile(mrs_subjBIDSdir,BIDSrefname));
+                            copyfile(fullfile(mrs_subjsourcedir,sourcerefname),fullfile(mrs_subjBIDSdir,BIDSrefname));
                         end
                     end
                     
@@ -303,18 +350,19 @@ for sub = 1:size(sourcesubjdirs,1)
                     voxelcounter = m;
                     plist_voxel = plist(m);
                     
-                    cd(mrs_subjsourcedir);
-                    GEDeIdentify;
-                    cd(rootdir);
+%                     cd(mrs_subjsourcedir);
+%                     GEDeIdentify;
+%                     cd(rootdir);
                     
                     for p = 1:size(plist,1)
-                        sourcepname = char(plist(n).name);
+                        sourcepname = char(plist_voxel(n).name);
                         sourcepnameparts = strsplit(sourcepname,'.');
                         sourcepext = sourcepnameparts{end};
-                        sourcepname_noID = [sourcepnameparts{1} '_noID.' sourcepext];
+%                         sourcepname_noID = [sourcepnameparts{1} '_noID.' sourcepext];
                         BIDSpname = char(strcat(sourcesubjs{sub},'_',sessid,'_acq-',voxelname,acq_type,'.',sourcepext));
                         if ~exist(fullfile(mrs_subjBIDSdir,BIDSpname),'file')
-                            movefile(fullfile(mrs_subjsourcedir,sourcepname_noID),fullfile(mrs_subjBIDSdir,BIDSpname));
+%                             movefile(fullfile(mrs_subjsourcedir,sourcepname_noID),fullfile(mrs_subjBIDSdir,BIDSpname));
+                            copyfile(fullfile(mrs_subjsourcedir,sourcepname),fullfile(mrs_subjBIDSdir,BIDSpname));
                         end
                     end
                     

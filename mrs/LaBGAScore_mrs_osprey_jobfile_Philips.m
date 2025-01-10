@@ -100,7 +100,7 @@ BIDSdir = fullfile(rootdir,'BIDS');
 
 derivrootdir = fullfile(rootdir,'derivatives');
 
-derivdir = fullfile(derivrootdir,'fmriprep');
+% derivdir = fullfile(derivrootdir,'fmriprep'); % LVO 2025-01-08: not needed anymore since we don't use fmriprep segmentation anymore
 
 derivospreydir = fullfile(derivrootdir,'osprey');
 
@@ -108,14 +108,17 @@ voxelname = 'LINS';
 
 acq_type = 'press';
 
-derivlist = dir(fullfile(derivdir,'sub-*'));
-derivsubjs = cellstr(char(derivlist([derivlist.isdir]').name));
+% derivlist = dir(fullfile(derivdir,'sub-*'));
+% derivsubjs = cellstr(char(derivlist([derivlist.isdir]').name));
+% 
+% for derivsub = 1:size(derivsubjs,1)    
+%     
+%     derivsubjdirs{derivsub,1} = fullfile(derivlist(derivsub).folder, derivlist(derivsub).name);
+%     
+% end
 
-for derivsub = 1:size(derivsubjs,1)    
-    
-    derivsubjdirs{derivsub,1} = fullfile(derivlist(derivsub).folder, derivlist(derivsub).name);
-    
-end
+% LVO 2025-01-08: not needed anymore since we don't use fmriprep segmentation anymore
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
@@ -274,7 +277,11 @@ for kk = 1:length(subs)
             % Specify metabolite data
             % (MANDATORY)
             dir_metabolite = dir([sess(ll).folder filesep sess(ll).name filesep 'mrs' filesep subs(kk).name '_' sess(ll).name '_acq-' voxelname acq_type '_svs.SDAT']); %MH 2023-02-19 AND %LVO 2024-02-16
-                if isempty(dir_metabolite) %LVO 2024-10-24
+            dir_nii = dir([sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name '_' sess(ll).name '_T1w.nii*']); %LVO 2025-01-09 wildcard to accept both zipped and unzipped format
+                if isempty(dir_metabolite) || isempty(dir_nii) % LVO 2024-10-24 & 2025-01-08
+                    fprintf('\n');
+                    fprintf('no Philips mrs or anatomical data found in %s, skipping subject, please check',[subs(kk).folder filesep subs(kk).name])
+                    fprintf('\n');
                     continue
                 else
                     files(counter) = {[dir_metabolite(end).folder filesep dir_metabolite(end).name]};
@@ -300,8 +307,11 @@ for kk = 1:length(subs)
             % Link to single NIfTI (*.nii) files for Siemens and Philips data
             % Link to DICOM (*.dcm) folders for GE data
             % NOTE: choose this option to use spm routines to perform segmentation (Osprey default) %LVO 2024-02-16
-            % files_nii(counter)  = {[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep sess(ll).name '_T1w.nii']};
-            files_nii(counter)  = {[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name '_' sess(ll).name '_T1w.nii.gz']}; %LVO 2024-02-16 changed to .nii.gz
+            if exist([sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep sess(ll).name '_T1w.nii'],'file') %LVO 2025-01-09 adapted to accept both zipped and unzipped format
+                files_nii(counter)  = {[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name filesep sess(ll).name '_T1w.nii']};
+            else
+                files_nii(counter)  = {[sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name '_' sess(ll).name '_T1w.nii.gz']};
+            end
 
             % External segmentation results
             % (OPTIONAL)
