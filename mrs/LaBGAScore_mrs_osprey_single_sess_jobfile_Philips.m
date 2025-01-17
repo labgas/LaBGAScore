@@ -104,6 +104,8 @@ derivrootdir = fullfile(rootdir,'derivatives');
 
 derivospreydir = fullfile(derivrootdir,'osprey');
 
+% results_suffix = 'Prob_L1'; % LVO 2025-01-17: use if you want to run analyses with different settings on the same voxel; comment out if you only want to run one analysis per voxel
+
 voxelname = 'pACC';
 
 acq_type = 'press';
@@ -338,7 +340,11 @@ end % for loop subjects %LVO 2024-02-16
 % the number of included groups. If no group is supplied the data will be
 % treated as one group. (You can always use the direct path)
 
-file_stat = fullfile(derivospreydir, voxelname, 'stat_Philips.csv');
+try
+    file_stat = fullfile(derivospreydir, voxelname, ['stat_GE_' results_suffix '.csv']); % LVO 2025-01-17 added results_suffix to filename
+catch
+    file_stat = fullfile(derivospreydir, voxelname, ['stat_GE.csv']);
+end
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -349,7 +355,12 @@ file_stat = fullfile(derivospreydir, voxelname, 'stat_Philips.csv');
 
 % Specify output folder (you can always use the direct path)
 % (MANDATORY)
-outputFolder = fullfile(derivospreydir, voxelname, 'Philips');
+
+try
+    outputFolder = fullfile(derivospreydir, voxelname, 'GE', results_suffix); % LVO 2025-01-17 added results_suffix subfolder
+catch
+    outputFolder = fullfile(derivospreydir, voxelname, 'GE', results_suffix);
+end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

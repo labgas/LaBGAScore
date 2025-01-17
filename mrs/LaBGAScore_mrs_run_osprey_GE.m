@@ -56,9 +56,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_mrs_run_osprey_GE.m                        v1.6
+% LaBGAScore_mrs_run_osprey_GE.m                        v1.7
 %
-% last modified: 2025/01/09
+% last modified: 2025/01/17
 %
 %
 %% SET OPTIONS & VARIABLES
@@ -67,6 +67,8 @@
 scanner = 'GE';
 
 study_prefix = 'cfs';                           % prefix used for all scripts in this study
+
+% results_suffix = 'Prob_L1';                     % use if you want to run analyses with different settings on the same voxel; comment out if you only want to run one analysis per voxel
 
 voxelnames = {'pACC'};                          % cell array with voxel names IN THE SAME ORDER AS THEY WERE ACQUIRED!
 
@@ -100,9 +102,9 @@ BIDSsubjs = cellstr(char(BIDSlist(:).name));
 % derivsubjs = cellstr(char(derivlist.name));
 
 if isequal(sourcesubjs,BIDSsubjs)
-    warning('\nnumbers and names of subjects in %s, and %s match - good to go',sourcedir,BIDSdir);
+    warning('\nnumbers and names of subjects in %s, and %s match - good to go\n',sourcedir,BIDSdir)
 else
-    warning('\nnumbers and names of subjects in %s, and %s do not match - please check before proceeding and make sure all your subjects in the BIDS subdataset are preprocessed',sourcedir,BIDSdir);
+    warning('\nnumbers and names of subjects in %s, and %s do not match - please check before proceeding and make sure all your subjects in the BIDS subdataset are preprocessed\n',sourcedir,BIDSdir)
 end
 
 
@@ -165,7 +167,12 @@ derivospreydir = fullfile(derivrootdir,'osprey');
                 mkdir(derivospreyvoxeldirs{d});
             end
             
-        files_stat{d} = fullfile(derivospreyvoxeldirs{d}, ['stat_' scanner '.csv']);
+        try
+            files_stat{d} = fullfile(derivospreyvoxeldirs{d}, ['stat_' scanner '_' results_suffix '.csv']);
+        catch
+            files_stat{d} = fullfile(derivospreyvoxeldirs{d}, ['stat_' scanner '.csv']);
+        end
+        
         writetable(table_stat,files_stat{d});
             
     end
@@ -207,61 +214,78 @@ cd(rootdir);
 
 for v = 1:size(voxelnames,1)
             
-        if nr_sess > 1
+    if nr_sess > 1
 
+        try
+            jobFileLocation = fullfile(codedir,'mrs',[study_prefix '_mrs_s0_osprey_jobfile_' voxelnames{v} '_' scanner '_' results_suffix '.m']);
+        catch
             jobFileLocation = fullfile(codedir,'mrs',[study_prefix '_mrs_s0_osprey_jobfile_' voxelnames{v} '_' scanner '.m']);
-
-        else
-
-            jobFileLocation = fullfile(codedir,'mrs',[study_prefix '_mrs_s0_osprey_single_sess_jobfile_' voxelnames{v} '_' scanner '.m']);
-
         end
-        
-        MRSCont = OspreyJob(jobFileLocation); % Generate MRS container
-        MRSCont = OspreyLoad(MRSCont); % Load data into MRS container
-        MRSCont = OspreyProcess(MRSCont); % Process data
-        MRSCont = OspreyFit(MRSCont); % Linear-combination modelling
-        MRSCont = OspreyCoreg(MRSCont); % Coregistration module
-        MRSCont = OspreySeg(MRSCont); % Segmentation module
-        MRSCont = OspreyQuantify(MRSCont); % Quantification module
-        MRSCont = OspreyOverview(MRSCont); % Create visualization
+
+    else
+
+        try
+            jobFileLocation = fullfile(codedir,'mrs',[study_prefix '_mrs_s0_osprey_single_sess_jobfile_' voxelnames{v} '_' scanner '_' results_suffix '.m']);
+        catch
+            jobFileLocation = fullfile(codedir,'mrs',[study_prefix '_mrs_s0_osprey_single_sess_jobfile_' voxelnames{v} '_' scanner '.m']);
+        end
+
+    end
+
+    MRSCont = OspreyJob(jobFileLocation); % Generate MRS container
+    MRSCont = OspreyLoad(MRSCont); % Load data into MRS container
+    MRSCont = OspreyProcess(MRSCont); % Process data
+    MRSCont = OspreyFit(MRSCont); % Linear-combination modelling
+    MRSCont = OspreyCoreg(MRSCont); % Coregistration module
+    MRSCont = OspreySeg(MRSCont); % Segmentation module
+    MRSCont = OspreyQuantify(MRSCont); % Quantification module
+    MRSCont = OspreyOverview(MRSCont); % Create visualization
         
 
 % PATHS TO OSPREY RESULTS TSV FILES
 
-dir_OspreyResults = fullfile(derivospreydir, voxelnames{v}, scanner);
-path_subjects   = fullfile(dir_OspreyResults, 'subject_names_and_excluded.tsv');
-path_quantify   = fullfile(dir_OspreyResults, 'QuantifyResults', 'A_tCr_Voxel_1_Basis_1.tsv');
-path_QM         = fullfile(dir_OspreyResults, 'QM_processed_spectra.tsv');
+    try
+        dir_OspreyResults = fullfile(derivospreydir, voxelnames{v}, scanner, results_suffix);
+    catch
+        dir_OspreyResults = fullfile(derivospreydir, voxelnames{v}, scanner);
+    end
+    
+    path_subjects   = fullfile(dir_OspreyResults, 'subject_names_and_excluded.tsv');
+    path_quantify   = fullfile(dir_OspreyResults, 'QuantifyResults', 'A_tCr_Voxel_1_Basis_1.tsv');
+    path_QM         = fullfile(dir_OspreyResults, 'QM_processed_spectra.tsv');
 
 
 % PATH TO XLS FILE
 
-secondlevelmrsvoxeldir = fullfile(secondlevelmrsdir,voxelnames{v});
-    if ~exist(secondlevelmrsvoxeldir,'dir')
-        mkdir(secondlevelmrsvoxeldir);
-    end
+    secondlevelmrsvoxeldir = fullfile(secondlevelmrsdir,voxelnames{v});
+        if ~exist(secondlevelmrsvoxeldir,'dir')
+            mkdir(secondlevelmrsvoxeldir);
+        end
 
-path_result = fullfile(secondlevelmrsvoxeldir, ['OspreyTestResults_' voxelnames{v} '_' scanner '.xlsx']);
+    try
+        path_result = fullfile(secondlevelmrsvoxeldir, ['OspreyTestResults_' voxelnames{v} '_' scanner '_' results_suffix '.xlsx']);
+    catch
+        path_result = fullfile(secondlevelmrsvoxeldir, ['OspreyTestResults_' voxelnames{v} '_' scanner '.xlsx']);
+    end
 
 
 % READ RESULTS TSV FILES
 
-results_subjects    = readtable(path_subjects, "FileType","delimitedtext");
-results_quantify    = readtable(path_quantify, "FileType","delimitedtext");
-results_QM          = readtable(path_QM, "FileType","delimitedtext");
-results_QM.Properties.VariableNames = "QC." + results_QM.Properties.VariableNames; % MH add term "QC" to the results of the quality control
-table_name          = ['tables_Voxel_' num2str(v)]; % LVO 2025-01-09
-results_fractions   = MRSCont.seg.(table_name);
+    results_subjects    = readtable(path_subjects, "FileType","delimitedtext");
+    results_quantify    = readtable(path_quantify, "FileType","delimitedtext");
+    results_QM          = readtable(path_QM, "FileType","delimitedtext");
+    results_QM.Properties.VariableNames = "QC." + results_QM.Properties.VariableNames; % MH add term "QC" to the results of the quality control
+    table_name          = ['tables_Voxel_' num2str(v)]; % LVO 2025-01-09
+    results_fractions   = MRSCont.seg.(table_name);
 
 
 % JOIN RESULTS TSV FILES AND WRITE TO EXCEL
 
-results_all = [results_subjects results_QM results_quantify results_fractions];
-results_all.QuantificationMethod = repmat(quant_method, size(results_all, 1), 1); % MH 2024-02-01
-writetable(results_all, path_result);
+    results_all = [results_subjects results_QM results_quantify results_fractions];
+    results_all.QuantificationMethod = repmat(quant_method, size(results_all, 1), 1); % MH 2024-02-01
+    writetable(results_all, path_result);
 
-clear jobFileLocation MRSCont
+    clear jobFileLocation MRSCont
 
 end
 
