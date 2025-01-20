@@ -353,7 +353,7 @@ end % for loop subjects %LVO 2024-02-16
 try
     file_stat = fullfile(derivospreydir, voxelname, ['stat_GE_' results_suffix '.csv']); % LVO 2025-01-17 added results_suffix to filename
 catch
-    file_stat = fullfile(derivospreydir, voxelname, ['stat_GE.csv']);
+    file_stat = fullfile(derivospreydir, voxelname, 'stat_GE.csv');
 end
 
 
