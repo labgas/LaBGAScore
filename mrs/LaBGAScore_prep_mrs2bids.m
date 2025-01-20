@@ -287,7 +287,7 @@ for sub = 1:size(sourcesubjdirs,1)
             mrs_subjBIDSdir = fullfile(BIDSsubjdirs{sub},sessid,'mrs');
             actlist = dir(fullfile(mrs_subjsourcedir,'*_act.*'));
             reflist = dir(fullfile(mrs_subjsourcedir,'*_ref.*'));
-            plist = dir(fullfile(mrs_subjsourecedir,'P*.7'));
+            plist = dir(fullfile(mrs_subjsourcedir,'P*.7'));
         
             if size(actlist,1) > size(voxelnames,1)*4 || size(reflist,1) > size(voxelnames,1)*4
                 error('\nnumber of MRS sourcedata files should be the same as number of voxelnames (times 4) in %s\n', mrs_subjsourcedir)
