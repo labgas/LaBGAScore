@@ -359,7 +359,7 @@ end
 try
     outputFolder = fullfile(derivospreydir, voxelname, 'GE', results_suffix); % LVO 2025-01-17 added results_suffix subfolder
 catch
-    outputFolder = fullfile(derivospreydir, voxelname, 'GE', results_suffix);
+    outputFolder = fullfile(derivospreydir, voxelname, 'GE');
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
