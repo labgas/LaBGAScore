@@ -275,8 +275,7 @@ for v = 1:size(voxelnames,1)
     results_quantify    = readtable(path_quantify, "FileType","delimitedtext");
     results_QM          = readtable(path_QM, "FileType","delimitedtext");
     results_QM.Properties.VariableNames = "QC." + results_QM.Properties.VariableNames; % MH add term "QC" to the results of the quality control
-    table_name          = ['tables_Voxel_' num2str(v)]; % LVO 2025-01-09
-    results_fractions   = MRSCont.seg.(table_name);
+    results_fractions   = MRSCont.seg.tables_Voxel_1;
 
 
 % JOIN RESULTS TSV FILES AND WRITE TO EXCEL
