@@ -341,9 +341,9 @@ end % for loop subjects %LVO 2024-02-16
 % treated as one group. (You can always use the direct path)
 
 try
-    file_stat = fullfile(derivospreydir, voxelname, ['stat_GE_' results_suffix '.csv']); % LVO 2025-01-17 added results_suffix to filename
+    file_stat = fullfile(derivospreydir, voxelname, ['stat_Philips_' results_suffix '.csv']); % LVO 2025-01-17 added results_suffix to filename
 catch
-    file_stat = fullfile(derivospreydir, voxelname, 'stat_GE.csv');
+    file_stat = fullfile(derivospreydir, voxelname, 'stat_Philips.csv');
 end
 
 
@@ -357,9 +357,9 @@ end
 % (MANDATORY)
 
 try
-    outputFolder = fullfile(derivospreydir, voxelname, 'GE', results_suffix); % LVO 2025-01-17 added results_suffix subfolder
+    outputFolder = fullfile(derivospreydir, voxelname, 'Philips', results_suffix); % LVO 2025-01-17 added results_suffix subfolder
 catch
-    outputFolder = fullfile(derivospreydir, voxelname, 'GE');
+    outputFolder = fullfile(derivospreydir, voxelname, 'Philips');
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
