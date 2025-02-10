@@ -41,7 +41,9 @@
 %
 % *OPTION*
 %
-% scanner = 'Philips'/'GE'                  brand of scanner on which data were acquired
+% scanner = 'Philips'/'GE'                      brand of scanner on which data were acquired
+%
+% quant_method = 'TissCorrWaterScaled'/'tCr'    quantification method used when writing results file, TissCorrWaterScaled can be considered the LaBGAS default, but to be discussed with Lukas (and Melina) per study!  
 %
 %
 % -------------------------------------------------------------------------
@@ -56,9 +58,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_mrs_run_osprey_Philips.m                        v1.7
+% LaBGAScore_mrs_run_osprey_Philips.m                        v1.8
 %
-% last modified: 2025/01/17
+% last modified: 2025/02/10
 %
 %
 %% SET OPTIONS & VARIABLES
@@ -72,9 +74,9 @@ study_prefix = 'moodbugs2';                     % prefix used for all scripts in
 
 voxelnames = {'LINS';'RINS'};                   % cell array with voxel names IN THE SAME ORDER AS THEY WERE ACQUIRED!
 
-acq_type = 'press';                             % type of MRS sequence (will be used in 'acq-' label as 'acq-[vox1][Acq_type]')
+acq_type = 'press';                             % type of MRS sequence (used in 'acq-' label as 'acq-[vox1][Acq_type]')
 
-quant_method = 'TissCorrWaterScaled';           % quantification method
+quant_method = 'TissCorrWaterScaled';           % quantification method used when writing results file, TissCorrWaterScaled can be considered the LaBGAS default, but to be discussed with Lukas (and Melina) per study!  
 
 nr_sess = 2;                                    % number of sessions in experiment
 
@@ -151,6 +153,11 @@ end
 
 table_stat = table_stat(idx,:);
 
+% NOTE: once we have implemented a fixed data structure for
+% participants.tsv and phenotype/ files, key variables such as group and
+% age should be extracted and added to this file, so Osprey can generate
+% plots per group, correlations with age, etc, in the overview tab
+% For now, you can implement this using your study-specific metadata file
 
 derivospreydir = fullfile(derivrootdir,'osprey');
     if ~exist(derivospreydir,'dir')
@@ -251,7 +258,14 @@ for v = 1:size(voxelnames,1)
     end
     
     path_subjects   = fullfile(dir_OspreyResults, 'subject_names_and_excluded.tsv');
-    path_quantify   = fullfile(dir_OspreyResults, 'QuantifyResults', 'A_tCr_Voxel_1_Basis_1.tsv');
+    
+    switch quant_method
+        case 'tCr'
+            path_quantify   = fullfile(dir_OspreyResults, 'QuantifyResults', 'A_tCr_Voxel_1_Basis_1.tsv');
+        case 'TissCorrWaterScaled'
+            path_quantify   = fullfile(dir_OspreyResults, 'QuantifyResults', 'A_TissCorrWaterScaled_Voxel_1_Basis_1.tsv');
+    end
+    
     path_QM         = fullfile(dir_OspreyResults, 'QM_processed_spectra.tsv');
 
 
