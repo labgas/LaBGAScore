@@ -38,8 +38,8 @@
 % date:   KU Leuven, July, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.3       
-% last modified: 2024/06/03
+% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.4       
+% last modified: 2025/05/07
 
 
 %% SET OPTIONS, DEFINE DIRS, AND SPECIFY MODEL AND ROI SET NAMES
@@ -120,7 +120,7 @@ while roi_counter < nr_rois1
                 if save_original_roi_atlas_obj
                     
                     roi_atlases1{roi_counter} = select_atlas_subset(roi_atlas_bilateral.threshold(0.20),{'_R'});
-                    roi_atlases1{roi_counter}.atlas_name = [roi_names1{label} '_L'];
+                    roi_atlases1{roi_counter}.atlas_name = [roi_names1{label} '_R'];
                     
                 end
 
@@ -198,7 +198,7 @@ while roi_counter < nr_rois2
                 if save_original_roi_atlas_obj
                     
                     roi_atlases2{roi_counter} = select_atlas_subset(roi_atlas_bilateral.threshold(0.20),{'_R'});
-                    roi_atlases2{roi_counter}.atlas_name = [roi_names2{label} '_L'];
+                    roi_atlases2{roi_counter}.atlas_name = [roi_names2{label} '_R'];
                     
                 end
 
@@ -275,7 +275,7 @@ while roi_counter < nr_rois3
                 if save_original_roi_atlas_obj
                     
                     roi_atlases3{roi_counter} = select_atlas_subset(roi_atlas_bilateral.threshold(0.20),{'_R'});
-                    roi_atlases3{roi_counter}.atlas_name = [roi_names3{label} '_L'];
+                    roi_atlases3{roi_counter}.atlas_name = [roi_names3{label} '_R'];
                     
                 end
 
