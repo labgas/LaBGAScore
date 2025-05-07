@@ -1,13 +1,13 @@
 %% LaBGAScore_atlas_rois_from_atlas.m
 %
 %
-% This script creates a rois by combining regions from one or more atlases, 
-% and automatically saves the rois as atlas objects, and .nii versions
-% of it in maskdir of your dataset
+% This script creates rois by combining regions from one or more atlases, 
+% and automatically saves the rois as atlas objects and optionallly as .nii files
+% in maskdir of secondlevel model
 %
-% There are options to save the original atlas object created by
-% select_atlas_subset (with one index for each individual parcel merged to
-% create your rois)
+% There is an option to save a single file including all flat rois
+% (i.e. with one index per newly created roi) as atlas object and/or .nii
+% file
 % 
 % USAGE
 %
@@ -28,6 +28,10 @@
 %                                               will always be saved as they are needed to extract roi averages using functionality in prep_3a script
 %
 % write_roi2nii = true/false                    writes .nii files for each of the flat roi atlas objects, which can be useful for some purposes
+%
+% save_combined_roi_atlas_obj = true/false      saves a single atlas object combining all flat roi atlas objects, useful for doing parcel-wise analyses in all rois
+%
+% write_combinedroi2nii = true/false            writes .nii file for the combined flat roi atlas object, which can be useful for some purposes
 %                                               
 %
 %__________________________________________________________________________
@@ -45,6 +49,8 @@
 
 save_original_roi_atlas_obj = true;
 write_roi2nii = true;
+save_combined_roi_atlas_obj = true;
+
 
 % STUDY- AND MODEL-SPECIFIC SCRIPTS/VARS
 
@@ -365,6 +371,17 @@ roi = 2;
         
         roi = roi+1;
         
+    end
+    
+    if save_combined_roi_atlas_obj
+        savecombinedfiledata = fullfile(maskdir,[roi_modelname '_combined' roi_set_name '.mat']);
+        save(savecombinedfilenamedata, 'roi_atlas', '-v7.3');
+        fprintf('\nSaved combined roi atlas object\n');
+    end
+    
+    if write_combinedroi2nii
+        savecombinedroinamedata = fullfile(maskdir,['combined_' roi_set_name '.nii']);
+        write(roi_atlas,'fname',savecombinedroinamedata);
     end
     
 cmap2cell = scn_standard_colors(size(roi_atlas.labels,2));
