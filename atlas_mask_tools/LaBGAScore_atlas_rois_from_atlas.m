@@ -1,15 +1,13 @@
 %% LaBGAScore_atlas_rois_from_atlas.m
 %
 %
-% This script creates a binary mask by combining regions from one or more
-% atlases, and automatically saves the fmri_mask_image, and .nii versions
+% This script creates a rois by combining regions from one or more atlases, 
+% and automatically saves the rois as atlas objects, and .nii versions
 % of it in maskdir of your dataset
 %
 % There are options to save the original atlas object created by
 % select_atlas_subset (with one index for each individual parcel merged to
-% create your mask), or an atlas object created from the fmri_mask_image
-% object after merging the original parcels, i.e. with one index for the
-% entire mask
+% create your rois)
 % 
 % USAGE
 %
