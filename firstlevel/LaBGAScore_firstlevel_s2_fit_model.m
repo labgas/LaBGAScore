@@ -103,8 +103,8 @@
 % date:   March, 2022 -
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.5
-% last modified: 2024/08/08
+% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v2.0
+% last modified: 2025/05/06
 
 
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN
@@ -249,7 +249,7 @@ for sub=1:size(derivsubjs,1)
     % define subject-specific dirs
     subjderivdir = fullfile(derivdir,derivsubjs{sub},'func');
     subjBIDSdir = fullfile(BIDSdir,derivsubjs{sub},'func');
-    subjfirstdir = fullfile(DSGN.modeldir,derivsubjs{sub});
+    subjfirstdir = firstsubjdirs{sub};
 
     % create image and noisefile lists
     BIDSimgs = dir(fullfile(subjBIDSdir,'*bold.nii.gz'));

@@ -1,15 +1,13 @@
 %% LaBGAScore_atlas_rois_from_atlas.m
 %
 %
-% This script creates a binary mask by combining regions from one or more
-% atlases, and automatically saves the fmri_mask_image, and .nii versions
-% of it in maskdir of your dataset
+% This script creates rois by combining regions from one or more atlases, 
+% and automatically saves the rois as atlas objects and optionallly as .nii files
+% in maskdir of secondlevel model
 %
-% There are options to save the original atlas object created by
-% select_atlas_subset (with one index for each individual parcel merged to
-% create your mask), or an atlas object created from the fmri_mask_image
-% object after merging the original parcels, i.e. with one index for the
-% entire mask
+% There is an option to save a single file including all flat rois
+% (i.e. with one index per newly created roi) as atlas object and/or .nii
+% file
 % 
 % USAGE
 %
@@ -30,6 +28,10 @@
 %                                               will always be saved as they are needed to extract roi averages using functionality in prep_3a script
 %
 % write_roi2nii = true/false                    writes .nii files for each of the flat roi atlas objects, which can be useful for some purposes
+%
+% save_combined_roi_atlas_obj = true/false      saves a single atlas object combining all flat roi atlas objects, useful for doing parcel-wise analyses in all rois
+%
+% write_combinedroi2nii = true/false            writes .nii file for the combined flat roi atlas object, which can be useful for some purposes
 %                                               
 %
 %__________________________________________________________________________
@@ -38,8 +40,8 @@
 % date:   KU Leuven, July, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.3       
-% last modified: 2024/06/03
+% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.4       
+% last modified: 2025/05/07
 
 
 %% SET OPTIONS, DEFINE DIRS, AND SPECIFY MODEL AND ROI SET NAMES
@@ -47,6 +49,8 @@
 
 save_original_roi_atlas_obj = true;
 write_roi2nii = true;
+save_combined_roi_atlas_obj = true;
+
 
 % STUDY- AND MODEL-SPECIFIC SCRIPTS/VARS
 
@@ -120,7 +124,7 @@ while roi_counter < nr_rois1
                 if save_original_roi_atlas_obj
                     
                     roi_atlases1{roi_counter} = select_atlas_subset(roi_atlas_bilateral.threshold(0.20),{'_R'});
-                    roi_atlases1{roi_counter}.atlas_name = [roi_names1{label} '_L'];
+                    roi_atlases1{roi_counter}.atlas_name = [roi_names1{label} '_R'];
                     
                 end
 
@@ -198,7 +202,7 @@ while roi_counter < nr_rois2
                 if save_original_roi_atlas_obj
                     
                     roi_atlases2{roi_counter} = select_atlas_subset(roi_atlas_bilateral.threshold(0.20),{'_R'});
-                    roi_atlases2{roi_counter}.atlas_name = [roi_names2{label} '_L'];
+                    roi_atlases2{roi_counter}.atlas_name = [roi_names2{label} '_R'];
                     
                 end
 
@@ -275,7 +279,7 @@ while roi_counter < nr_rois3
                 if save_original_roi_atlas_obj
                     
                     roi_atlases3{roi_counter} = select_atlas_subset(roi_atlas_bilateral.threshold(0.20),{'_R'});
-                    roi_atlases3{roi_counter}.atlas_name = [roi_names3{label} '_L'];
+                    roi_atlases3{roi_counter}.atlas_name = [roi_names3{label} '_R'];
                     
                 end
 
@@ -367,6 +371,17 @@ roi = 2;
         
         roi = roi+1;
         
+    end
+    
+    if save_combined_roi_atlas_obj
+        savecombinedfiledata = fullfile(maskdir,[roi_modelname '_combined' roi_set_name '.mat']);
+        save(savecombinedfilenamedata, 'roi_atlas', '-v7.3');
+        fprintf('\nSaved combined roi atlas object\n');
+    end
+    
+    if write_combinedroi2nii
+        savecombinedroinamedata = fullfile(maskdir,['combined_' roi_set_name '.nii']);
+        write(roi_atlas,'fname',savecombinedroinamedata);
     end
     
 cmap2cell = scn_standard_colors(size(roi_atlas.labels,2));
