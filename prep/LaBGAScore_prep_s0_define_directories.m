@@ -24,8 +24,13 @@
 % date:   November, 2021
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s0_define_directories.m         v1.1       
-% last modified: 2022/03/16
+% @(#)% LaBGAScore_prep_s0_define_directories.m         v1.2      
+% last modified: 2025/07/12
+
+
+%% SET STUDY PREFIX FOR USE IN ALL SUBSEQUENT SCRIPTS
+%--------------------------------------------------------------------------
+study_prefix = ''; % STUDY-SPECIFIC
 
 
 %% DEFINE DIRECTORIES AND ADD CODE DIR TO MATLAB PATH

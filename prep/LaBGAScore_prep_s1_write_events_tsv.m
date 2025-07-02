@@ -40,14 +40,16 @@
 % date:   December, 2021
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s1_write_events_tsv.m         v1.3        
-% last modified: 2023/01/05
+% @(#)% LaBGAScore_prep_s1_write_events_tsv.m         v1.4        
+% last modified: 2025/07/02
 
 
 %% DEFINE DIRECTORIES, SUBJECTS, RUNS, CONDITIONS, AND IMPORT OPTIONS
 %--------------------------------------------------------------------------
 
-LaBGAScore_prep_s0_define_directories; % lukasvo edited from original LaBGAScore script to enable standalone functioning of proj_ery_4a dataset
+study_prefix = ''; % STUDY-SPECIFIC
+
+eval([study_prefix '_prep_s0_define_directories']);
 
 subjs2write = {}; % enter subjects separated by comma if you only want to write files for selected subjects e.g. {'sub-01','sub-02'}
 pheno_tsv = true; % turn to false if you do not wish to generate a phenotype.tsv file with trial-by-trial ratings; will only work if subjs2write is empty (i.e. when you loop over all your subjects)

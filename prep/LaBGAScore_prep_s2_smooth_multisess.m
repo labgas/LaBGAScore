@@ -34,13 +34,17 @@
 %
 % OPTIONS
 %
-% 1. fwhm
+% 1. study_prefix 
+%   prefix used for all scripts of a given study
+% 2. fwhm
 %   smoothing kernel width in mm
-% 2. prefix
+% 3. prefix
 %   string defining prefix of choice for smoothing images
-% 3. subjs2smooth
+% 4. subjs2smooth
 %   cell array of subjects in derivdir you want to smooth, empty cell array
 %   if you want to loop over all subjects
+% 5. nr_sess
+%   number of sessions in your experiment
 %
 %__________________________________________________________________________
 %
@@ -48,15 +52,16 @@
 % date:   November, 2021
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s2_smooth_multisess.m         v1.0       
-% last modified: 2023/09/01
+% @(#)% LaBGAScore_prep_s2_smooth_multisess.m         v1.1       
+% last modified: 2025/07/02
 
 
 %% SET SMOOTHING OPTIONS, AND SUBJECTS
 %--------------------------------------------------------------------------
 
-fwhm = 6; % kernel width in mm
-prefix = 's6-'; % prefix for name of smoothed images
+study_prefix = '';  % STUDY-SPECIFIC
+fwhm = 6;           % kernel width in mm
+prefix = 's6-';     % prefix for name of smoothed images
 subjs2smooth = {} ; % enter subjects separated by comma if you only want to smooth selected subjects e.g. {'sub-01','sub-02'}
 nr_sess = 2;
 
@@ -64,7 +69,7 @@ nr_sess = 2;
 %% DEFINE DIRECTORIES
 %--------------------------------------------------------------------------
 
-bit_rew_prep_s0_define_directories;
+eval([study_prefix '_prep_s0_define_directories']);
 
 
 %% UNZIP IMAGES, SMOOTH, ZIP, SMOOTHED IMAGES, AND DELETE ALL UNZIPPED IMAGES
