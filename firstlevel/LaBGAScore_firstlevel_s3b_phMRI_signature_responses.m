@@ -1,11 +1,15 @@
-%% LaBGAScore_firstlevel_s3_phMRI_signature_responses.m
+%% LaBGAScore_firstlevel_s3b_phMRI_signature_responses.m
 %
 %
 % *USAGE*
 %
 % This scripts calculates signature response on every first-level condition
 % (one per timebin per condition) and writes a summary table in long format 
-% for mixed model analysis in a statistical program of your choice
+% for mixed model analysis in a statistical program of your choice.
+%
+% It also contains an option to interpolate (behavioral, physiological)
+% covariates using splines and add the interpolated values to the same
+% table
 %
 % It needs to be run after first-level model definition and estimation using 
 % LaBGAScore_firstlevel_s1b_fit_phMRI_model.m
@@ -30,9 +34,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s3b_phMRI_signature_responses.m         v1.0
+% LaBGAScore_firstlevel_s3_phMRI_signature_responses.m         v2.0
 %
-% last modified: 2025/06/24
+% last modified: 2025/07/02
 %
 %
 %% SET STUDY, MODEL AND SESSION INFO
@@ -53,6 +57,16 @@ sessions = {'sucrose','erythritol','water'}; % names of conditions AS THEY APPEA
 path_sigs = {which('PleasureSignature.nii'), which('Reward_Signature_bootstrapped_0.5.nii.gz'), load_image_set('ncs')};         % either 1) signature .nii file on Matlab path or 2) keyword from load_image_set
 name_sigs = {'pleasure','reward','craving','craving drugs','craving food'};                                                     % if one of the signatures defined using load_image_set in path_sigs, list the names of all signatures included in the set separately here
 results_suffix = 'reward_sigs';                                                                                                 % arbitrary name to append to results excel file
+
+
+%% SET COVARIATE OPTION AND INFO
+% -------------------------------------------------------------------------
+
+% NOTE: STUDY-SPECIFIC
+
+add_covars = true;
+name_covars = {'delta_GLP1','delta_PYY','delta_insulin','delta_leptin'};
+covars_filename = 'blood_hormones_msd.csv';
 
 
 %% GET & SET PATHS
@@ -94,6 +108,18 @@ num_subs = size(derivsubjdirs,1);
 
 master_table = table();
 
+if add_covars
+    
+    num_covars = size(name_covars,2);
+
+    covars_table = readtable(fullfile(BIDSdir,covars_filename));
+    covars_table.Condition = lower(covars_table.Condition);    % will not always be needed but covariate file has capitalized condition names here
+    covars_table.Condition = categorical(covars_table.Condition);
+    covars_table.Timepoint(covars_table.Timepoint == -10) = 0; % recode to 0 for correct interpolation
+    covars_table.Scan_included = logical(covars_table.Scan_included);
+    
+end
+
 for sub = 1:num_subs
     
     % DO THE MATH
@@ -114,9 +140,9 @@ for sub = 1:num_subs
     
     sigs = cell(size(path_sigs,2),1);
     
-    for s = 1:size(path_sigs,2)
-        sigs{s} = apply_mask(betas_oi_obj,path_sigs{s},'pattern_expression');
-    end
+        for s = 1:size(path_sigs,2)
+            sigs{s} = apply_mask(betas_oi_obj,path_sigs{s},'pattern_expression');
+        end
     
     % PUT RESULTS IN TABLE
     %---------------------
@@ -147,6 +173,44 @@ for sub = 1:num_subs
                     varcounter = varcounter + 1;
                 end
             end
+        end
+        
+    % ADD COVARIATES TO TABLE IF REQUESTED
+    %-------------------------------------
+    
+        if add_covars
+            
+            sub_nr = phDSGN.subjects{sub}(end-2:end);
+    
+            covars_table_sub = covars_table(contains(covars_table.ID,sub_nr),:);
+            covars_table_sub = covars_table_sub(covars_table_sub.Scan_included,:);
+            
+            covars = cell(num_covars,1);
+
+            for covar = 1:num_covars
+                
+                covar_interp_subj = [];
+
+                for sess = 1:(height(subj_table)/phDSGN.nr_timebins)
+                    
+                    covar_time_2interp = covars_table_sub.Timepoint(covars_table_sub.Condition == phDSGN.sessions{sess});
+                    covar_2interp = covars_table_sub.(name_covars{covar})(covars_table_sub.Condition == phDSGN.sessions{sess});
+
+                        if sum(~isnan(covar_2interp)) > 2
+                            covar_interp_sess = interp1(covar_time_2interp,covar_2interp,[1:phDSGN.nr_timebins],'spline');
+                            covar_interp_sess = covar_interp_sess';
+                        else
+                            covar_interp_sess = NaN(phDSGN.nr_timebins,1);
+                        end
+
+                    covar_interp_subj = [covar_interp_subj;covar_interp_sess];
+                    
+                end
+                
+                subj_table.(name_covars{covar}) = covar_interp_subj;
+
+            end
+
         end
     
     master_table = [master_table;subj_table];
