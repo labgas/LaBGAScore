@@ -1,4 +1,4 @@
-%% bit_rew_firstlevel_m2_s2_fit_model.m
+%% LaBGAScore_firstlevel_s2a_fit_model_multisess_multitask.m
 %
 % This script does everything to fit and diagnose first level models,
 % more specifically
@@ -103,8 +103,8 @@
 % date:   March, 2022
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s2_fit_model.m         v1.3
-% last modified: 2022/05/29
+% @(#)% LaBGAScore_firstlevel_s2a_fit_model_multisess_multitask.m       v2.0
+% last modified: 2026/02/06
 %
 %
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN
@@ -113,8 +113,8 @@
 % STUDY-SPECIFIC: replace LaBGAScore with name of study-specific script in code below
 
 if ~exist('DSGN','var')
-    warning('\nDSGN structure variable not found in Matlab workspace, running LaBGAScore_firstlevel_s1_options_dsgn_struct before proceeding')
-    bit_rew_firstlevel_m2_s1_options_dsgn_struct;
+    warning('\nDSGN structure variable not found in Matlab workspace, running LaBGAScore_firstlevel_s1a_options_dsgn_struct_multisess_multitask before proceeding')
+    LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m;
     cd(rootdir);
 else
     cd(rootdir);
@@ -230,33 +230,47 @@ firstsubjs = cellstr(char(firstlist(:).name));
 %% LOOP OVER SUBJECTS
 %--------------------------------------------------------------------------
 
-for sub = 1:size(derivsubjs,1)
+sub_counter = 0;
+
+for sub = LaBGAS_options.subjs2analyze
+    sub_idx = 1 + sub_counter;
     
     if nr_sess == 1 || ~exist('nr_sess','var')
         
         %% DEFINE SUBJECT LEVEL DIRS & FILENAMES
-        
-        subjderivdir = fullfile(derivsubjdirs{sub},'func');
-        subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
-        subjfirstdir = firstsubjdirs{sub};
+            if isempty(LaBGAS_options.subjs2analyze)
+                subjderivdir = fullfile(derivsubjdirs{sub},'func');
+                subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
+                subjfirstdir = firstsubjdirs{sub};
+            
+            else
+                subjderivdir = fullfile(derivdir, sub{sub_idx}, 'func');
+                subjBIDSdir = fullfile(BIDSdir, sub{sub_idx}, 'func');
+                subjfirstdir = fullfile(DSGN.modeldir, sub{sub_idx});
 
-        BIDSimgs = dir(fullfile(subjBIDSdir,['*' tasknames{2} '*bold.nii.gz']));
+            end
+
+        
+        BIDSimgs = dir(fullfile(subjBIDSdir,['*' taskname '*bold.nii.gz']));
         BIDSimgs = {BIDSimgs(:).name}';
         BIDSidx = ~contains(BIDSimgs,'rest'); % omit resting state scan if it exists
         BIDSimgs = {BIDSimgs{BIDSidx}}';
 
-        derivimgs = dir(fullfile(subjderivdir,['s6*' tasknames{2} '*.nii.gz']));
+        derivimgs = dir(fullfile(subjderivdir,['s6*' taskname '*.nii.gz']));
+
         derivimgs = {derivimgs(:).name}';
+        subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
+
         derividx = ~contains(derivimgs,'rest'); % omit resting state scan if it exists
         derivimgs = {derivimgs{derividx}}';
 
-        fmriprep_noisefiles = dir(fullfile(subjderivdir,['*' tasknames{2} '*desc-confounds_timeseries.tsv'])); % change to tasknames{1} if you don't have _ in your taskname
+        fmriprep_noisefiles = dir(fullfile(subjderivdir,['*' taskname '*desc-confounds_timeseries.tsv']));
         fmriprep_noisefiles = {fmriprep_noisefiles(:).name}';
         noiseidx = ~contains(fmriprep_noisefiles,'rest'); % omit resting state scan if it exists
         fmriprep_noisefiles = {fmriprep_noisefiles{noiseidx}}';
 
         % read events.tsv files with onsets, durations, and trial type
-        eventsfiles = dir(fullfile(subjBIDSdir,['*' tasknames{2} '*events.tsv']));
+        eventsfiles = dir(fullfile(subjBIDSdir,['*' taskname '*events.tsv']));
         eventsfiles = {eventsfiles(:).name}';
 
             for runname = 1:size(fmriprep_noisefiles,1)
@@ -265,7 +279,7 @@ for sub = 1:size(derivsubjs,1)
                 if size(tasknames,1) == 1
                     subjrundirnames{runname} = subjrunnames{runname}(end-4:end);
                 else
-                    subjrundirnames{runname} = [subjrunnames{runname}(end-4:end) '_' tasknames{2}]; % change to tasknames{1} if you don't have _ in your taskname
+                    subjrundirnames{runname} = [subjrunnames{runname}(end-4:end) '_' taskname];
                 end
             end
 
@@ -273,16 +287,16 @@ for sub = 1:size(derivsubjs,1)
         subjrundirnames = subjrundirnames';
 
         % create rundirs in subjderivdir if needed
-            if ~isfolder(fullfile(subjderivdir,rundirnames{1}))
+            if ~isfolder(fullfile(subjderivdir,subjrundirnames{1}))
                 cd(subjderivdir);
-                cellfun(sm,rundirnames);
+                cellfun(sm,subjrundirnames);
             end
     
         % sanity check #1: number of images & noise/event files
-            if ~isequal(size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1),size(eventsfiles,1)) 
-                error('\nnumbers of raw images, preprocessed images, noise, and events files do not match for %s, please check BIDSimgs, derivimgs, fmriprep_noisefiles, and eventsfiles variables before proceeding',derivsubjs{sub});
+            if ~isequal(size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1))
+                error('\nnumbers of raw images, preprocessed images, noise, and events files do not match for %s, please check BIDSimgs, derivimgs, and fmriprep_noisefiles variables before proceeding',derivsubjs{sub});
             else
-                warning('\nnumbers of raw images, preprocessed images, noise, and events files match for %s, continuing',derivsubjs{sub});
+                warning('\nnumbers of raw images, preprocessed images, and noise files match for %s, continuing',derivsubjs{sub});
             end
     
         cd(rootdir);
@@ -928,27 +942,35 @@ for sub = 1:size(derivsubjs,1)
             
             %% DEFINE SUBJECT LEVEL DIRS & FILENAMES
             
-            subjderivdir = fullfile(derivsubjdirs{sub},['ses-' num2str(ses)],'func');
-            subjBIDSdir = fullfile(BIDSsubjdirs{sub},['ses-' num2str(ses)],'func');
-            subjfirstdir = firstsubjdirs{sub};
+                if isempty(LaBGAS_options.subjs2analyze)
+                    subjderivdir = fullfile(derivsubjdirs{sub},['ses-0' num2str(ses)],'func');
+                    subjBIDSdir = fullfile(BIDSsubjdirs{sub},['ses-0' num2str(ses)],'func');
+                    subjfirstdir = firstsubjdirs{sub};
+                
+                else
+                    subjderivdir = fullfile(derivdir, sub{sub_idx},['ses-0' num2str(ses)],'func');
+                    subjBIDSdir = fullfile(BIDSdir, sub{sub_idx},['ses-0' num2str(ses)],'func');
+                    subjfirstdir = fullfile(DSGN.modeldir, sub{sub_idx});
 
-            BIDSimgs = dir(fullfile(subjBIDSdir,['*' tasknames{2} '*bold.nii.gz']));
+                end
+            
+            BIDSimgs = dir(fullfile(subjBIDSdir,['*' taskname '*bold.nii.gz']));
             BIDSimgs = {BIDSimgs(:).name}';
             BIDSidx = ~contains(BIDSimgs,'rest'); % omit resting state scan if it exists
             BIDSimgs = {BIDSimgs{BIDSidx}}';
 
-            derivimgs = dir(fullfile(subjderivdir,['s6*' tasknames{2} '*.nii.gz']));
+            derivimgs = dir(fullfile(subjderivdir,['s6*' taskname '*.nii.gz']));
             derivimgs = {derivimgs(:).name}';
             derividx = ~contains(derivimgs,'rest'); % omit resting state scan if it exists
             derivimgs = {derivimgs{derividx}}';
 
-            fmriprep_noisefiles = dir(fullfile(subjderivdir,['*' tasknames{2} '*desc-confounds_timeseries.tsv']));
+            fmriprep_noisefiles = dir(fullfile(subjderivdir,['*' taskname '*desc-confounds_timeseries.tsv']));
             fmriprep_noisefiles = {fmriprep_noisefiles(:).name}';
             noiseidx = ~contains(fmriprep_noisefiles,'rest'); % omit resting state scan if it exists
             fmriprep_noisefiles = {fmriprep_noisefiles{noiseidx}}';
 
             % read events.tsv files with onsets, durations, and trial type
-            eventsfiles = dir(fullfile(subjBIDSdir,['*' tasknames{2} '*events.tsv']));
+            eventsfiles = dir(fullfile(subjBIDSdir,['*' taskname '*events.tsv']));
             eventsfiles = {eventsfiles(:).name}';
 
                 for runname = 1:size(fmriprep_noisefiles,1)
@@ -957,7 +979,7 @@ for sub = 1:size(derivsubjs,1)
                     if size(tasknames,1) == 1
                         subjrundirnames{runname} = subjrunnames{runname}(end-4:end);
                     else
-                        subjrundirnames{runname} = [subjrunnames{runname}(end-4:end) '_' tasknames{2}];
+                        subjrundirnames{runname} = [subjrunnames{runname}(end-4:end) '_' taskname];
                     end
                 end
 
@@ -965,16 +987,16 @@ for sub = 1:size(derivsubjs,1)
             subjrundirnames = subjrundirnames';
 
             % create rundirs in subjderivdir if needed
-                if ~isfolder(fullfile(subjderivdir,rundirnames{1}))
+                if ~isfolder(fullfile(subjderivdir,subjrundirnames{1}))
                     cd(subjderivdir);
-                    cellfun(sm,rundirnames);
+                    cellfun(sm,subjrundirnames);
                 end
     
             % sanity check #1: number of images & noise/event files
-                if ~isequal(size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1),size(eventsfiles,1)) 
-                    error('\nnumbers of raw images, preprocessed images, noise, and events files do not match for %s ses-%s, please check BIDSimgs, derivimgs, fmriprep_noisefiles, and eventsfiles variables before proceeding',derivsubjs{sub}, num2str(ses));
+                if ~isequal(size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1))
+                      error('\nnumbers of raw images, preprocessed images, and noisefiles do not match for %s ses-0%s, please check BIDSimgs, derivimgs, and fmriprep_noisefiles variables before proceeding',derivdir, sub{1}, num2str(ses));
                 else
-                    warning('\nnumbers of raw images, preprocessed images, noise, and events files match for %s ses-%s, continuing',derivsubjs{sub},num2str(ses));
+                      warning('\nnumbers of raw images, preprocessed images, and noise files match for %s ses-0%s, continuing',derivdir, sub{1},num2str(ses));
                 end
                 
             cd(rootdir);
@@ -1216,27 +1238,48 @@ for sub = 1:size(derivsubjs,1)
 
                 % read events.tsv files
                 O = readtable(fullfile(subjBIDSdir,eventsfiles{run}),'FileType', 'text', 'Delimiter', 'tab');
-                idx_nowin = ~contains(O.trial_type,'nowin'); % get rid of no win conditions - study -specific
-                O = O(idx_nowin,:);
-                    for i = 1:height(O)
-                        if contains(O.trial_type(i),'cue')
-                            O.trial_type(i) = replace(O.trial_type(i),'cue ','cue_');
-                        end
-                    end
                 O.trial_type = categorical(O.trial_type);
                 
                 % create run indices for DSGN.conditions/pmods 
                 % to handle missing runs and multiple sessions
-                % NOTE: only works for two runs per session for now!
+                % NOTE: only works for up to four runs per session for now!
                 
                 if ses > 1
                     
-                    prev_ses = ses -1;
+                    if nr_runs{ses} < size(rundirnames,1)
                     
-                    if nr_runs{prev_ses} < size(rundirnames,1)
-                        run_idx_DSGN = nr_runs{prev_ses} + run + (size(rundirnames,1) - nr_runs{prev_ses});
+                        if contains(fmriprep_noisefiles{run},'run-1')
+                            run_idx_DSGN = run + (size(rundirnames,1)*(ses-1));
+                        elseif contains(fmriprep_noisefiles{run},'run-2')
+                            if run == 1 % run 1 is missing
+                                run_idx_DSGN = run + 1 + (size(rundirnames,1)*(ses-1));
+                            else % run 1 is not missing
+                                run_idx_DSGN = run + (size(rundirnames,1)*(ses-1));
+                            end
+                        elseif contains(fmriprep_noisefiles{run},'run-3')
+                            if run == 1 % run 1 & 2 missing
+                                run_idx_DSGN = run + 2 + (size(rundirnames,1)*(ses-1));
+                            elseif run == 2 % run 1 or 2 missing
+                                run_idx_DSGN = run + 1 + (size(rundirnames,1)*(ses-1));
+                            else
+                                run_idx_DSGN = run + (size(rundirnames,1)*(ses-1));
+                            end
+                        else
+                            if run == 1 % run 1-3 missing
+                                rund_idx_DSGN = run + 3 + (size(rundirnames,1)*(ses-1));
+                            elseif run == 2 % 2 of the previous runs missing
+                                run_idx_DSGN = run + 2 + (size(rundirnames,1)*(ses-1));
+                            elseif run == 3 % 1 of the previous runs missing
+                                run_idx_DSGN = run + 1 + (size(rundirnames,1)*(ses-1));
+                            else
+                                run_idx_DSGN = run + (size(rundirnames,1)*(ses-1));
+                            end
+                        end
+                        
                     else
-                        run_idx_DSGN = nr_runs{prev_ses} + run;
+                        
+                       run_idx_DSGN = run + (size(rundirnames,1)*(ses-1)); 
+                        
                     end
                     
                 elseif ses == 1
@@ -1246,7 +1289,29 @@ for sub = 1:size(derivsubjs,1)
                         if contains(fmriprep_noisefiles{run},'run-1')
                             run_idx_DSGN = run;
                         elseif contains(fmriprep_noisefiles{run},'run-2')
-                            run_idx_DSGN = run + 1;
+                            if run == 1 % run 1 is missing
+                                run_idx_DSGN = run + 1;
+                            else % run 1 is not missing
+                                run_idx_DSGN = run;
+                            end
+                        elseif contains(fmriprep_noisefiles{run},'run-3')
+                            if run == 1 % run 1 & 2 missing
+                                run_idx_DSGN = run + 2;
+                            elseif run == 2 % run 1 or 2 missing
+                                run_idx_DSGN = run + 1;
+                            else
+                                run_idx_DSGN = run;
+                            end
+                        else
+                            if run == 1 % run 1-3 missing
+                                rund_idx_DSGN = run + 3;
+                            elseif run == 2 % 2 of the previous runs missing
+                                run_idx_DSGN = run + 2;
+                            elseif run == 3 % 1 of the previous runs missing
+                                run_idx_DSGN = run + 1;
+                            else
+                                run_idx_DSGN = run;
+                            end
                         end
                         
                     else
@@ -1385,9 +1450,8 @@ for sub = 1:size(derivsubjs,1)
                     ax2.Title.FontWeight = 'bold';
                     ax2.TitleHorizontalAlignment = 'left';
 
-                    sgtitle([derivsubjs{sub},' ses-',num2str(ses),' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
-
-                    print(f1,fullfile(runmodeldir,['design_',derivsubjs{sub},' ses-',num2str(ses),'_',subjrundirnames{run},'.png']),'-dpng','-r300');
+                    sgtitle([sub{1},' ses-0',num2str(ses),' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
+                    print(f1,fullfile(runmodeldir,['design_',sub{1},' ses-0',num2str(ses),'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
                     clear f1 ax1 ax2
 
@@ -1668,8 +1732,8 @@ for sub = 1:size(derivsubjs,1)
     
     %% FIT FIRST LEVEL MODEL
     
-    fprintf('\nRunning on subject directory %s\n',DSGN.subjects{sub});
-    canlab_glm_subject_levels(DSGN,'subjects',DSGN.subjects(sub),'overwrite','nolinks','noreview');
+    fprintf('\nRunning on subject directory %s\n',DSGN.subjects{1});
+    canlab_glm_subject_levels_old(DSGN,'subjects',DSGN.subjects(1),'overwrite','nolinks','noreview');
     
             if isfield(DSGN,'singletrials')
             
@@ -1729,6 +1793,8 @@ for sub = 1:size(derivsubjs,1)
     end
     
     cd(rootdir);
+    
+    sub_counter = sub_counter + 1;
     
     
 end % for loop subjects 

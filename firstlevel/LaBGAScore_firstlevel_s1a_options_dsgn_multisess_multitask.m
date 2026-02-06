@@ -180,8 +180,8 @@
 % date:   September, 2023
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s1_options_dsgn_multisess_multitask.m     v1.0
-% last modified: 2023/09/18
+% @(#)% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m    v1.1
+% last modified: 2026/02/06
 %
 %
 %% CREATE LABGAS_OPTIONS STRUCTURE
@@ -229,7 +229,7 @@ end
 % load standard BIDS directory structure from root dir
 % STUDY-SPECIFIC: replace LaBGAScore with name of study-specific script
 
-bit_rew_prep_s0_define_directories;
+LaBGAScore_prep_s0_define_directories;
 
 % define run directory names
 % STUDY-SPECIFIC: names are defaults, only change number
