@@ -1,4 +1,4 @@
-%% ery_4a_m6r_decoding_template_xclass_acc.m
+%% LaBGAScore_decoding_template_xclass_acc.m
 %
 %
 % *USAGE*
@@ -41,9 +41,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_decoding_template_xclass_acc.m         v1.0
+% LaBGAScore_decoding_template_xclass_acc.m         v1.1
 %
-% last modified: 2023/06/22
+% last modified: 2026/02/26
 %
 %
 %
@@ -52,7 +52,7 @@
 
 results_suffix = 'all_conds';
 conds2include = [1:4]; % indices of conditions in DSGN.conditions (or SPM.Sess(x).U.name); assumes all conditions are present in all runs!
-mask_name = 'gray_matter_mask_sparse.img'; % absolute path to mask, or name of mask file if already on Matlab path
+mask_name = 'gm_mask_canlab2023_coarse_fmriprep20_0_20.nii'; % absolute path to mask, or name of mask file if already on Matlab path
 
 
 %% PREP WORK
