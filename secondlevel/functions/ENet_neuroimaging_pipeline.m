@@ -390,7 +390,12 @@ results.signStability = mean(sign(betaFlat)==sign(results.meanFeatureWeight),2);
 % 6. Top-K selection frequency
 %% -------------------------------------------------
 
-topK = 20;
+if size(X,2) < 20
+    topK = size(X,2);
+else
+    topK = 20;
+end
+
 freq = zeros(p,1);
 
 for i = 1:size(featureWeights,2)

@@ -463,7 +463,12 @@ results.signStability = signStability;
 % 11. Top-K selection Frequency
 %% ---------------------------
 
-topK = 20;
+if size(X,2) < 20
+    topK = size(X,2);
+else
+    topK = 20;
+end
+
 freq = zeros(size(results.meanFeatureWeight));
 
 for i = 1:size(results.featureWeights,2)
