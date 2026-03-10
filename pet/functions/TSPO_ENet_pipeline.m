@@ -401,25 +401,25 @@ results.selectionFrequency = freq / size(featureWeights,2);
 % 7. Permutation testing
 %% -------------------------------------------------
 
-% permAUC = nan(opts.nPerm,1);
-% 
-% parfor i = 1:opts.nPerm
-% 
-%     yp = yNum(randperm(n));
-% 
-%     permAUC(i) = quickCV_ENet(X,yp,opts);
-% 
-% end
-% 
-% results.allpermAUC = permAUC;
-% results.permAUC = nanmean(permAUC);
-% results.permutation_p = mean(permAUC >= results.AUC,'omitnan');
-% 
-% figure
-% histogram(permAUC(~isnan(permAUC)))
-% hold on
-% xline(results.AUC)
-% title('Permutation AUC')
+permAUC = nan(opts.nPerm,1);
+
+parfor i = 1:opts.nPerm
+
+    yp = yNum(randperm(n));
+
+    permAUC(i) = quickCV_ENet(X,yp,opts);
+
+end
+
+results.allpermAUC = permAUC;
+results.permAUC = nanmean(permAUC);
+results.permutation_p = mean(permAUC >= results.AUC,'omitnan');
+
+figure
+histogram(permAUC(~isnan(permAUC)))
+hold on
+xline(results.AUC)
+title('Permutation AUC')
 
 %% -------------------------------------------------
 % 8. Bootstrap CI (out-of-bag bootstrap)
