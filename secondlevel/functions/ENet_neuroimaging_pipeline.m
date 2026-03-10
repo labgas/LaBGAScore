@@ -3,10 +3,11 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 % Robust Elastic Net pipeline for neuroimaging feature matrices.
 %
 % This function implements Elastic Net regularized logistic-style classification
-% (via lasso/elastic net on a binary outcome) with repeated nested k-fold cross-validation.
-% It is designed for neuroimaging feature matrices (subjects × features) such
-% as PET ROI binding, fMRI ROI betas, morphometry, connectivity-derived
-% measures (edges), graph metrics, or multimodal ROI feature sets. The architecture emphasizes:
+% (via lassoglm / elastic net on a binary outcome) with repeated nested k-fold
+% cross-validation. It is designed for neuroimaging feature matrices
+% (subjects × features) such as PET ROI binding, fMRI ROI betas, morphometry,
+% connectivity-derived measures (edges), graph metrics, or multimodal ROI
+% feature sets. The architecture emphasizes:
 %   - leakage-free preprocessing (train-only scaling in every fold)
 %   - inner CV selection of elastic net hyperparameters (alpha, lambda)
 %   - outer CV estimation of generalization performance
@@ -98,8 +99,8 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %     results.permutation_p  scalar p = mean(permAUC >= observed AUC)
 %
 %   Bootstrap:
-%     results.allbootAUC [nBoot x 1] bootstrap AUC distribution
-%     results.bootAUC    scalar mean bootstrap AUC
+%     results.allbootAUC [nBoot x 1] out-of-bag bootstrap AUC distribution
+%     results.bootAUC    scalar mean out-of-bag bootstrap AUC
 %     results.AUC_CI     [1 x 2] percentile CI (2.5, 97.5)
 %
 %   Learning curve:
@@ -108,8 +109,12 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %
 % NOTES / INTERPRETATION (high level)
 %   - Use results.AUC from nested CV as the primary generalization estimate.
-%   - Bootstrap AUC can be higher than nested CV AUC (often optimistic,
-%     especially for small n) and is best viewed as sampling variability.
+%   - Bootstrap AUC is estimated using out-of-bag (OOB) testing rather than
+%     evaluating on the bootstrap sample itself, which makes it more conservative
+%     and typically less optimistic than naive bootstrap performance estimates.
+%   - Accordingly, bootstrap AUC may be somewhat lower than nested CV AUC in
+%     small samples and should be viewed primarily as a measure of sampling
+%     variability rather than as the main performance estimate.
 %   - Elastic net weights are sparse for alpha closer to 1 (lasso-like),
 %     and dense for alpha closer to 0 (ridge-like). Stability metrics
 %     (featureStability, signStability, selectionFrequency) help identify
@@ -120,15 +125,18 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %   - Outer-fold predictions use the full elastic net linear predictor
 %       score = X*beta + intercept
 %     ensuring consistency with the models evaluated during inner CV.
+%   - Bootstrap confidence intervals are based on out-of-bag bootstrap samples:
+%     each bootstrap replicate is trained on the in-bag sample, hyperparameters
+%     are tuned within that sample, and AUC is evaluated on out-of-bag subjects.
 %   - If stratified cvpartition fails (e.g., extreme imbalance), the code falls back
 %     to non-stratified partitions.
 %   - If some folds lack a class, reduce outerK/innerK.
 %
 % DEPENDENCIES
 %   Requires Statistics and Machine Learning Toolbox:
-%     cvpartition, lasso, perfcurve, fitglm, grp2idx
+%     cvpartition, lassoglm, perfcurve, fitglm, grp2idx
 %
-% See also: lasso, perfcurve, cvpartition, fitglm
+% See also: lassoglm, perfcurve, cvpartition, fitglm
 
 %% -------------------------------------------------
 % 0. Defaults
@@ -427,24 +435,26 @@ xline(results.AUC)
 title('Permutation AUC')
 
 %% -------------------------------------------------
-% 8. Bootstrap CI
+% 8. Bootstrap CI (out-of-bag bootstrap)
 %% -------------------------------------------------
 
 bootAUC = nan(opts.nBoot,1);
 
-parfor b=1:opts.nBoot
-    idx = randsample(n,n,true);
-    bootAUC(b) = quickCV_ENet(X(idx,:),yNum(idx),opts);
+parfor b = 1:opts.nBoot
+    bootAUC(b) = bootstrapOOB_ENet(X, yNum, opts);
 end
 
 results.allbootAUC = bootAUC;
 results.bootAUC = nanmean(bootAUC);
-
-results.AUC_CI = prctile(bootAUC(~isnan(bootAUC)),[2.5 97.5]);
+results.AUC_CI = prctile(bootAUC(~isnan(bootAUC)), [2.5 97.5]);
 
 figure
 histogram(bootAUC(~isnan(bootAUC)))
-title('Bootstrap AUC')
+hold on
+xline(results.AUC)
+title('Bootstrap OOB AUC')
+xlabel('AUC')
+ylabel('Frequency')
 
 %% -------------------------------------------------
 % 9. Learning curve (robust stratified sampling)
@@ -510,6 +520,220 @@ switch lower(mode)
         sd(sd==0) = 1;
         XtrS = (Xtr - mu) ./ sd;
         XteS = (Xte - mu) ./ sd;
+end
+
+end
+
+function AUC = bootstrapOOB_ENet(X, Y, opts)
+% bootstrapOOB_ENet
+% Out-of-bag bootstrap AUC for Elastic Net:
+% - bootstrap sample used for training
+% - OOB subjects used for testing
+% - alpha/lambda selected by inner CV within the bootstrap sample
+% - robustified to mirror quickCV_ENet logic
+
+n = length(Y);
+
+if numel(unique(Y)) < 2
+    AUC = NaN;
+    return
+end
+
+% -----------------------
+% Bootstrap sample
+% -----------------------
+idxBoot = randsample(n, n, true);
+
+% OOB subjects = never selected
+inBag = false(n,1);
+inBag(idxBoot) = true;
+oob = ~inBag;
+
+if sum(oob) < 2
+    AUC = NaN;
+    return
+end
+
+Xtrain = X(idxBoot,:);
+Xtest  = X(oob,:);
+
+ytrain = Y(idxBoot);
+ytest  = Y(oob);
+
+if numel(unique(ytrain)) < 2 || numel(unique(ytest)) < 2
+    AUC = NaN;
+    return
+end
+
+% -----------------------
+% Leakage-free scaling
+% -----------------------
+[Xtrain, Xtest] = applyScaling(Xtrain, Xtest, opts.scale);
+
+% -----------------------
+% Inner CV setup
+% -----------------------
+innerK = min([opts.innerK, floor(numel(ytrain)/2), sum(ytrain==0), sum(ytrain==1)]);
+if innerK < 2
+    AUC = NaN;
+    return
+end
+
+try
+    cvInner = cvpartition(ytrain,'KFold',innerK,'Stratify',true);
+catch
+    cvInner = cvpartition(length(ytrain),'KFold',innerK);
+end
+
+% -----------------------
+% Alpha grid (coarsen for speed if needed)
+% -----------------------
+alphaGrid = opts.alphaGrid;
+if numel(alphaGrid) > 4
+    alphaGrid = alphaGrid([1 round(end/2) end]);
+end
+
+bestAUC = -inf;
+bestBeta = NaN(size(Xtrain,2),1);
+bestIntercept = NaN;
+
+% -----------------------
+% Hyperparameter search
+% -----------------------
+for a = 1:numel(alphaGrid)
+
+    alpha = alphaGrid(a);
+
+    % Fit lambda path once for this alpha on full bootstrap training set
+    try
+        [BfullPath,FitInfoFullPath] = lassoglm( ...
+            Xtrain, ytrain, 'binomial', ...
+            'Alpha', alpha, ...
+            'Standardize', false, ...
+            'NumLambda', 25, ...
+            'LambdaRatio', 1e-3, ...
+            'MaxIter', 1e4, ...
+            'RelTol', 1e-3);
+    catch
+        continue
+    end
+
+    lambdaPath = FitInfoFullPath.Lambda;
+    nLambda = numel(lambdaPath);
+
+    foldAUC = nan(innerK, nLambda);
+
+    for f = 1:innerK
+
+        tr = training(cvInner,f);
+        va = test(cvInner,f);
+
+        ytr = ytrain(tr);
+        yva = ytrain(va);
+
+        if numel(unique(ytr))<2 || numel(unique(yva))<2
+            continue
+        end
+
+        % Recompute path on inner-training fold using same lambda path
+        try
+            [B,FitInfo] = lassoglm( ...
+                Xtrain(tr,:), ytr, 'binomial', ...
+                'Alpha', alpha, ...
+                'Lambda', lambdaPath, ...
+                'Standardize', false, ...
+                'MaxIter', 1e4, ...
+                'RelTol', 1e-3);
+        catch
+            continue
+        end
+
+        for l = 1:nLambda
+            score = Xtrain(va,:)*B(:,l) + FitInfo.Intercept(l);
+
+            try
+                [~,~,~,foldAUC(f,l)] = perfcurve(yva, score, 1);
+                if ~isfinite(foldAUC(f,l))
+                    foldAUC(f,l) = NaN;
+                end
+            catch
+                foldAUC(f,l) = NaN;
+            end
+        end
+    end
+
+    meanAUC = nanmean(foldAUC,1);
+
+    if all(isnan(meanAUC))
+        continue
+    end
+
+    % -----------------------
+    % Robust lambda selection
+    % -----------------------
+    % First choose min-deviance over inner folds
+    [~,idxm] = max(meanAUC);
+
+    % Approximate 1SE-style choice:
+    % pick the most regularized lambda whose AUC is within 1 SE of the best
+    seAUC = nanstd(foldAUC,[],1) ./ sqrt(sum(~isnan(foldAUC),1));
+    bestMean = meanAUC(idxm);
+    thresh = bestMean - seAUC(idxm);
+
+    idxCandidates = find(meanAUC >= thresh);
+
+    if ~isempty(idxCandidates)
+        idx1 = idxCandidates(1);   % most regularized among acceptable
+    else
+        idx1 = idxm;
+    end
+
+    idx = idx1;
+
+    % If 1SE choice is all-zero, try min-deviance
+    if all(BfullPath(:,idx)==0) && ~isempty(idxm) && idxm>=1
+        idx = idxm;
+    end
+
+    % If still all-zero, choose best non-zero solution on path
+    if all(BfullPath(:,idx)==0)
+        nonzeroCols = find(any(BfullPath~=0,1));
+        validCols = nonzeroCols(isfinite(meanAUC(nonzeroCols)));
+        if ~isempty(validCols)
+            [~,ii] = max(meanAUC(validCols));
+            idx = validCols(ii);
+        end
+    end
+
+    if ~isfinite(meanAUC(idx))
+        continue
+    end
+
+    if meanAUC(idx) > bestAUC
+        bestAUC = meanAUC(idx);
+        bestBeta = BfullPath(:,idx);
+        bestIntercept = FitInfoFullPath.Intercept(idx);
+    end
+
+end
+
+% -----------------------
+% Final OOB evaluation
+% -----------------------
+if all(isnan(bestBeta)) || isnan(bestIntercept)
+    AUC = NaN;
+    return
+end
+
+score = Xtest*bestBeta + bestIntercept;
+
+try
+    [~,~,~,AUC] = perfcurve(ytest, score, 1);
+    if ~isfinite(AUC)
+        AUC = NaN;
+    end
+catch
+    AUC = NaN;
 end
 
 end

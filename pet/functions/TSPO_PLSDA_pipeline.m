@@ -1,6 +1,6 @@
 function results = TSPO_PLSDA_pipeline(X,Y,opts)
 
-% TSPO_PLSDA_pipeline  Robust PLS-DA pipeline for neuroimaging ROI features.
+% Robust PLS-DA pipeline for TSPO PET ROI features.
 %
 % This function implements Partial Least Squares Discriminant Analysis (PLS-DA)
 % for binary classification with repeated nested k-fold cross-validation.
@@ -98,8 +98,8 @@ function results = TSPO_PLSDA_pipeline(X,Y,opts)
 %     results.permutation_p  scalar p = mean(permAUC >= observed AUC)
 %
 %   Bootstrap:
-%     results.allbootAUC [nBoot x 1] bootstrap AUC distribution
-%     results.bootAUC    scalar mean bootstrap AUC
+%     results.allbootAUC [nBoot x 1] out-of-bag bootstrap AUC distribution
+%     results.bootAUC    scalar mean out-of-bag bootstrap AUC
 %     results.AUC_CI     [1 x 2] percentile CI (2.5, 97.5)
 %
 %   Learning curve:
@@ -108,11 +108,24 @@ function results = TSPO_PLSDA_pipeline(X,Y,opts)
 %
 % NOTES / INTERPRETATION (high level)
 %   - Use results.AUC from nested CV as the primary generalization estimate.
-%   - Bootstrap AUC can be higher than nested CV AUC (often optimistic,
-%     especially for small n) and is best viewed as sampling variability.
+%   - Bootstrap AUC is estimated using out-of-bag (OOB) testing rather than
+%     evaluating on the bootstrap sample itself, which makes it more conservative
+%     and typically less optimistic than naive bootstrap performance estimates.
+%   - Accordingly, bootstrap AUC may be somewhat lower than nested CV AUC in
+%     small samples and should be viewed primarily as a measure of sampling
+%     variability rather than as the main performance estimate.
 %   - VIP and stabilityZ provide complementary interpretability:
 %       VIP: importance in the final fitted model
 %       stabilityZ: robustness of the effect across CV runs
+%
+% IMPLEMENTATION NOTES
+%   - Scaling is leakage-free and performed by z-scoring within each CV fold.
+%   - Bootstrap confidence intervals are based on out-of-bag bootstrap samples:
+%     each bootstrap replicate is trained on the in-bag sample, latent variables
+%     are tuned within that sample, and AUC is evaluated on out-of-bag subjects.
+%   - If stratified cvpartition fails (e.g., extreme imbalance), the code falls back
+%     to non-stratified partitions.
+%   - If some folds lack a class, reduce outerK/innerK.
 %
 % DEPENDENCIES
 %   Requires Statistics and Machine Learning Toolbox:
@@ -164,7 +177,11 @@ featureWeights = nan(p, opts.nRepeats*opts.outerK);
 
 for r = 1:opts.nRepeats
 
-    cvOuter = cvpartition(yNum,'KFold',opts.outerK,'Stratify',true);
+    try
+        cvOuter = cvpartition(yNum,'KFold',opts.outerK,'Stratify',true);
+    catch
+        cvOuter = cvpartition(length(yNum),'KFold',opts.outerK);
+    end
 
     for k = 1:opts.outerK
 
@@ -193,10 +210,19 @@ for r = 1:opts.nRepeats
 
         %% inner CV LV tuning
 
-        maxLV = min([opts.maxLV rank(Xtrain)-1 size(Xtrain,1)-2]);
+        maxLV = capLV(opts.maxLV, Xtrain);
+
+            if maxLV < 1
+                continue
+            end
 
         innerAUC = nan(maxLV,1);
-        cvInner = cvpartition(ytrain,'KFold',opts.innerK,'Stratify',true);
+
+        try
+            cvInner = cvpartition(ytrain,'KFold',opts.innerK,'Stratify',true);
+        catch
+            cvInner = cvpartition(length(ytrain),'KFold',opts.innerK);
+        end
 
         parfor lv = 1:maxLV
 
@@ -359,23 +385,26 @@ xline(results.AUC)
 title('Permutation AUC distribution')
 
 %% -------------------------------------------------
-% 8. Bootstrap AUC CI
+% 8. Bootstrap AUC CI (out-of-bag bootstrap)
 %% -------------------------------------------------
 
 bootAUC = nan(opts.nBoot,1);
 
-parfor b=1:opts.nBoot
-    idx = randsample(n,n,true);
-    bootAUC(b) = quickCV(X(idx,:),yNum(idx),opts);
+parfor b = 1:opts.nBoot
+    bootAUC(b) = bootstrapOOB_PLSDA(X, yNum, opts);
 end
 
 results.allbootAUC = bootAUC;
 results.bootAUC = nanmean(bootAUC);
-results.AUC_CI = prctile(bootAUC(~isnan(bootAUC)),[2.5 97.5]);
+results.AUC_CI = prctile(bootAUC(~isnan(bootAUC)), [2.5 97.5]);
 
 figure
 histogram(bootAUC(~isnan(bootAUC)))
-title('Bootstrap AUC')
+hold on
+xline(results.AUC)
+title('Bootstrap OOB AUC')
+xlabel('AUC')
+ylabel('Frequency')
 
 %% -------------------------------------------------
 % 9. Learning curve (robust stratified sampling)
@@ -454,6 +483,23 @@ end
 
 %% inline functions
 
+function maxLV = capLV(maxLVopt, Xtrain)
+    % capLV: ensures LV count is valid for any p/n ratio
+    nTr = size(Xtrain,1);
+    
+    % rank-based cap is important even when p<n
+    rX = rank(Xtrain);
+    
+    % plsregress needs lv <= min(rank(X), n-1) typically; keep your -1/-2 safeguards
+    maxLV = min([maxLVopt, rX-1, nTr-2]);
+    
+    if isnan(maxLV) || isinf(maxLV)
+        maxLV = 0;
+    end
+    
+    maxLV = floor(maxLV);
+end
+
 function AUC = quickCV(X,Y,opts)
 
 if numel(unique(Y)) < 2
@@ -502,4 +548,110 @@ end
 
 AUC = nanmean(auc);
 
+end
+
+function AUC = bootstrapOOB_PLSDA(X, Y, opts)
+% bootstrapOOB_PLSDA
+% Out-of-bag bootstrap AUC for PLS-DA:
+% - bootstrap sample used for training
+% - OOB subjects used for testing
+% - LV selected by inner CV within the bootstrap sample
+
+n = length(Y);
+
+if numel(unique(Y)) < 2
+    AUC = NaN;
+    return
+end
+
+% Bootstrap sample
+idxBoot = randsample(n, n, true);
+
+% OOB = subjects not selected at least once
+inBag = false(n,1);
+inBag(idxBoot) = true;
+oob = ~inBag;
+
+% Need enough OOB cases and both classes present
+if sum(oob) < 2
+    AUC = NaN;
+    return
+end
+
+ytrain = Y(idxBoot);
+ytest  = Y(oob);
+
+if numel(unique(ytrain)) < 2 || numel(unique(ytest)) < 2
+    AUC = NaN;
+    return
+end
+
+Xtrain = X(idxBoot,:);
+Xtest  = X(oob,:);
+
+% leakage-free scaling
+mu = mean(Xtrain,1);
+sd = std(Xtrain,0,1);
+sd(sd==0) = 1;
+
+Xtrain = (Xtrain - mu) ./ sd;
+Xtest  = (Xtest  - mu) ./ sd;
+
+% cap LV
+maxLV = capLV(opts.maxLV, Xtrain);
+if maxLV < 1
+    AUC = NaN;
+    return
+end
+
+% inner CV for LV tuning
+innerK = min([opts.innerK, floor(length(ytrain)/2), sum(ytrain==0), sum(ytrain==1)]);
+if innerK < 2
+    AUC = NaN;
+    return
+end
+
+try
+    cvInner = cvpartition(ytrain,'KFold',innerK,'Stratify',true);
+catch
+    cvInner = cvpartition(length(ytrain),'KFold',innerK);
+end
+
+innerAUC = nan(maxLV,1);
+
+for lv = 1:maxLV
+    foldAUC = nan(innerK,1);
+
+    for f = 1:innerK
+        tr = training(cvInner,f);
+        va = test(cvInner,f);
+
+        ytr = ytrain(tr);
+        yva = ytrain(va);
+
+        if numel(unique(ytr))<2 || numel(unique(yva))<2
+            continue
+        end
+
+        [~,~,~,~,beta] = plsregress(Xtrain(tr,:), ytr, lv);
+        yhat = [ones(sum(va),1) Xtrain(va,:)] * beta;
+
+        [~,~,~,foldAUC(f)] = perfcurve(yva, yhat, 1);
+    end
+
+    innerAUC(lv) = nanmean(foldAUC);
+end
+
+if all(isnan(innerAUC))
+    AUC = NaN;
+    return
+end
+
+[~,bestLV] = max(innerAUC);
+
+% final fit on bootstrap sample
+[~,~,~,~,beta] = plsregress(Xtrain, ytrain, bestLV);
+
+score = [ones(sum(oob),1) Xtest] * beta;
+[~,~,~,AUC] = perfcurve(ytest, score, 1);
 end
