@@ -1,40 +1,36 @@
-
 # PLSDA_neuroimaging_pipeline — User Guide
 
 ## Overview
 
-`PLSDA_neuroimaging_pipeline` implements a robust **Partial Least Squares Discriminant Analysis (PLS-DA)** classification pipeline for neuroimaging feature matrices.
+`PLSDA_neuroimaging_pipeline` implements a robust **Partial Least Squares Discriminant Analysis (PLS-DA)** pipeline for neuroimaging feature matrices.
 
-It is designed for **subjects × features** datasets common in neuroimaging such as:
+PLS-DA is particularly well suited to neuroimaging settings where:
 
-- PET ROI binding values
-- fMRI ROI beta estimates
-- cortical thickness or morphometry
-- connectivity matrices or edge features
-- graph metrics
-- multimodal ROI feature sets
+- features are strongly correlated  
+- the number of features may approach or exceed the sample size  
+- prediction and interpretation both matter  
 
-The pipeline estimates predictive performance while minimizing overfitting by combining:
+The pipeline is designed for **subjects × features** datasets such as:
 
-- repeated nested cross-validation
-- leakage-free preprocessing
-- hyperparameter tuning (latent variables)
-- permutation testing
-- bootstrap confidence intervals
-- feature stability metrics
-- learning curves
+- PET ROI binding values  
+- fMRI ROI beta estimates  
+- cortical thickness or morphometry  
+- connectivity or graph-derived features  
+- multimodal ROI feature matrices  
 
-The architecture is intentionally kept **very close to the TSPO-specific pipeline**, while remaining fully generic.
+The architecture emphasizes:
 
-This approach is particularly useful when:
-
-p ≈ n   or   p > n
-
-which is common in neuroimaging datasets.
+- repeated nested cross-validation  
+- leakage-free preprocessing  
+- inner tuning of latent variables (LVs)  
+- permutation testing  
+- **out-of-bag (OOB) bootstrap confidence intervals**  
+- feature importance and stability metrics  
+- learning curves  
 
 ---
 
-# 1. Pipeline Architecture
+# Pipeline Architecture
 
 The pipeline uses **repeated nested cross-validation**.
 
@@ -42,459 +38,285 @@ The pipeline uses **repeated nested cross-validation**.
 
 Purpose: estimate **generalization performance**.
 
-Process:
+Workflow:
 
-Data → split into K folds  
-Train model on K−1 folds  
-Test model on held-out fold  
+1. Split data into **K folds**
+2. Train on **K−1 folds**
+3. Test on the **held-out fold**
 
-Outputs include:
+Metrics:
 
-- AUC
-- accuracy
-- sensitivity
-- specificity
+- AUC  
+- accuracy  
+- sensitivity  
+- specificity  
 
 ---
 
 ## Inner Cross-Validation
 
-Purpose: select the optimal **number of latent variables (LV)**.
+Purpose: select the optimal number of **latent variables (LVs)**.
 
-Process:
+For each outer training fold:
 
-Training set → inner CV  
-Evaluate LV = 1..maxLV  
-Select LV with highest mean AUC  
-
-This prevents hyperparameter overfitting.
+1. Evaluate LV = 1 … maxLV  
+2. Select the LV with the highest inner-CV AUC  
 
 ---
 
 ## Repeated Cross-Validation
 
-The outer CV procedure is repeated:
-
-nRepeats times
+The outer CV procedure is repeated **nRepeats** times.
 
 Benefits:
 
-- reduces variance of performance estimates
-- enables feature stability estimation
-- improves reliability of interpretation
+- reduces variance of performance estimates  
+- improves robustness of LV selection  
+- enables feature stability summaries  
 
 ---
 
-# 2. Input Data Structure
+# Input Data Structure
 
-## Feature Matrix X
+## Feature Matrix
 
+```
 X : [n × p]
+```
 
 | Dimension | Meaning |
-|---|---|
+|-----------|--------|
 | n | subjects |
 | p | features |
 
-Examples:
+Example features:
 
-- PET ROI binding
-- fMRI ROI beta estimates
-- cortical thickness
-- graph metrics
-- connectivity strengths
+- PET ROI binding  
+- fMRI ROI beta estimates  
+- cortical thickness  
+- graph metrics  
+- connectivity strengths  
 
 ---
 
-## Outcome Vector Y
+## Outcome Vector
 
-Binary outcome vector:
-
+```
 Y : [n × 1]
+```
 
 Accepted formats:
 
-- numeric
-- logical
-- categorical
-- string
-- cellstr
+- numeric  
+- logical  
+- categorical  
+- string  
+- cell array of strings  
 
 Internally converted to:
 
+```
 yNum = double(Y == max(Y))
-
-Meaning:
+```
 
 The **maximum label becomes the positive class**.
 
 ---
 
-# 3. Preprocessing
+# Preprocessing
 
-The pipeline performs **leakage-free scaling** inside each cross-validation fold.
+Scaling is performed **inside each cross-validation fold** to prevent leakage.
 
 Example:
 
-Xtrain_z = (Xtrain − mean(Xtrain)) / std(Xtrain)  
+```
+Xtrain_z = (Xtrain − mean(Xtrain)) / std(Xtrain)
 Xtest_z  = (Xtest − mean(Xtrain)) / std(Xtrain)
+```
 
-Scaling parameters are learned **only from training data**.
+Supported scaling modes:
 
-Optional scaling modes:
-
-opts.scale = 'zscore'   (default)  
-opts.scale = 'center'  
+```
+opts.scale = 'zscore'   (default)
+opts.scale = 'center'
 opts.scale = 'none'
+```
 
-For most neuroimaging feature matrices, **z-scoring is recommended**.
-
----
-
-# 4. Choosing Hyperparameters
-
-Default parameters are optimized for **small neuroimaging samples**.
-
-| Parameter | Default | Purpose |
-|---|---|---|
-outerK | 5 | outer CV folds |
-innerK | 4 | LV tuning |
-nRepeats | 50 | CV repetitions |
-maxLV | 4 | max latent variables |
-nPerm | 1000 | permutation tests |
-nBoot | 500 | bootstrap samples |
-learningSteps | 6 | learning curve points |
+For most neuroimaging feature matrices **z-score scaling is recommended**.
 
 ---
 
-# 5. Recommended Settings by Dataset Type
+# Hyperparameters
 
-## High-dimensional datasets (p >> n)
+Default settings are designed for **small neuroimaging samples**.
 
-Example:
+| Parameter | Default |
+|----------|---------|
+| outerK | 5 |
+| innerK | 4 |
+| nRepeats | 50 |
+| maxLV | 4 |
+| nPerm | 1000 |
+| nBoot | 500 |
+| learningSteps | 6 |
 
-- connectivity edges
-- multimodal features
-
-Recommended:
-
-outerK = 4–5  
-innerK = 3–4  
-maxLV = 2–4  
-nRepeats ≥ 50  
-
----
-
-## Moderate dimensional datasets (p ≈ n)
-
-Example:
-
-- ROI betas
-- cortical parcellations
-
-Recommended:
-
-outerK = 5  
-innerK = 4–5  
-maxLV = 4–8  
-nRepeats = 30–50  
+The actual LV cap is constrained by **sample size and matrix rank** within each training fold.
 
 ---
 
-## Lower dimensional datasets (p < n)
+# Output Structure
 
-Example:
+The pipeline returns a MATLAB structure:
 
-- small ROI feature sets
-
-Recommended:
-
-outerK = 5–10  
-innerK = 5  
-maxLV = 6–12  
-nRepeats = 10–30  
-
----
-
-# 6. Output Structure
-
-The pipeline returns a structure:
-
+```
 results
+```
 
 ## Cross-validated performance
 
-results.AUC  
-results.ACC  
-results.SENS  
-results.SPEC  
+- `results.AUC`
+- `results.ACC`
+- `results.SENS`
+- `results.SPEC`
 
 Fold-level metrics:
 
-results.allAUC  
-results.allACC  
-results.allSENS  
-results.allSPEC  
+- `results.allAUC`
+- `results.allACC`
+- `results.allSENS`
+- `results.allSPEC`
+
+Primary estimate:
+
+```
+results.AUC
+```
 
 ---
 
-## Model selection
+## Model Selection
 
-results.selectedLV
-
-LV selected for each outer fold.
-
----
-
-## Model weights
-
-results.betaStore  
-results.featureWeights  
-results.meanFeatureWeight  
-results.featureStability  
+- `results.selectedLV`
+- `results.betaStore`
+- `results.featureWeights`
+- `results.meanFeatureWeight`
 
 ---
 
-## Baseline global model
+## Final Model (Interpretation Only)
 
-results.AUC_global
-
-Logistic regression using a global summary feature (mean or median of X).
-
-Purpose: test whether classification is driven by **global signal differences**.
-
----
-
-## Final model (interpretation only)
-
-results.finalLV  
-results.betaFinal  
-results.finalXLoadings  
-results.finalYLoadings  
-results.varExplainedX  
-results.varExplainedY  
-
-Important:
-
-This model is **not used for performance estimation**.
+- `results.finalLV`
+- `results.betaFinal`
+- `results.varExplainedX`
+- `results.varExplainedY`
+- `results.finalXLoadings`
+- `results.finalYLoadings`
 
 ---
 
-# 7. Feature Importance Metrics
+## Feature Importance / Stability
 
-The pipeline provides multiple complementary measures.
+- `results.VIP`
+- `results.meanBeta`
+- `results.sdBeta`
+- `results.stabilityZ`
+- `results.signStability`
+- `results.selectionFrequency`
 
-## VIP scores
-
-results.VIP
-
-Interpretation:
-
-| VIP | Interpretation |
-|---|---|
-<0.8 | weak |
-0.8–1 | moderate |
->1 | important |
->1.5 | strong contributor |
+These metrics help identify **robust contributors across resampling**.
 
 ---
 
-## Weight stability
+# Global Baseline Model
 
-results.meanBeta  
-results.sdBeta  
-results.stabilityZ  
+A simple logistic model using:
 
-Where:
-
-stabilityZ = meanBeta / sdBeta
-
-Interpretation:
-
-| stabilityZ | Meaning |
-|---|---|
-<1 | unstable |
-1–2 | moderate |
->2 | stable |
->3 | very stable |
-
-Common robust feature criterion:
-
-VIP > 1  
-AND  
-|stabilityZ| > 2  
-
----
-
-## Sign stability
-
-results.signStability
-
-Measures how consistently the **direction of the effect** appears across CV runs.
-
-Example:
-
-0.95 → highly consistent sign  
-0.5  → unstable sign  
-
----
-
-## Selection frequency
-
-results.selectionFrequency
-
-Proportion of runs where a feature appears among the **Top-20 absolute weights**.
-
-Typical interpretation:
-
-| Frequency | Meaning |
-|---|---|
->0.7 | highly robust |
-0.4–0.7 | moderate |
-<0.4 | unstable |
-
----
-
-# 8. Statistical Validation
-
-## Permutation testing
-
-Tests whether classification exceeds chance.
-
-Procedure:
-
-shuffle labels  
-repeat CV  
-compute AUC  
+```
+mean(X,2)
+```
 
 Output:
 
-results.permutation_p
+```
+results.AUC_global
+```
 
-Interpretation:
-
-| p | Meaning |
-|---|---|
-<0.05 | significant |
-<0.01 | strong evidence |
-<0.001 | very strong evidence |
+This tests whether regional patterns outperform a global signal shift.
 
 ---
 
-## Bootstrap confidence intervals
+# Permutation Testing
 
-Bootstrap estimates uncertainty in AUC.
+Permutation testing evaluates whether predictive performance exceeds chance.
 
-results.AUC_CI
+Procedure:
 
-Example:
-
-AUC = 0.72  
-CI = [0.58 0.85]
-
-Important:
-
-Bootstrap AUC may be **higher than nested CV AUC** because bootstrap samples reuse observations.
-
-Nested CV remains the **primary performance estimate**.
-
----
-
-# 9. Learning Curves
-
-Learning curves estimate:
-
-performance vs sample size
+1. Shuffle labels  
+2. Re-run the quick cross-validated PLS-DA routine  
+3. Compute AUC  
 
 Outputs:
 
-results.learningSizes  
-results.learningAUC  
+```
+results.allpermAUC
+results.permAUC
+results.permutation_p
+```
+
+A healthy null distribution should be **centered near 0.5**.
+
+---
+
+# Bootstrap Confidence Intervals
+
+Uncertainty in AUC is estimated using **out-of-bag (OOB) bootstrap sampling**.
+
+Procedure:
+
+1. Sample subjects **with replacement**  
+2. Train model on the **in-bag sample**  
+3. Tune latent variables within the in-bag sample  
+4. Evaluate AUC on the **out-of-bag subjects**  
+5. Repeat `nBoot` times  
+
+Outputs:
+
+```
+results.allbootAUC
+results.bootAUC
+results.AUC_CI
+```
+
+Because evaluation occurs on **OOB subjects rather than the bootstrap sample**, bootstrap estimates are typically **more conservative** than naive bootstrap approaches.
+
+Nested cross-validation remains the **primary performance estimate**.
+
+---
+
+# Learning Curves
+
+Outputs:
+
+```
+results.learningSizes
+results.learningAUC
+```
 
 Interpretation:
 
-- increasing curve → more subjects would likely improve performance
-- plateau → model may have reached dataset limits
+- increasing curve → more data likely improves performance  
+- plateau → model approaching its achievable limit  
 
 ---
 
-# 10. Interpreting Latent Variable Brain Maps
-
-PLS components represent **multivariate patterns**, not isolated regions.
-
-Key principles:
-
-### 1. Patterns rather than single regions
-
-PLS components capture **distributed networks**.
-
-### 2. Relative interpretation
-
-Loadings should be interpreted **relative to other regions**.
-
-Example pattern:
-
-insula ↑  
-ACC ↑  
-precuneus ↓  
-
-Interpretation:
-
-patients show increased insula/ACC and decreased precuneus.
-
----
-
-### 3. Later LVs can still be important
-
-It is common that:
-
-- LV1 explains large variance in X
-- LV2+ explain smaller variance in X but **more variance in Y**
-
-These later components may capture **disease-specific patterns**.
-
----
-
-# 11. Common Pitfalls
-
-### Data leakage
-
-Never perform:
-
-- scaling
-- feature selection
-- nuisance regression involving Y
-
-on the full dataset before cross-validation.
-
----
-
-### Missing classes in folds
-
-If warnings occur reduce:
-
-outerK  
-innerK  
-
----
-
-### Overinterpreting single weights
-
-Always interpret weights together with:
-
-- VIP
-- stabilityZ
-- selectionFrequency
-
----
-
-# 12. Summary
+# Summary
 
 `PLSDA_neuroimaging_pipeline` provides:
 
-- robust performance estimation
-- interpretable multivariate brain patterns
-- statistical validation
-- feature stability diagnostics
+- robust performance estimation  
+- latent-variable modeling suited for correlated neuroimaging features  
+- permutation-based statistical inference  
+- OOB bootstrap uncertainty estimation  
+- feature importance and stability diagnostics  
 
-making it well suited for **small-sample neuroimaging machine learning studies**.
+This makes it well suited for **small-sample neuroimaging machine-learning studies** where **p ≈ n or p > n** are common.
