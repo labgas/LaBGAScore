@@ -1,127 +1,131 @@
+# ENet Neuroimaging Pipeline
 
-# ENet_neuroimaging_pipeline / TSPO_ENet_pipeline — User Guide
+Robust **Elastic Net classification pipeline** for neuroimaging feature
+matrices.
 
-## Overview
+This repository provides two closely related MATLAB pipelines:
 
-`ENet_neuroimaging_pipeline` and `TSPO_ENet_pipeline` implement a robust **Elastic Net classification pipeline** for neuroimaging feature matrices.
+-   **ENet_neuroimaging_pipeline** -- generic implementation for
+    neuroimaging feature matrices
+-   **TSPO_ENet_pipeline** -- original TSPO PET--specific version
 
-Elastic Net combines **L1 (lasso)** and **L2 (ridge)** regularization, allowing the model to:
+Both implement **Elastic Net regularized classification** using repeated
+nested cross‑validation, permutation testing, and out‑of‑bag bootstrap
+uncertainty estimation.
 
-- perform **feature selection**
-- handle **high-dimensional data**
-- reduce overfitting when **p ≈ n or p > n**
+The pipelines are designed for **small to moderate sample size
+neuroimaging datasets** where feature dimensionality can approach or
+exceed sample size.
 
-The pipelines are designed for **subjects × features** datasets common in neuroimaging such as:
+------------------------------------------------------------------------
 
-- PET ROI binding values
-- fMRI ROI beta estimates
-- cortical thickness or morphometry
-- connectivity matrices or edge features
-- graph metrics
-- multimodal ROI feature sets
+# Overview
 
-The architecture mirrors the PLSDA pipelines and estimates predictive performance while minimizing overfitting by combining:
+Elastic Net combines:
 
-- repeated nested cross-validation
-- leakage-free preprocessing
-- hyperparameter tuning
-- permutation testing
-- bootstrap confidence intervals
-- feature stability metrics
-- learning curves
+-   **L1 (lasso) regularization** → feature selection
+-   **L2 (ridge) regularization** → shrinkage and stability
 
-The **TSPO_ENet_pipeline** is the original TSPO-specific version.  
-The **ENet_neuroimaging_pipeline** is the **generic version** supporting different scaling modes and global signal definitions.
+This combination allows models to:
 
----
+-   handle **high‑dimensional data (p ≥ n)**
+-   perform **automatic feature selection**
+-   reduce **overfitting**
+-   provide **interpretable feature weights**
 
-# 1. Pipeline Architecture
+Typical neuroimaging inputs include:
 
-The pipeline uses **repeated nested cross-validation**.
+-   PET ROI binding values
+-   fMRI ROI beta estimates
+-   cortical thickness / morphometry
+-   functional connectivity edges
+-   graph metrics
+-   multimodal ROI feature matrices
 
-## Outer Cross-Validation
+------------------------------------------------------------------------
+
+# Pipeline Architecture
+
+The pipelines estimate predictive performance using **repeated nested
+cross‑validation**.
+
+## Outer Cross‑Validation
 
 Purpose: estimate **generalization performance**.
 
-Process:
+Workflow:
 
-Data → split into K folds  
-Train model on K−1 folds  
-Test model on held-out fold
+1.  Split data into **K folds**
+2.  Train model on **K−1 folds**
+3.  Test on the **held‑out fold**
 
-Outputs include:
+Metrics:
 
-- AUC
-- accuracy
-- sensitivity
-- specificity
+-   AUC (primary metric)
+-   accuracy
+-   sensitivity
+-   specificity
 
----
+------------------------------------------------------------------------
 
-## Inner Cross-Validation
+## Inner Cross‑Validation
 
-Purpose: select the optimal **Elastic Net hyperparameters**:
+Purpose: tune Elastic Net hyperparameters:
 
-- **alpha** → L1 vs L2 regularization balance
-- **lambda** → regularization strength
+-   **alpha** -- L1 vs L2 regularization balance
+-   **lambda** -- regularization strength
 
-Process:
+For each outer training fold:
 
-Training set → inner CV  
-Evaluate alpha × lambda grid  
-Select combination with highest mean AUC
+1.  Evaluate the **alpha × lambda grid**
+2.  Select combination with **highest inner‑CV AUC**
 
----
+------------------------------------------------------------------------
 
-## Repeated Cross-Validation
+## Repeated Cross‑Validation
 
-The outer CV procedure is repeated:
-
-nRepeats times
+The outer CV procedure is repeated **nRepeats times**.
 
 Benefits:
 
-- reduces variance of performance estimates
-- enables feature stability estimation
-- improves reliability of interpretation
+-   reduces variance of performance estimates
+-   enables feature stability analysis
+-   improves reliability of interpretation
 
----
+------------------------------------------------------------------------
 
-# 2. Input Data Structure
+# Input Data Structure
 
-## Feature Matrix X
+## Feature Matrix
 
-X : [n × p]
+X : \[n × p\]
 
-| Dimension | Meaning |
-|---|---|
-| n | subjects |
-| p | features |
+  Dimension   Meaning
+  ----------- --------------------
+  n           number of subjects
+  p           number of features
 
-Examples:
+Example features:
 
-- PET ROI binding
-- fMRI ROI beta estimates
-- cortical thickness
-- graph metrics
-- connectivity strengths
-- edge weights
+-   PET ROI binding
+-   fMRI ROI beta estimates
+-   cortical thickness
+-   connectivity strengths
+-   graph metrics
 
----
+------------------------------------------------------------------------
 
-## Outcome Vector Y
+## Outcome Vector
 
-Binary outcome vector:
-
-Y : [n × 1]
+Y : \[n × 1\]
 
 Accepted formats:
 
-- numeric
-- logical
-- categorical
-- string
-- cellstr
+-   numeric
+-   logical
+-   categorical
+-   string
+-   cell array of strings
 
 Internally converted to:
 
@@ -129,165 +133,114 @@ yNum = double(Y == max(Y))
 
 The **maximum label becomes the positive class**.
 
----
+------------------------------------------------------------------------
 
-# 3. Preprocessing
+# Preprocessing
 
-The pipeline performs **leakage-free scaling** inside each cross-validation fold.
+Scaling is performed **inside each cross‑validation fold** to prevent
+data leakage.
 
-Example:
+Example (z‑score):
 
-Xtrain_z = (Xtrain − mean(Xtrain)) / std(Xtrain)  
-Xtest_z  = (Xtest − mean(Xtrain)) / std(Xtrain)
-
-Scaling parameters are learned **only from training data**.
+Xtrain_z = (Xtrain − mean(Xtrain)) / std(Xtrain)\
+Xtest_z = (Xtest − mean(Xtrain)) / std(Xtrain)
 
 Scaling options:
 
-- opts.scale = 'zscore' (default)
-- opts.scale = 'center'
-- opts.scale = 'none'
+opts.scale = 'zscore' (default)\
+opts.scale = 'center'\
+opts.scale = 'none'
 
-For most neuroimaging matrices **z-score scaling is recommended**.
+For most neuroimaging datasets **z‑score scaling is recommended**.
 
----
+------------------------------------------------------------------------
 
-# 4. Choosing Hyperparameters
+# Hyperparameters
 
-Default parameters are optimized for **small neuroimaging samples**.
+Default settings are designed for **small neuroimaging datasets**.
 
-| Parameter | Default | Purpose |
-|---|---|---|
-outerK | 5 | outer CV folds |
-innerK | 4 | hyperparameter tuning |
-nRepeats | 50 | CV repetitions |
-nPerm | 1000 | permutation tests |
-nBoot | 500 | bootstrap samples |
-learningSteps | 6 | learning curve points |
+  Parameter       Default
+  --------------- ---------
+  outerK          5
+  innerK          4
+  nRepeats        50
+  nPerm           1000
+  nBoot           500
+  learningSteps   6
 
-Elastic Net hyperparameters:
+Elastic Net parameters:
 
-| Parameter | Default | Purpose |
-|---|---|---|
-alphaGrid | [0.05–1] | L1/L2 mixing |
-lambdaGrid | logspace(-3,1,25) | regularization strength |
+  Parameter    Default
+  ------------ ----------------------------------
+  alphaGrid    \[0.05 0.1 0.25 0.5 0.75 0.9 1\]
+  lambdaGrid   logspace(-3,1,25)
 
----
+------------------------------------------------------------------------
 
-# 5. Recommended Settings by Dataset Type
+# Output Structure
 
-## High-dimensional datasets (p >> n)
-
-Examples:
-
-- connectivity edges
-- voxelwise features
-- multimodal matrices
-
-Recommended:
-
-outerK = 4–5  
-innerK = 3–4  
-nRepeats ≥ 50
-
-Higher alpha encourages **sparser models**.
-
----
-
-## Moderate dimensional datasets (p ≈ n)
-
-Examples:
-
-- ROI beta estimates
-- cortical parcellations
-
-Recommended:
-
-outerK = 5  
-innerK = 4–5  
-nRepeats = 30–50
-
----
-
-## Lower dimensional datasets (p < n)
-
-Examples:
-
-- graph summary metrics
-- small ROI feature sets
-
-Recommended:
-
-outerK = 5–10  
-innerK = 5  
-nRepeats = 10–30
-
----
-
-# 6. Output Structure
-
-The pipeline returns:
+The pipeline returns a MATLAB structure:
 
 results
 
-### Cross‑validated performance
+## Cross‑validated performance
 
-results.AUC  
-results.ACC  
-results.SENS  
-results.SPEC  
+-   results.AUC
+-   results.ACC
+-   results.SENS
+-   results.SPEC
 
 Fold‑level metrics:
 
-results.allAUC  
-results.allACC  
-results.allSENS  
-results.allSPEC  
+-   results.allAUC
+-   results.allACC
+-   results.allSENS
+-   results.allSPEC
 
-Primary metric:
+The **primary performance estimate** is:
 
 results.AUC
 
----
+------------------------------------------------------------------------
 
-### Hyperparameter selection
+## Hyperparameter Selection
 
-results.selectedAlpha  
+results.selectedAlpha\
 results.selectedLambda
 
----
+------------------------------------------------------------------------
 
-### Model coefficients
+## Model Coefficients
 
-results.betaStore  
-results.featureWeights  
+results.betaStore\
+results.featureWeights\
 results.meanFeatureWeight
 
-Elastic Net coefficients represent **feature importance**.
+Elastic Net produces **sparse models**, meaning many coefficients may be
+exactly zero.
 
-Due to L1 regularization many coefficients may be **exactly zero**.
+------------------------------------------------------------------------
 
----
+## Feature Stability Metrics
 
-### Feature stability metrics
-
-results.featureStability  
-results.signStability  
+results.featureStability\
+results.signStability\
 results.selectionFrequency
 
-Interpretation guidelines:
+Interpretation guideline:
 
-| Stability | Meaning |
-|---|---|
->0.8 | highly stable |
-0.4–0.8 | moderate |
-<0.4 | unstable |
+  Stability   Interpretation
+  ----------- ----------------
+  \>0.8       highly stable
+  0.4--0.8    moderate
+  \<0.4       unstable
 
----
+------------------------------------------------------------------------
 
-# 7. Global Baseline Model
+# Global Baseline Model
 
-The pipeline also fits a simple baseline model using a global feature:
+A simple baseline logistic model is also computed using a **global
+feature**:
 
 mean(X,2)
 
@@ -295,157 +248,72 @@ or
 
 median(X,2)
 
-depending on:
+This helps determine whether **regional information improves
+prediction** beyond global signal.
 
-opts.globalFun
+------------------------------------------------------------------------
 
-Example interpretation:
-
-AUC_global = 0.60  
-AUC_model = 0.74  
-
-Regional patterns provide additional predictive information.
-
----
-
-# 8. Interpreting Elastic Net Coefficients
-
-Elastic Net produces **sparse linear models**.
-
-Positive coefficient → higher values in positive class  
-Negative coefficient → lower values in positive class
-
-Example:
-
-insula weight = +0.28  
-precuneus weight = −0.21
-
-Interpretation: patients show higher insula values and lower precuneus values.
-
----
-
-# 9. Permutation Testing
+# Permutation Testing
 
 Permutation testing evaluates whether performance exceeds chance.
 
 Procedure:
 
-shuffle labels → run CV → compute AUC
+1.  Shuffle outcome labels
+2.  Re‑run cross‑validation
+3.  Compute AUC
 
 Output:
 
 results.permutation_p
 
-Interpretation:
+------------------------------------------------------------------------
 
-| p-value | Meaning |
-|---|---|
-<0.05 | significant |
-<0.01 | strong evidence |
-<0.001 | very strong evidence |
+# Bootstrap Confidence Intervals
 
----
-
-# 10. Bootstrap Confidence Intervals
-
-Bootstrap estimates uncertainty in AUC.
+Uncertainty in AUC is estimated using **out‑of‑bag (OOB) bootstrap
+sampling**.
 
 Procedure:
 
-resample subjects with replacement → run quickCV → repeat nBoot times
+1.  Sample subjects **with replacement**
+2.  Train model on the **in‑bag sample**
+3.  Evaluate performance on **out‑of‑bag subjects**
+4.  Repeat nBoot times
 
-Output:
+Outputs:
 
+results.allbootAUC\
+results.bootAUC\
 results.AUC_CI
 
-Example:
+Because evaluation occurs on **OOB subjects rather than the bootstrap
+sample**, bootstrap estimates are typically **more conservative** than
+naive bootstrap approaches.
 
-AUC = 0.72  
-CI = [0.60 0.85]
+Nested cross‑validation remains the **primary performance estimate**.
 
-Bootstrap AUC may be optimistic in small samples.  
-Nested CV remains the **primary performance estimate**.
+------------------------------------------------------------------------
 
----
+# Learning Curves
 
-# 11. Learning Curves
+Learning curves estimate how performance changes with **sample size**.
 
-Learning curves estimate **performance vs sample size**.
+results.learningSizes\
+results.learningAUC
 
-If curve increases:
+------------------------------------------------------------------------
 
-more subjects likely improve performance.
-
-If plateaued:
-
-dataset near achievable performance.
-
----
-
-# 12. Typical Result Pattern
-
-Example:
-
-Nested CV AUC = 0.74  
-Permutation p = 0.01  
-Bootstrap CI = [0.78–0.97]
-
-Interpretation:
-
-- model performs above chance
-- bootstrap optimistic for small n
-- nested CV is main estimate
-
----
-
-# 13. Recommended Reporting
-
-Example manuscript text:
-
-Elastic Net classification with repeated nested cross-validation yielded AUC = 0.74.  
-Permutation testing (5000 permutations) confirmed performance exceeded chance (p = 0.01).  
-Bootstrap sampling indicated AUC 0.90 [0.78–0.97], reflecting optimism in small samples.  
-Regions with high selection frequency and stable coefficient signs were considered robust contributors.
-
----
-
-# 14. Common Pitfalls
-
-### Data leakage
-
-Never perform scaling or feature selection on the **full dataset before CV**.
-
-### Class imbalance
-
-If CV warnings occur reduce outerK (e.g., outerK = 3).
-
-### Overinterpreting single models
-
-Interpret **stability metrics**, not individual weights.
-
----
-
-# 15. Relationship to Plotting Scripts
-
-Plotting functions typically use:
-
-- results.featureWeights
-- results.meanFeatureWeight
-- results.selectionFrequency
-- results.signStability
-
-Ensure feature order matches ROI labels or atlas indices.
-
----
-
-# 16. Summary
+# Summary
 
 The Elastic Net pipelines provide:
 
-- robust performance estimation
-- automatic feature selection
-- interpretable neuroimaging features
-- statistical validation
-- feature stability diagnostics
+-   robust performance estimation
+-   automatic feature selection
+-   interpretable neuroimaging features
+-   permutation‑based statistical inference
+-   bootstrap uncertainty estimation
+-   feature stability diagnostics
 
-making them well suited for **small‑sample neuroimaging machine‑learning studies**.
+These properties make the pipelines well suited for **small‑sample
+neuroimaging machine‑learning studies**.
