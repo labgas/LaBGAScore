@@ -1,12 +1,13 @@
 function results = TSPO_ENet_pipeline(X,Y,opts)
-
+%
 % Robust Elastic Net pipeline for TSPO ROI features.
 %
 % This function implements Elastic Net regularized logistic regression for
 % binary classification with repeated nested k-fold cross-validation.
 % It is designed for neuroimaging feature matrices (subjects × features) such
-% as PET ROI binding, fMRI ROI betas, morphometry, or connectivity-derived
-% measures. The architecture emphasizes:
+% as PET ROI binding where p (features) / n (subjects) is typically high. 
+% 
+% The architecture emphasizes:
 %   - leakage-free preprocessing (train-only scaling in every fold)
 %   - inner CV selection of Elastic Net hyperparameters (alpha, lambda)
 %   - outer CV estimation of generalization performance
@@ -22,8 +23,8 @@ function results = TSPO_ENet_pipeline(X,Y,opts)
 % INPUTS
 %   X    [n x p] numeric
 %        Feature matrix (n subjects, p features). Each column is a feature
-%        (e.g., ROI binding, ROI beta, edge weight, graph metric). Missing
-%        values should be handled upstream (impute/remove) prior to calling
+%        (e.g., ROI binding, ROI beta, edge weight, graph metric). 
+%        Missing values should be handled upstream (impute/remove) prior to calling
 %        this function.
 %
 %   Y    [n x 1] labels
@@ -47,7 +48,7 @@ function results = TSPO_ENet_pipeline(X,Y,opts)
 %                              0<alpha<1   elastic net
 %          opts.lambdaGrid    (default logspace(-3,1,25))
 %                            lambda controls overall regularization strength
-%                            (larger lambda → stronger shrinkage, more zeros).
+%                            (larger lambda → stronger shrinkage, more zeros)
 %
 %        Resampling inference:
 %          opts.nPerm         (default 1000) permutations for p-value
@@ -82,7 +83,7 @@ function results = TSPO_ENet_pipeline(X,Y,opts)
 %   Global baseline (interpretation only):
 %     results.AUC_global scalar   AUC of logistic model on mean(X,2)
 %
-%   Feature stability / interpretability:
+%   Feature stability (from CV weights):
 %     results.signStability [p x 1] proportion of runs matching mean sign
 %     results.selectionFrequency [p x 1] frequency of appearing in topK
 %                        absolute weights across runs (topK fixed at 20)
@@ -114,6 +115,10 @@ function results = TSPO_ENet_pipeline(X,Y,opts)
 %   - Accordingly, bootstrap AUC may be somewhat lower than nested CV AUC in
 %     small samples and should be viewed primarily as a measure of sampling
 %     variability rather than as the main performance estimate.
+%   - Elastic net weights are sparse for alpha closer to 1 (lasso-like),
+%     and dense for alpha closer to 0 (ridge-like). Stability metrics
+%     (featureStability, signStability, selectionFrequency) help identify
+%     robust contributors across resampling.
 %
 % IMPLEMENTATION NOTES
 %   - Inner CV performs a grid search over alphaGrid × lambdaGrid using AUC.
@@ -123,6 +128,8 @@ function results = TSPO_ENet_pipeline(X,Y,opts)
 %   - Bootstrap confidence intervals are based on out-of-bag bootstrap samples:
 %     each bootstrap replicate is trained on the in-bag sample, hyperparameters
 %     are tuned within that sample, and AUC is evaluated on out-of-bag subjects.
+%   - If stratified cvpartition fails (e.g., extreme imbalance), the code falls back
+%     to non-stratified partitions.
 %   - If some folds lack a class, reduce outerK/innerK.
 %
 % DEPENDENCIES

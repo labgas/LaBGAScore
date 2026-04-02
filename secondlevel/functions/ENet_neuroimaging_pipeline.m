@@ -7,9 +7,11 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 % cross-validation. It is designed for neuroimaging feature matrices
 % (subjects × features) such as PET ROI binding, fMRI ROI betas, morphometry,
 % connectivity-derived measures (edges), graph metrics, or multimodal ROI
-% feature sets. The architecture emphasizes:
+% feature sets. 
+% 
+% The architecture emphasizes:
 %   - leakage-free preprocessing (train-only scaling in every fold)
-%   - inner CV selection of elastic net hyperparameters (alpha, lambda)
+%   - inner CV selection of Elastic Net hyperparameters (alpha, lambda)
 %   - outer CV estimation of generalization performance
 %   - resampling-based inference (permutation p-value, bootstrap CI)
 %   - stability/interpretability metrics (mean weights, non-zero stability,
@@ -39,11 +41,15 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %          opts.innerK        (default 4)  inner k-fold CV (hyperparameter tuning)
 %          opts.nRepeats      (default 50) repeats of outer CV
 %
-%        Elastic net hyperparameters:
+%        Elastic Net hyperparameters:
 %          opts.alphaGrid     (default [0.05 0.1 0.25 0.5 0.75 0.9 1])
-%                            mixing parameter (1=lasso, 0=ridge-like)
+%                            alpha controls lasso–ridge mixing:
+%                              alpha = 1   lasso (sparse)
+%                              alpha ~ 0   ridge-like (dense)
+%                              0<alpha<1   elastic net
 %          opts.lambdaGrid    (default logspace(-3,1,25))
-%                            regularization strengths (larger = more shrinkage)
+%                            lambda controls overall regularization strength
+%                            (larger lambda → stronger shrinkage, more zeros)
 %
 %        Resampling inference:
 %          opts.nPerm         (default 1000) permutations for p-value
@@ -63,14 +69,18 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %
 % OUTPUT (results struct)
 %   Cross-validated performance (generalization estimate):
-%     results.AUC        scalar   mean AUC across repeats×outer folds
-%     results.ACC        scalar   mean accuracy across repeats×outer folds
-%     results.SENS       scalar   mean sensitivity across repeats×outer folds
-%     results.SPEC       scalar   mean specificity across repeats×outer folds
-%     results.allAUC     [nRepeats x outerK] fold-level AUC
-%     results.allACC     [nRepeats x outerK] fold-level ACC
-%     results.allSENS    [nRepeats x outerK] fold-level SENS
-%     results.allSPEC    [nRepeats x outerK] fold-level SPEC
+%     results.AUC               scalar   mean ROC AUC across repeats×outer folds
+%     results.AUC_PR            scalar   mean precision-recall AUC across repeatsxouter folds
+%     results.ACC               scalar   mean accuracy across repeats×outer folds
+%     results.SENS              scalar   mean sensitivity across repeats×outer folds
+%     results.SPEC              scalar   mean specificity across repeats×outer folds
+%     results.ACC_balanced      scalar   mean balanced accuracy across repeatsxouter folds
+%     results.allAUC            [nRepeats x outerK] fold-level ROC AUC
+%     results.allAUC_PR         [nRepeats x outerK] fold-level precision-recall AUC
+%     results.allACC            [nRepeats x outerK] fold-level ACC
+%     results.allSENS           [nRepeats x outerK] fold-level SENS
+%     results.allSPEC           [nRepeats x outerK] fold-level SPEC
+%     results.allACC_balanced   [nRepeats x outerK] fold-level balanced accuracy
 %
 %   Model selection / weights across CV:
 %     results.selectedAlpha  [nRepeats x outerK] selected alpha per outer fold
@@ -85,8 +95,11 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %     results.featureStability  [p x 1] proportion of runs where |beta|>0
 %
 %   Global baseline (interpretation only):
-%     results.AUC_global scalar   AUC of logistic model on a global summary feature
-%                        (mean/median across features, or custom opts.globalFun)
+%     results.AUC_global        scalar   AUC of logistic model on a global summary feature
+%                                   (mean/median across features, or custom opts.globalFun)
+%     results.AUC_PR_global     scalar   precision-recall AUC of logistic model on a global summary feature
+%                                   (mean/median across features, or custom
+%                                   opts.globalFun)
 %
 %   Feature stability (from CV weights):
 %     results.signStability [p x 1] proportion of runs matching mean sign
@@ -94,9 +107,12 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %                        absolute weights across runs (topK fixed at 20)
 %
 %   Permutation test:
-%     results.allpermAUC     [nPerm x 1] permuted AUC distribution
-%     results.permAUC        scalar mean permuted AUC
-%     results.permutation_p  scalar p = mean(permAUC >= observed AUC)
+%     results.allpermAUC        [nPerm x 1] permuted ROC AUC distribution
+%     results.permAUC           scalar mean permuted ROC AUC
+%     results.permutation_p     scalar p = mean(permAUC >= observed AUC)
+%     results.allpermAUC_PR     [nPerm x 1] permuted PR AUC distribution
+%     results.permAUC_PR        scalar mean permuted PR AUC
+%     results.permutation_p_PR  scalar p = mean(permAUC >= observed AUC)
 %
 %   Bootstrap:
 %     results.allbootAUC [nBoot x 1] out-of-bag bootstrap AUC distribution
@@ -109,6 +125,13 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %
 % NOTES / INTERPRETATION (high level)
 %   - Use results.AUC from nested CV as the primary generalization estimate.
+%   - Even though ROC AUC is mathematically insensitive to imbalance, in
+%       case of (strong) inbalance, additionally use
+%       - results.AUC_PR if n(positives) is low
+%       - results.balanced accuracy (mean of Sens & Spec) if n(positives) is high
+%   - Elastic Net yields sparse solutions (some betas exactly zero), making:
+%       featureStability (non-zero proportion) and selectionFrequency
+%       particularly informative for interpretation.
 %   - Bootstrap AUC is estimated using out-of-bag (OOB) testing rather than
 %     evaluating on the bootstrap sample itself, which makes it more conservative
 %     and typically less optimistic than naive bootstrap performance estimates.
@@ -122,6 +145,7 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %
 % IMPLEMENTATION NOTES
 %   - Scaling is leakage-free and controlled by opts.scale.
+%   - Inner CV performs a grid search over alphaGrid × lambdaGrid using AUC.
 %   - Outer-fold predictions use the full elastic net linear predictor
 %       score = X*beta + intercept
 %     ensuring consistency with the models evaluated during inner CV.
@@ -183,9 +207,11 @@ yNum = double(Y(:)==max(Y));
 %% -------------------------------------------------
 
 AUC  = nan(opts.nRepeats,opts.outerK);
+AUC_PR = nan(opts.nRepeats,opts.outerK);
 ACC  = nan(opts.nRepeats,opts.outerK);
 SENS = nan(opts.nRepeats,opts.outerK);
 SPEC = nan(opts.nRepeats,opts.outerK);
+ACC_balanced = nan(opts.nRepeats,opts.outerK);
 
 selectedAlpha  = nan(opts.nRepeats,opts.outerK);
 selectedLambda = nan(opts.nRepeats,opts.outerK);
@@ -197,9 +223,11 @@ parfor r = 1:opts.nRepeats
 
     % local containers for parfor
     AUC_r  = nan(1,opts.outerK);
+    AUC_PR_r  = nan(1,opts.outerK);
     ACC_r  = nan(1,opts.outerK);
     SENS_r = nan(1,opts.outerK);
     SPEC_r = nan(1,opts.outerK);
+    ACC_balanced_r  = nan(1,opts.outerK);
 
     alpha_r  = nan(1,opts.outerK);
     lambda_r = nan(1,opts.outerK);
@@ -308,6 +336,9 @@ parfor r = 1:opts.nRepeats
 
         [~,~,~,AUC_r(k)] = perfcurve(ytest,scores,1);
 
+        [~, ~, ~, AUC_PR_r(k)] = perfcurve(ytest,scores,1, ...
+            'xCrit','reca','yCrit','prec');
+
         prob = 1./(1+exp(-scores));
         pred = prob > 0.5;
 
@@ -320,14 +351,17 @@ parfor r = 1:opts.nRepeats
 
         SENS_r(k) = tp/(tp+fn);
         SPEC_r(k) = tn/(tn+fp);
+        ACC_balanced_r(k) = mean([SENS_r(k),SPEC_r(k)]);
 
     end
 
     % write back to shared arrays
     AUC(r,:)  = AUC_r;
+    AUC_PR(r,:)  = AUC_PR_r;
     ACC(r,:)  = ACC_r;
     SENS(r,:) = SENS_r;
     SPEC(r,:) = SPEC_r;
+    ACC_balanced(r,:)  = ACC_balanced_r;
 
     selectedAlpha(r,:)  = alpha_r;
     selectedLambda(r,:) = lambda_r;
@@ -346,6 +380,9 @@ featureWeights = reshape(betaStore,p,opts.nRepeats*opts.outerK);
 results.allAUC = AUC;
 results.AUC = nanmean(AUC(:));
 
+results.allAUC_PR = AUC_PR;
+results.AUC_PR = nanmean(AUC_PR(:));
+
 results.allACC = ACC;
 results.ACC = nanmean(ACC(:));
 
@@ -354,6 +391,9 @@ results.SENS = nanmean(SENS(:));
 
 results.allSPEC = SPEC;
 results.SPEC = nanmean(SPEC(:));
+
+results.allACC_balanced = ACC_balanced;
+results.ACC_balanced = nanmean(ACC_balanced(:));
 
 results.selectedAlpha  = selectedAlpha;
 results.selectedLambda = selectedLambda;
@@ -385,7 +425,10 @@ end
 mdl = fitglm(globalFeature,yNum,'Distribution','binomial');
 scores = predict(mdl,globalFeature);
 [~,~,~,AUCg] = perfcurve(yNum,scores,1);
+[~,~,~,AUC_PRg] = perfcurve(yNum,scores,1,...
+    'xCrit','reca','yCrit','prec');
 results.AUC_global = AUCg;
+results.AUC_PR_global = AUC_PRg;
 
 %% -------------------------------------------------
 % 5. Sign stability
@@ -433,6 +476,23 @@ histogram(permAUC(~isnan(permAUC)))
 hold on
 xline(results.AUC)
 title('Permutation AUC')
+
+permAUC_PR = nan(opts.nPerm,1);
+
+parfor i=1:opts.nPerm
+    yp = yNum(randperm(n));
+    permAUC_PR(i) = quickCV_ENet_PR(X,yp,opts);
+end
+
+results.allpermAUC_PR = permAUC_PR;
+results.permAUC_PR = nanmean(permAUC_PR);
+results.permutation_p_PR = mean(permAUC_PR >= results.AUC_PR,'omitnan');
+
+figure
+histogram(permAUC(~isnan(permAUC_PR)))
+hold on
+xline(results.AUC_PR)
+title('Permutation PR AUC distribution')
 
 %% -------------------------------------------------
 % 8. Bootstrap CI (out-of-bag bootstrap)

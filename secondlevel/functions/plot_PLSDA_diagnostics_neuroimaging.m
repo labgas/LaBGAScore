@@ -126,9 +126,9 @@ roiNames = roiNames(:);
 
 % Robust LV selection/clamping
 LV = max(1, min(LV, size(XL,2)));
-if isfield(results,'finalLV') && ~isempty(results.finalLV)
-    LV = max(1, min(results.finalLV, size(XL,2)));
-end
+% if isfield(results,'finalLV') && ~isempty(results.finalLV)
+%     LV = max(1, min(results.finalLV, size(XL,2)));
+% end
 
 % --------------------------
 % 1. ROI table

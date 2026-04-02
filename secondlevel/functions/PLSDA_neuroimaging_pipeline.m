@@ -61,14 +61,18 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %
 % OUTPUT (results struct)
 %   Cross-validated performance (generalization estimate):
-%     results.AUC        scalar   mean AUC across repeats×outer folds
-%     results.ACC        scalar   mean accuracy across repeats×outer folds
-%     results.SENS       scalar   mean sensitivity across repeats×outer folds
-%     results.SPEC       scalar   mean specificity across repeats×outer folds
-%     results.allAUC     [nRepeats x outerK] fold-level AUC
-%     results.allACC     [nRepeats x outerK] fold-level ACC
-%     results.allSENS    [nRepeats x outerK] fold-level SENS
-%     results.allSPEC    [nRepeats x outerK] fold-level SPEC
+%     results.AUC               scalar   mean ROC AUC across repeats×outer folds
+%     results.AUC_PR            scalar   mean precision-recall AUC across repeatsxouter folds
+%     results.ACC               scalar   mean accuracy across repeats×outer folds
+%     results.SENS              scalar   mean sensitivity across repeats×outer folds
+%     results.SPEC              scalar   mean specificity across repeats×outer folds
+%     results.ACC_balanced      scalar   mean balanced accuracy across repeatsxouter folds
+%     results.allAUC            [nRepeats x outerK] fold-level ROC AUC
+%     results.allAUC_PR         [nRepeats x outerK] fold-level precision-recall AUC
+%     results.allACC            [nRepeats x outerK] fold-level ACC
+%     results.allSENS           [nRepeats x outerK] fold-level SENS
+%     results.allSPEC           [nRepeats x outerK] fold-level SPEC
+%     results.allACC_balanced   [nRepeats x outerK] fold-level balanced accuracy
 %
 %   Model selection / weights across CV:
 %     results.selectedLV [nRepeats x outerK] selected LV per outer fold
@@ -82,8 +86,11 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %                         rarely exactly zero; included for plot symmetry)
 %
 %   Global baseline (interpretation only):
-%     results.AUC_global scalar   AUC of logistic model on a global summary feature
-%                        (mean/median across features, or custom opts.globalFun)
+%     results.AUC_global        scalar   ROC AUC of logistic model on a global summary feature
+%                                   (mean/median across features, or custom opts.globalFun)
+%     results.AUC_PR_global     scalar   precision-recall AUC of logistic model on a global summary feature
+%                                   (mean/median across features, or custom
+%                                   opts.globalFun)
 %
 %   Final model on all data (interpretation only; NOT for performance):
 %     results.finalLV        scalar median selected LV across all runs (then capped valid)
@@ -103,13 +110,16 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %                        absolute weights across runs (topK fixed at 20)
 %
 %   Permutation test:
-%     results.allpermAUC     [nPerm x 1] permuted AUC distribution
-%     results.permAUC        scalar mean permuted AUC
-%     results.permutation_p  scalar p = mean(permAUC >= observed AUC)
+%     results.allpermAUC        [nPerm x 1] permuted ROC AUC distribution
+%     results.permAUC           scalar mean permuted ROC AUC
+%     results.permutation_p     scalar p = mean(permAUC >= observed AUC)
+%     results.allpermAUC_PR     [nPerm x 1] permuted PR AUC distribution
+%     results.permAUC_PR        scalar mean permuted PR AUC
+%     results.permutation_p_PR  scalar p = mean(permAUC >= observed AUC)
 %
 %   Bootstrap:
-%     results.allbootAUC [nBoot x 1] out-of-bag bootstrap AUC distribution
-%     results.bootAUC    scalar mean out-of-bag bootstrap AUC
+%     results.allbootAUC [nBoot x 1] out-of-bag bootstrap ROC AUC distribution
+%     results.bootAUC    scalar mean out-of-bag bootstrap ROC AUC
 %     results.AUC_CI     [1 x 2] percentile CI (2.5, 97.5)
 %
 %   Learning curve:
@@ -118,6 +128,10 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %
 % NOTES / INTERPRETATION (high level)
 %   - Use results.AUC from nested CV as the primary generalization estimate.
+%   - Even though ROC AUC is mathematically insensitive to imbalance, in
+%       case of (strong) inbalance, additionally use
+%       - results.AUC_PR if n(positives) is low
+%       - results.balanced accuracy (mean of Sens & Spec) if n(positives) is high 
 %   - Bootstrap AUC is estimated using out-of-bag (OOB) testing rather than
 %     evaluating on the bootstrap sample itself, which makes it more conservative
 %     and typically less optimistic than naive bootstrap performance estimates.
@@ -181,9 +195,11 @@ yNum = double(Y(:)==max(Y));
 %% -------------------------------------------------
 
 AUC  = nan(opts.nRepeats,opts.outerK);
+AUC_PR = nan(opts.nRepeats,opts.outerK);
 ACC  = nan(opts.nRepeats,opts.outerK);
 SENS = nan(opts.nRepeats,opts.outerK);
 SPEC = nan(opts.nRepeats,opts.outerK);
+ACC_balanced = nan(opts.nRepeats,opts.outerK);
 
 selectedLV = nan(opts.nRepeats,opts.outerK);
 betaStore = nan(p+1,opts.outerK,opts.nRepeats);
@@ -274,6 +290,10 @@ for r = 1:opts.nRepeats
 
         [~,~,~,AUC(r,k)] = perfcurve(ytest,scores,1);
 
+        [~, ~, ~, AUC_PR(r,k)] = perfcurve(ytest,scores,1, ...
+            'xCrit','reca','yCrit','prec');
+
+
         pred = scores>0.5;
 
         ACC(r,k) = mean(pred==ytest);
@@ -285,18 +305,23 @@ for r = 1:opts.nRepeats
 
         SENS(r,k) = tp/(tp+fn);
         SPEC(r,k) = tn/(tn+fp);
+        ACC_balanced(r,k) = mean([SENS(r,k),SPEC(r,k)]);
 
     end
 end
 
 results.allAUC  = AUC;
 results.AUC     = nanmean(AUC(:));
+results.allAUC_PR  = AUC_PR;
+results.AUC_PR     = nanmean(AUC_PR(:));
 results.allACC  = ACC;
 results.ACC     = nanmean(ACC(:));
 results.allSENS = SENS;
 results.SENS    = nanmean(SENS(:));
 results.allSPEC = SPEC;
 results.SPEC    = nanmean(SPEC(:));
+results.allACC_balanced = ACC_balanced;
+results.ACC_balanced = nanmean(ACC_balanced(:));
 
 results.selectedLV    = selectedLV;
 results.betaStore     = betaStore;
@@ -325,7 +350,10 @@ end
 mdl = fitglm(globalFeature,yNum,'Distribution','binomial');
 scores = predict(mdl,globalFeature);
 [~,~,~,AUCg] = perfcurve(yNum,scores,1);
+[~,~,~,AUC_PRg] = perfcurve(yNum,scores,1,...
+    'xCrit','reca','yCrit','prec');
 results.AUC_global = AUCg;
+results.AUC_PR_global = AUC_PRg;
 
 %% -------------------------------------------------
 % 4. Final model (interpretation only)
@@ -396,7 +424,24 @@ figure
 histogram(permAUC(~isnan(permAUC)))
 hold on
 xline(results.AUC)
-title('Permutation AUC distribution')
+title('Permutation ROC AUC distribution')
+
+permAUC_PR = nan(opts.nPerm,1);
+
+parfor i=1:opts.nPerm
+    yp = yNum(randperm(n));
+    permAUC_PR(i) = quickCV_PR(X,yp,opts);
+end
+
+results.allpermAUC_PR = permAUC_PR;
+results.permAUC_PR = nanmean(permAUC_PR);
+results.permutation_p_PR = mean(permAUC_PR >= results.AUC_PR,'omitnan');
+
+figure
+histogram(permAUC(~isnan(permAUC_PR)))
+hold on
+xline(results.AUC_PR)
+title('Permutation PR AUC distribution')
 
 %% -------------------------------------------------
 % 8. Bootstrap AUC CI (out-of-bag bootstrap)
@@ -582,6 +627,59 @@ for k=1:K
 end
 
 AUC = nanmean(auc);
+
+end
+
+function AUC_PR = quickCV_PR(X,Y,opts)
+
+if numel(unique(Y)) < 2
+    AUC_PR = NaN;
+    return
+end
+
+n = length(Y);
+K = min(opts.outerK,floor(n/2));
+
+try
+    cv = cvpartition(Y,'KFold',K,'Stratify',true);
+catch
+    cv = cvpartition(n,'KFold',K);
+end
+
+auc_pr = nan(K,1);
+
+for k=1:K
+
+    tr = training(cv,k);
+    te = test(cv,k);
+
+    ytr = Y(tr);
+    yte = Y(te);
+
+    if numel(unique(ytr))<2 || numel(unique(yte))<2
+        continue
+    end
+
+    Xtr = X(tr,:);
+    Xte = X(te,:);
+
+    [Xtr, Xte] = applyScaling(Xtr, Xte, opts.scale);
+
+    lv = capLV(opts.maxLV, Xtr);
+    if lv < 1
+        continue
+    end
+
+    [~,~,~,~,beta] = plsregress(Xtr,ytr,lv);
+
+    score = [ones(sum(te),1) Xte]*beta;
+
+    [~,~,~,auc_pr(k)] = perfcurve(yte,score,1,...
+        'xCrit','reca','yCrit','prec');
+
+end
+
+AUC_PR = nanmean(auc_pr);
 
 end
 
