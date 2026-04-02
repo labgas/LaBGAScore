@@ -107,12 +107,13 @@ function ROI_table = plot_ENet_diagnostics_neuroimaging(results, X, Y, roiNames,
 p_input = inputParser;
 addParameter(p_input,'TopN',20,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_input,'TopK',20,@(x) isnumeric(x) && isscalar(x));
-addParameter(p_input,'FreqThresh',0.5,@(x) isnumeric(x) && isscalar(x));     % robustness threshold for selectionFrequency
-addParameter(p_input,'WeightThresh',0,@(x) isnumeric(x) && isscalar(x));     % robustness threshold for |meanWeight|
-addParameter(p_input,'MapPrctile',70,@(x) isnumeric(x) && isscalar(x));      % threshold maps at top (100-MapPrctile)% abs weights
+addParameter(p_input,'FreqThresh',0.5,@(x) isnumeric(x) && isscalar(x));
+addParameter(p_input,'WeightThresh',0,@(x) isnumeric(x) && isscalar(x));
+addParameter(p_input,'MapPrctile',70,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_input,'DoPostSelection',true,@(x) islogical(x) && isscalar(x));
 addParameter(p_input,'OutPrefix','ENet',@(x) ischar(x) || isstring(x));
-addParameter(p_input,'RelaxIfEmpty',true,@(x) islogical(x) && isscalar(x)); % NEW: relax thresholds if none robust
+addParameter(p_input,'RelaxIfEmpty',true,@(x) islogical(x) && isscalar(x));
+addParameter(p_input,'UnderlayFile','',@(x) ischar(x) || isstring(x));
 parse(p_input,varargin{:});
 
 TopN          = p_input.Results.TopN;
@@ -123,6 +124,7 @@ MapPrctile    = p_input.Results.MapPrctile;
 DoPostSel     = p_input.Results.DoPostSelection;
 OutPrefix     = char(p_input.Results.OutPrefix);
 RelaxIfEmpty  = p_input.Results.RelaxIfEmpty;
+UnderlayFile  = char(p_input.Results.UnderlayFile);
 
 % --------------------------
 % Basic checks
@@ -139,6 +141,7 @@ end
 if ~exist('roiNames','var') || isempty(roiNames)
     roiNames = arrayfun(@(i) sprintf('ROI_%03d',i), 1:p, 'UniformOutput', false);
 end
+roiNames = cellstr(roiNames(:));
 
 if ~isfield(results,'meanFeatureWeight')
     error('results.meanFeatureWeight missing. Ensure ENet pipeline stores meanFeatureWeight.');
@@ -147,16 +150,14 @@ if ~isfield(results,'featureWeights')
     error('results.featureWeights missing. Ensure ENet pipeline stores featureWeights.');
 end
 if ~isfield(results,'selectionFrequency')
-    % fallback if not present
     warning('results.selectionFrequency missing: computing TopK frequency as zeros.');
     results.selectionFrequency = zeros(p,1);
 end
 if ~isfield(results,'featureStability')
-    % fallback if not present
     results.featureStability = mean(abs(results.featureWeights)>0,2);
 end
 
-% Convert Y to 0/1 numeric (same logic as your pipelines)
+% Convert Y to 0/1 numeric
 if iscell(Y) || isstring(Y) || iscategorical(Y)
     Y = grp2idx(Y);
 end
@@ -164,15 +165,13 @@ yNum = double(Y(:)==max(Y));
 
 meanW = results.meanFeatureWeight(:);
 absW  = abs(meanW);
-
-% "Stability" analogue: use selectionFrequency and featureStability (nonzero proportion)
 selFreq  = results.selectionFrequency(:);
 stabProp = results.featureStability(:);
 
 % Robustness criterion
 isRobust = (absW > WeightThresh) & (selFreq >= FreqThresh);
 
-% NEW: relax thresholds for visualization/labels only if nothing is robust
+% Relax thresholds for visualization/labels only if none robust
 FreqThresh_vis   = FreqThresh;
 WeightThresh_vis = WeightThresh;
 
@@ -199,20 +198,24 @@ disp(['Table exported: ' csvName]);
 % --------------------------
 % 2. Scatter: |meanWeight| vs selectionFrequency
 % --------------------------
-figure('Color','w'); hold on;
-scatter(absW, selFreq, 50, 'b', 'filled');
-xlabel('|Mean ENet weight|');
-ylabel('Selection frequency (TopK fraction)');
-title('ROI importance and robustness (Elastic Net)');
-grid on;
+figure('Color','w','Units','pixels','Position',[100 100 1000 800]); hold on;
+set(gcf,'Name','ENet_importance_vs_robustness','NumberTitle','off');
 
-yline(FreqThresh_vis,'r--',sprintf('freq \\ge %.2f',FreqThresh_vis));
-xline(WeightThresh_vis,'r--',sprintf('|w| > %.2f',WeightThresh_vis));
+scatter(absW, selFreq, 60, 'b', 'filled');
+xlabel('|Mean ENet weight|','FontSize',14);
+ylabel('Selection frequency (TopK fraction)','FontSize',14);
+title('ROI importance and robustness (Elastic Net)','FontSize',16);
+grid on;
+set(gca,'FontSize',14,'LineWidth',1.2);
+
+yline(FreqThresh_vis,'r--',sprintf('freq \\ge %.2f',FreqThresh_vis),'LineWidth',1.2);
+xline(WeightThresh_vis,'r--',sprintf('|w| > %.2f',WeightThresh_vis),'LineWidth',1.2);
 
 robustIdx = find(isRobust);
 for ii = 1:numel(robustIdx)
     idx = robustIdx(ii);
-    text(absW(idx)+0.02*max(absW), selFreq(idx), roiNames{idx}, 'FontSize',10);
+    text(absW(idx)+0.02*max(absW), selFreq(idx), roiNames{idx}, ...
+        'FontSize',11, 'Interpreter','none');
 end
 
 % --------------------------
@@ -221,11 +224,23 @@ end
 V = spm_vol(atlasFile);
 atlasData = spm_read_vols(V);
 
-% NEW: atlas label sanity warning
 labels = unique(atlasData(:));
 labels(labels==0 | isnan(labels)) = [];
 if ~isempty(labels) && max(labels) < p
     warning('Atlas max label (%d) < number of features p (%d). Mapping may be wrong.', max(labels), p);
+end
+
+% Optional underlay
+hasUnderlay = ~isempty(UnderlayFile) && exist(UnderlayFile,'file');
+if hasUnderlay
+    Vu = spm_vol(UnderlayFile);
+    underlayData = spm_read_vols(Vu);
+
+    if ~isequal(size(underlayData), size(atlasData))
+        error('Underlay and atlas must have the same dimensions.');
+    end
+else
+    underlayData = [];
 end
 
 wMap  = zeros(size(atlasData));
@@ -248,7 +263,6 @@ spm_write_vol(Vf,fMap); disp(['Selection frequency NIfTI saved: ' Vf.fname]);
 Vs = V; Vs.fname = sprintf('%s_featureStability_map.nii',OutPrefix);
 spm_write_vol(Vs,sMap); disp(['Feature stability NIfTI saved: ' Vs.fname]);
 
-% Thresholded weight map (~top (100-MapPrctile)%)
 threshW = prctile(abs(meanW),MapPrctile);
 wMap_thresh = zeros(size(atlasData));
 for i = 1:p
@@ -262,57 +276,214 @@ spm_write_vol(Vwt,wMap_thresh);
 disp(['Thresholded mean weight NIfTI saved: ' Vwt.fname]);
 
 % --------------------------
-% 4. Multi-panel figure: weight / selectionFrequency / featureStability
+% 4. Multi-slice figure: meanWeight / selectionFrequency / featureStability
 % --------------------------
 
-% NEW: choose slices that actually contain atlas content
+% Recompute slice selection and avoid extreme inferior/superior slices
 zHasData = squeeze(any(any(atlasData>0,1),2));
 zList = find(zHasData);
+
 if numel(zList) >= 5
-    slice_idx = zList(round(linspace(1,numel(zList),5)));
+    lo = max(1, round(0.20 * numel(zList)));
+    hi = min(numel(zList), round(0.80 * numel(zList)));
+    keepIdx = zList(lo:hi);
+
+    if numel(keepIdx) >= 5
+        slice_idx = keepIdx(round(linspace(1, numel(keepIdx), 5)));
+    else
+        slice_idx = zList(round(linspace(1, numel(zList), 5)));
+    end
 else
     slice_idx = round(linspace(1,size(wMap,3),5));
 end
 
-% Apply thresholds for display
-wDisp = wMap; % optionally threshold later
-fDisp = fMap; fDisp(fDisp < FreqThresh_vis) = 0;
+% Display maps
+wDisp = wMap;
+fDisp = fMap; 
+fDisp(fDisp < FreqThresh_vis) = 0;
 sDisp = sMap;
 
-figure('Color','w','Position',[50 50 1200 450]);
-for s = 1:length(slice_idx)
+figure('Color','k','Units','pixels','Position',[50 50 2200 1200]);
+set(gcf,'Name','ENet_multislice','NumberTitle','off');
+
+nSlices = length(slice_idx);
+baseAxes = gobjects(3,nSlices);
+
+for s = 1:nSlices
     z = slice_idx(s);
 
-    subplot(3,length(slice_idx),s);
-    imagesc(wDisp(:,:,z)'); axis image; axis off;
-    title(sprintf('MeanW Z=%d',z));
+    % ---------- Row 1: meanWeight ----------
+    axBase = subplot(3,nSlices,s);
+    baseAxes(1,s) = axBase;
+    hold(axBase,'on');
 
-    subplot(3,length(slice_idx),s+length(slice_idx));
-    imagesc(fDisp(:,:,z)'); axis image; axis off;
-    title(sprintf('Freq Z=%d',z));
+    if hasUnderlay
+        bg = orient_for_display(underlayData(:,:,z));
+        bg = bg - min(bg(:));
+        if max(bg(:)) > 0
+            bg = bg ./ max(bg(:));
+        end
+    else
+        bg = orient_for_display(double(atlasData(:,:,z) > 0));
+    end
 
-    subplot(3,length(slice_idx),s+2*length(slice_idx));
-    imagesc(sDisp(:,:,z)'); axis image; axis off;
-    title(sprintf('Stab Z=%d',z));
+    imagesc(bg,'Parent',axBase);
+    axis(axBase,'image');
+    axis(axBase,'off');
+    colormap(axBase,gray);
 
-    % ROI labels for robust contributors
-    for ii = 1:length(robustIdx)
-        roiID = robustIdx(ii);
-        mask = atlasData(:,:,z)==roiID;
-        [y,x] = find(mask);
-        if ~isempty(x)
-            text(median(x), median(y), roiNames{roiID}, 'Color','w', ...
-                'FontSize',8,'FontWeight','bold','HorizontalAlignment','center');
+    pos = get(axBase,'Position');
+    axOverlay = axes('Position',pos,'Color','none');
+    ov = rot90(orient_for_display(wDisp(:,:,z)), 2);
+    hOv = imagesc(ov,'Parent',axOverlay);
+    axis(axOverlay,'image');
+    axis(axOverlay,'off');
+    colormap(axOverlay,jet);
+
+    nz = ov(abs(ov) > 0);
+    if ~isempty(nz)
+        cmax = max(abs(nz));
+        if cmax == 0 || isnan(cmax) || isinf(cmax), cmax = 1; end
+        caxis(axOverlay,[-cmax cmax]);
+    end
+
+    set(hOv,'AlphaData', 0.75 * double(abs(ov) > 0));
+
+    % ---------- Row 2: selectionFrequency ----------
+    axBase = subplot(3,nSlices,s+nSlices);
+    baseAxes(2,s) = axBase;
+    hold(axBase,'on');
+
+    if hasUnderlay
+        bg = orient_for_display(underlayData(:,:,z));
+        bg = bg - min(bg(:));
+        if max(bg(:)) > 0
+            bg = bg ./ max(bg(:));
+        end
+    else
+        bg = orient_for_display(double(atlasData(:,:,z) > 0));
+    end
+
+    imagesc(bg,'Parent',axBase);
+    axis(axBase,'image');
+    axis(axBase,'off');
+    colormap(axBase,gray);
+
+    pos = get(axBase,'Position');
+    axOverlay = axes('Position',pos,'Color','none');
+    ov = rot90(orient_for_display(fDisp(:,:,z)), 2);
+    hOv = imagesc(ov,'Parent',axOverlay);
+    axis(axOverlay,'image');
+    axis(axOverlay,'off');
+    colormap(axOverlay,hot);
+
+    nz = ov(ov > 0);
+    if ~isempty(nz)
+        cmin = min(nz);
+        cmax = max(nz);
+        if cmax <= cmin
+            cmax = cmin + eps;
+        end
+        caxis(axOverlay,[cmin cmax]);
+    end
+
+    set(hOv,'AlphaData', 0.75 * double(ov > 0));
+
+    % ---------- Row 3: featureStability ----------
+    axBase = subplot(3,nSlices,s+2*nSlices);
+    baseAxes(3,s) = axBase;
+    hold(axBase,'on');
+
+    if hasUnderlay
+        bg = orient_for_display(underlayData(:,:,z));
+        bg = bg - min(bg(:));
+        if max(bg(:)) > 0
+            bg = bg ./ max(bg(:));
+        end
+    else
+        bg = orient_for_display(double(atlasData(:,:,z) > 0));
+    end
+
+    imagesc(bg,'Parent',axBase);
+    axis(axBase,'image');
+    axis(axBase,'off');
+    colormap(axBase,gray);
+
+    pos = get(axBase,'Position');
+    axOverlay = axes('Position',pos,'Color','none');
+    ov = rot90(orient_for_display(sDisp(:,:,z)), 2);
+    hOv = imagesc(ov,'Parent',axOverlay);
+    axis(axOverlay,'image');
+    axis(axOverlay,'off');
+    colormap(axOverlay,jet);
+
+    nz = ov(ov > 0);
+    if ~isempty(nz)
+        cmin = min(nz);
+        cmax = max(nz);
+        if cmax <= cmin
+            cmax = cmin + eps;
+        end
+        caxis(axOverlay,[cmin cmax]);
+    end
+
+    set(hOv,'AlphaData', 0.75 * double(ov > 0));
+end
+
+% ROI labels
+for s = 1:nSlices
+    z = slice_idx(s);
+
+    for row = 1:3
+        axBase = baseAxes(row,s);
+        hold(axBase,'on');
+
+        for ii = 1:length(robustIdx)
+            roiID = robustIdx(ii);
+
+            mask = rot90(orient_for_display(atlasData(:,:,z) == roiID), 2);
+            [yy,xx] = find(mask);
+
+            if numel(xx) >= 8
+                text(axBase, median(xx), median(yy), roiNames{roiID}, ...
+                    'Color','w', ...
+                    'FontSize',8, ...
+                    'FontWeight','bold', ...
+                    'HorizontalAlignment','center', ...
+                    'VerticalAlignment','middle', ...
+                    'Interpreter','none', ...
+                    'BackgroundColor','k', ...
+                    'Margin',0.5);
+            end
         end
     end
 end
-colormap('jet');
-try
-    sgtitle('Elastic Net: mean weights, selection frequency, feature stability (robust ROIs labeled)');
-catch
-    subtitle('Elastic Net: mean weights, selection frequency, feature stability (robust ROIs labeled)');
+
+% Column headers: z in mm
+for s = 1:nSlices
+    ax = baseAxes(1,s);
+    nx = size(atlasData,1);
+    ny = size(atlasData,2);
+    xyz_mm = V.mat * [nx/2; ny/2; slice_idx(s); 1];
+    z_mm = xyz_mm(3);
+
+    title(ax, sprintf('z = %.0f mm', z_mm), ...
+        'Color','w', 'FontSize',16, 'FontWeight','bold');
 end
-colorbar;
+
+% Row labels once at left
+rowNames = {'MeanW','Freq','Stab'};
+for row = 1:3
+    ax = baseAxes(row,1);
+    text(ax, -0.10, 0.5, rowNames{row}, ...
+        'Units','normalized', ...
+        'Color','w', ...
+        'FontSize',16, ...
+        'FontWeight','bold', ...
+        'HorizontalAlignment','right', ...
+        'VerticalAlignment','middle', ...
+        'Interpreter','none');
+end
 
 % --------------------------
 % 5. Top-K weight table & bar plot
@@ -328,37 +499,53 @@ weight_table = table(roiNames(idx(1:topK)), ...
 
 disp(weight_table);
 
-figure('Color','w');
+figure('Color','w','Units','pixels','Position',[100 100 1400 800]);
+set(gcf,'Name',sprintf('ENet_top%d_weights',topK),'NumberTitle','off');
+
 bar(meanW(idx(1:topK)));
 xticks(1:topK);
 xticklabels(roiNames(idx(1:topK)));
+set(gca,'TickLabelInterpreter','none');
 xtickangle(45);
-ylabel('Mean Weight');
-title(sprintf('Top %d Stable Brain Features (Elastic Net)',topK));
+ylabel('Mean Weight','FontSize',14);
+title(sprintf('Top %d Stable Brain Features (Elastic Net)',topK),'FontSize',16);
+set(gca,'FontSize',14,'LineWidth',1.2);
 
 % --------------------------
 % 6. Feature selection stability plot
 % --------------------------
-figure('Color','w');
-stem(stabProp);
-xlabel('Feature Index');
-ylabel('Stability proportion (non-zero across CV runs)');
-title('Feature Selection Stability');
+figure('Color','w','Units','pixels','Position',[100 100 1400 700]);
+set(gcf,'Name','ENet_feature_stability','NumberTitle','off');
+
+stem(stabProp,'LineWidth',1.2);
+xlabel('Feature Index','FontSize',14);
+ylabel('Stability proportion (non-zero across CV runs)','FontSize',14);
+title('Feature Selection Stability','FontSize',16);
+set(gca,'FontSize',14,'LineWidth',1.2);
 
 % --------------------------
 % 7. Alpha/Lambda selection histograms (if available)
 % --------------------------
-if isfield(results,'selectedAlpha')
-    figure('Color','w');
+if isfield(results,'selectedAlpha') && ~isempty(results.selectedAlpha)
+    figure('Color','w','Units','pixels','Position',[100 100 900 700]);
+    set(gcf,'Name','ENet_alpha_selection_histogram','NumberTitle','off');
+
     histogram(results.selectedAlpha(:));
-    xlabel('Selected alpha'); ylabel('Frequency');
-    title('Alpha selection across CV folds');
+    xlabel('Selected alpha','FontSize',14);
+    ylabel('Frequency','FontSize',14);
+    title('Alpha selection across CV folds','FontSize',16);
+    set(gca,'FontSize',14,'LineWidth',1.2);
 end
-if isfield(results,'selectedLambda')
-    figure('Color','w');
+
+if isfield(results,'selectedLambda') && ~isempty(results.selectedLambda)
+    figure('Color','w','Units','pixels','Position',[100 100 900 700]);
+    set(gcf,'Name','ENet_lambda_selection_histogram','NumberTitle','off');
+
     histogram(log10(results.selectedLambda(:)));
-    xlabel('log10(selected lambda)'); ylabel('Frequency');
-    title('Lambda selection across CV folds');
+    xlabel('log10(selected lambda)','FontSize',14);
+    ylabel('Frequency','FontSize',14);
+    title('Lambda selection across CV folds','FontSize',16);
+    set(gca,'FontSize',14,'LineWidth',1.2);
 end
 
 % --------------------------
@@ -372,7 +559,6 @@ if DoPostSel
 
         Xsel = X(:,keep);
 
-        % Version-robust logistic regression + Firth/Jeffreys penalty to handle separation
         mdl = fitglm(Xsel, yNum, ...
             'Distribution','binomial', ...
             'Link','logit', ...
@@ -401,4 +587,8 @@ if DoPostSel
     end
 end
 
+end
+
+function img = orient_for_display(vol2d)
+img = rot90(vol2d, -1);
 end

@@ -177,6 +177,7 @@ if ~isfield(opts,'learningSteps'); opts.learningSteps = 6; end
 if ~isfield(opts,'scale'); opts.scale = 'zscore'; end  % 'zscore'|'center'|'none'
 if ~isfield(opts,'globalFun'); opts.globalFun = 'mean'; end % 'mean'|'median' (or function handle)
 
+rng('default')
 rng(1)
 
 %% -------------------------------------------------
@@ -365,7 +366,7 @@ results.AUC_PR_global = AUC_PRg;
 finalLV = round(nanmedian(selectedLV(:)));
 finalLV = max(1, min(finalLV, capLV(opts.maxLV, Xz)));
 
-[XL,YL,XS,YS,beta,PCTVAR,MSE,stats] = plsregress(Xz,yNum,finalLV);
+[XL,YL,XS,~,beta,PCTVAR,~,stats] = plsregress(Xz,yNum,finalLV);
 
 results.finalLV = finalLV;
 results.betaFinal = beta;
