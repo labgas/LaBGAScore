@@ -189,7 +189,7 @@ end
 if ~isfield(opts,'scale'); opts.scale = 'zscore'; end       % 'zscore'|'center'|'none'
 if ~isfield(opts,'globalFun'); opts.globalFun = 'mean'; end % 'mean'|'median'|function handle
 
-rng(1)
+rng(1,'twister')
 
 %% -------------------------------------------------
 % 1. Outcome preparation
