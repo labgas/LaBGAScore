@@ -41,13 +41,16 @@
 % CHOOSE PIPELINE(S)
 
 do_pls = true;
-do_enet = true;
+do_enet = false;
 
 
 % INPUT DIRECTORIES
 
-moodbugs2_prep_s0_define_directories;
-moodbugs2_secondlevel_m1_s0_a_set_up_paths_always_run_first;
+LaBGAScore_prep_s0_define_directories;
+a_set_up_paths_always_run_first;
+load(fullfile(resultsdir,'image_names_and_setup.mat'));
+
+group_ID = 'group'; % name of variable indicating group membership in ['roi_stats_', mygroupnamefield, '_', scaling_string, '_', results_suffix, '.mat']
 
 
 % SET MANDATORY OPTIONS FROM CORRESPONDING PREP_3a_SCRIPT
@@ -84,7 +87,28 @@ roi_set_name = 'MIST';                    % descriptive name for set of rois whi
 
 % SET CONDITIONS/CONTRASTS ON WHICH YOU WANT TO RUN THE PIPELINE(S)
 
-cons2use = 1:5; % indices from DAT.conditions or DAT.contrasts, depending on mygroupnamefield
+cons2analyze = 1:5; % indices from DAT.conditions or DAT.contrasts, depending on mygroupnamefield
+
+
+% INPUT DATA - LOAD TABLES WITH ROI DATA AND PREP FUNCTION INPUT
+
+% pre-allocate
+
+X_vars = cell(1, size(cons2analyze,2));
+
+% load results file
+
+load(fullfile(resultsdir, ['roi_stats_', mygroupnamefield, '_', scaling_string, '_', results_suffix, '.mat']));
+input_data = roi_means_table;
+varnames = input_data{1}.Properties.VariableNames(1:end-1); % group var always last
+
+% create cell arrays with X vars, and define single Y var
+
+for x = 1:size(X_vars,2)
+    X_vars{x} = table2array(input_data{x}(:,varnames)); % group var always last
+end
+
+Y_var = input_data{1}.(group_ID);
 
 
 % SET OPTIONS FOR PLS AND ENET PIPELINES
@@ -115,65 +139,26 @@ opts_ENet.learningSteps = 6;
 
 % LOAD ATLAS
 
-load(fullfile(maskdir,[roi_modelname '_combined' roi_set_name]));
-atlasFile = fullfile(maskdir,['combined_' roi_set_name]);
+load(fullfile(maskdir,[roi_modelname '_combined' roi_set_name '.mat']));
+roiatlasFile = fullfile(maskdir,['combined_' roi_set_name '.nii']);
 roiNames = roi_atlas.labels';
 
+% T1 UNDERLAY FOR PLOTTING
 
-% INPUT DATA - LOAD TABLES WITH ROI DATA AND PREP FUNCTION INPUT
-
-% pre-allocate cell arrays to store output
-
-roi_PLSDA_results = cell(size(cons2use,2),1);
-roi_ENet_results = cell(size(cons2use,2),1);
-
-% load results
-
-load(fullfile(resultsdir, ['roi_stats_', mygroupnamefield, '_', scaling_string, '_', results_suffix, '.mat']));
-
-for c = cons2use
-
-K1_ROI_file = fullfile(resultsdir,"K1_ROI.xlsx");
-K1_ROI_data = readtable(K1_ROI_file);
-K1_ROI_data = K1_ROI_data(:,[1:2,63:end]); % hardcoded, can be done more elegantly - ideally no need to trim if we produce a clean file from the excel results files, adding group
-
-% convert group var into numerical if needed
-
-groupIsCell = iscell(K1_ROI_data.Group);
-
-if groupIsCell
-
-    allAreChar = all(cellfun(@ischar,K1_ROI_data));
-
-    if allAreChar
-        for i = 1:height(K1_ROI_data)
-            if contains(K1_ROI_data.Group(i),'CFS')
-                K1_ROI_data.GroupNum(i) = 1;
-            elseif contains(K1_ROI_data.Group(i),'HC')
-                K1_ROI_data.GroupNum(i) = -1;
-            else
-                error('wrong label')
-            end
-        end
-
-    end
-
-end
-
-% remove rows with missings if needed
-
-K1_ROI_data = rmmissing(K1_ROI_data);
-
-% define X and Y for model
-
-K1_ROI_X = table2array(K1_ROI_data(:,3:end));
-K1_ROI_Y = K1_ROI_data.Group;
+T1 = which('fmriprep20_template.nii');
+T1_obj = fmri_data(T1);
+T1_obj_resample = resample_space(T1_obj,roi_atlas);
+T1_obj_resample.write('fname',fullfile(maskdir,'fmriprep20_template_downsample.nii'),'overwrite');
+T1_downsample = fullfile(maskdir,'fmriprep20_template_downsample.nii');
 
 
 % OUTPUT DIRECTORY
 
-cd(resultsdir)
-mkdir("K1_ROI");
+pipeline_resultsdir = fullfile(resultsdir,'pls_enet_pipeline');
+
+    if ~exist(pipeline_resultsdir,'dir')
+        mkdir(pipeline_resultsdir);
+    end
 
 
 %% ========================================================================
@@ -183,23 +168,104 @@ mkdir("K1_ROI");
 % PLS
 
 if do_pls
-
-    K1_ROI_PLSDA_results = PLSDA_neuroimaging_pipeline(K1_ROI_X,K1_ROI_Y,opts_PLS);
     
-    K1_ROI_PLSDA_table = plot_PLSDA_diagnostics_neuroimaging(K1_ROI_results, [], roiNames, atlasFile, ...
-        'LV',1,'TopN',14,'TopK',14,'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix','K1_ROI_PLSDA','RelaxIfEmpty',true);
+    PLS_results = cell(1, size(cons2analyze,2));
+    PLS_tables = cell(1, size(cons2analyze,2));
+    
+    for d = cons2analyze
+        
+        switch mygroupnamefield
+            
+            case 'conditions'
+        
+                pipeline_resultssubdir = fullfile(pipeline_resultsdir,DAT.conditions{d});
+
+                    if ~exist(pipeline_resultssubdir,'dir')
+                        mkdir(pipeline_resultssubdir);
+                    end
+
+                cd(pipeline_resultssubdir);
+                
+            case 'contrasts'
+                
+                pipeline_resultssubdir = fullfile(pipeline_resultsdir,DAT.contrastnames{d});
+
+                    if ~exist(pipeline_resultssubdir,'dir')
+                        mkdir(pipeline_resultssubdir);
+                    end
+
+                cd(pipeline_resultssubdir);
+                
+        end
+                
+
+        PLS_results{d} = PLSDA_neuroimaging_pipeline(X_vars{d},Y_var,opts_PLS);
+        
+        [max_varY, idx_LV] = max(PLS_results{d}.varExplainedY); 
+        
+        fprintf('\nPlotting latent variable %d explaining %.2f%% of the variance in Y\n\n', idx_LV, max_varY*100);
+    
+        PLS_tables{d} = plot_PLSDA_diagnostics_neuroimaging(PLS_results{d}, [], roiNames, roiatlasFile, ...
+            'LV',idx_LV,'TopN',min(size(X_vars{d},2),20),'TopK',min(size(X_vars{d},2),20),'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix',[num2str(cons2analyze(1,d)) '_PLS'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
+
+        save_all_open_figures_smart(pipeline_resultssubdir,[num2str(cons2analyze(1,d)) '_PLS'],{'fig','svg'},true);
+        
+        clear pipeline_resultssubdir
+        
+    end
+    
+    saveplsfilename = fullfile(pipeline_resultsdir,'PLS_DA.mat');
+    save(saveplsfilename, 'cons2analyze','varnames','PLS_results','PLS_tables','-v7.3');
 
 end
 
 % ELASTIC NET
 
 if do_enet
-
-    K1_ROI_ENet_results = ENet_neuroimaging_pipeline(K1_ROI_X,K1_ROI_Y,opts_ENet);
     
-    plot_ENet_diagnostics_neuroimaging(K1_ROI_ENet_results, K1_ROI_X, K1_ROI_Y, roiNames, atlasFile, ...
-        'TopN',14,'TopK',14,'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix','ENet_K1_ROIs','RelaxIfEmpty',true);
+    ENet_results = cell(1, size(cons2analyze,2));
+    ENet_tables = cell(1, size(cons2analyze,2));
+    
+    for d = cons2analyze
+        
+        switch mygroupnamefield
+            
+            case 'conditions'
+        
+                pipeline_resultssubdir = fullfile(pipeline_resultsdir,DAT.conditions{d});
+
+                    if ~exist(pipeline_resultssubdir,'dir')
+                        mkdir(pipeline_resultssubdir);
+                    end
+
+                cd(pipeline_resultssubdir);
+                
+            case 'contrasts'
+                
+                pipeline_resultssubdir = fullfile(pipeline_resultsdir,DAT.contrastnames{d});
+
+                    if ~exist(pipeline_resultssubdir,'dir')
+                        mkdir(pipeline_resultssubdir);
+                    end
+
+                cd(pipeline_resultssubdir);
+                
+        end
+
+     ENet_results{d} = ENet_neuroimaging_pipeline(X_vars{d},Y_var,opts_ENet);
+
+     ENet_tables{d} = plot_ENet_diagnostics_neuroimaging(ENet_results{d}, X_vars{d},Y_var, roiNames, roiatlasFile, ...
+        'TopN',min(size(X_vars{d},2),20),'TopK',min(size(X_vars{d},2),20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[num2str(cons2analyze(1,d)) '_ENet'],'RelaxIfEmpty',false);
+    
+    save_all_open_figures_smart(pipeline_resultssubdir,[num2str(cons2analyze(1,d)) '_ENet'],{'fig','svg'},true);
+        
+    clear pipeline_resultssubdir
+    
+    end
+    
+    saveenetfilename = fullfile(pipeline_resultsdir,'ENet.mat');
+    save(saveenetfilename, 'cons2analyze','varnames','ENet_results','ENet_tables','-v7.3');
 
 end
 
-end
+cd(rootdir)
