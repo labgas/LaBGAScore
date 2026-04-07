@@ -178,6 +178,7 @@ if ~isfield(opts,'scale'); opts.scale = 'zscore'; end  % 'zscore'|'center'|'none
 if ~isfield(opts,'globalFun'); opts.globalFun = 'mean'; end % 'mean'|'median' (or function handle)
 
 rng(1,'twister')
+LaBGAScore_smart_parallel_pool_setup;
 
 %% -------------------------------------------------
 % 1. Outcome preparation

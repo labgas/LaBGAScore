@@ -231,6 +231,8 @@ if do_enet
             ENet_tables{d} = plot_ENet_diagnostics_neuroimaging(ENet_results{d}, X_vars{d},Y_var, parcelNames, parcelatlasFile, ...
                 'TopN',min(size(X_vars{d},2),20),'TopK',min(size(X_vars{d},2),20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[data2analyze{d} '_ENet'],'RelaxIfEmpty',false);
             
+            save_all_open_figures_smart(pipeline_resultssubdir,[data2analyze{d} '_ENet'],{'fig','svg'},true);
+            
         end
         
         clear pipeline_resultssubdir
