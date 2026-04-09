@@ -81,9 +81,6 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %     results.featureWeights [p x (nRepeats*outerK)] betas (no intercept),
 %                        stacked across all outer folds/repeats
 %     results.meanFeatureWeight [p x 1] mean featureWeights across runs
-%     results.featureStability  [p x 1] proportion of runs where |beta|>0
-%                        (in PLS-DA this is typically ~1 because betas are
-%                         rarely exactly zero; included for plot symmetry)
 %
 %   Global baseline (interpretation only):
 %     results.AUC_global        scalar   ROC AUC of logistic model on a global summary feature
@@ -106,8 +103,6 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %     results.sdBeta      [p x 1] std beta across outer CV runs
 %     results.stabilityZ  [p x 1] meanBeta ./ sdBeta (stability statistic)
 %     results.signStability [p x 1] proportion of runs matching mean sign
-%     results.selectionFrequency [p x 1] frequency of appearing in topK
-%                        absolute weights across runs (topK fixed at 20)
 %
 %   Permutation test:
 %     results.allpermAUC        [nPerm x 1] permuted ROC AUC distribution
@@ -178,7 +173,6 @@ if ~isfield(opts,'scale'); opts.scale = 'zscore'; end  % 'zscore'|'center'|'none
 if ~isfield(opts,'globalFun'); opts.globalFun = 'mean'; end % 'mean'|'median' (or function handle)
 
 rng(1,'twister')
-LaBGAScore_smart_parallel_pool_setup;
 
 %% -------------------------------------------------
 % 1. Outcome preparation
@@ -328,7 +322,6 @@ results.selectedLV    = selectedLV;
 results.betaStore     = betaStore;
 results.featureWeights = featureWeights;
 
-results.featureStability   = mean(abs(featureWeights) > 0,2);
 results.meanFeatureWeight  = mean(featureWeights,2);
 
 fprintf('Nested CV AUC = %.3f\n',results.AUC)
@@ -514,28 +507,10 @@ title('Learning curve')
 % betaStore is (p+1) x outerK x nRepeats, so compare sign across folds/repeats
 betaNoIntercept = betaStore(2:end,:,:);
 betaFlat = reshape(betaNoIntercept,p,[]);
+% Compare each fold/repeat sign to the sign of the mean weight
 signStability = mean(sign(results.meanFeatureWeight) == sign(betaFlat),2,'omitnan');
 results.signStability = signStability;
 
-%% ---------------------------
-% 11. Top-K selection Frequency
-%% ---------------------------
-
-if size(X,2) < 20
-    topK = size(X,2);
-else
-    topK = 20;
-end
-
-freq = zeros(size(results.meanFeatureWeight));
-
-for i = 1:size(results.featureWeights,2)
-    [~,idx] = sort(abs(results.featureWeights(:,i)),'descend');
-    freq(idx(1:topK)) = freq(idx(1:topK)) + 1;
-end
-
-freq = freq / size(results.featureWeights,2);
-results.selectionFrequency = freq;
 
 end
 

@@ -31,8 +31,8 @@
 % date: KU Leuven, March 2026    
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_pet_run_PLS_ENet_pipeline.m          v1.0
-% last modified: 2026/03/07
+% @(#)% LaBGAScore_pet_run_PLS_ENet_pipeline.m          v1.1
+% last modified: 2026/04/08
 
 
 %% ========================================================================
@@ -62,6 +62,7 @@ group_ID = 'patient';
 
 varnames = cell(1, size(data2analyze,2));
 X_vars = cell(1, size(data2analyze,2));
+p = cell(1, size(data2analyze,2));
 
 % read results file
 
@@ -80,6 +81,7 @@ varnames{4} = DV_data(1,1:end-14); % exclude ROIs, only parcels
 
 for x = 1:size(X_vars,2)
     X_vars{x} = table2array(input_data(:,varnames{x}));
+    p{x} = size(X_vars{x},2); % number of features
 end
 
 Y_var = input_data.(group_ID);
@@ -149,6 +151,10 @@ pipeline_resultsdir = fullfile(resultsdir,'pls_enet_pipeline');
         mkdir(pipeline_resultsdir);
     end
 
+% START PARALLEL POOL SMARTLY
+
+LaBGAScore_smart_parallel_pool_setup;
+
 
 %% ========================================================================
 % 1. CALL PIPELINE AND PLOTTING FUNCTIONS
@@ -180,14 +186,14 @@ if do_pls
         if contains(data2analyze{d},'ROI')
     
             PLS_tables{d} = plot_PLSDA_diagnostics_neuroimaging(PLS_results{d}, [], roiNames, roiatlasFile, ...
-                'LV',idx_LV,'TopN',min(size(X_vars{d},2),20),'TopK',min(size(X_vars{d},2),20),'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix',[data2analyze{d} '_PLS'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
+                'LV',idx_LV,'TopN',min(p{d},20),'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix',[data2analyze{d} '_PLS'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
             
             save_all_open_figures_smart(pipeline_resultssubdir,[data2analyze{d} '_PLS'],{'fig','svg'},true);
         
         else
             
             PLS_tables{d} = plot_PLSDA_diagnostics_neuroimaging(PLS_results{d}, [], parcelNames, parcelatlasFile, ...
-                'LV',idx_LV,'TopN',min(size(X_vars{d},2),20),'TopK',min(size(X_vars{d},2),20),'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix',[data2analyze{d} '_PLS'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
+                'LV',idx_LV,'TopN',min(p{d},20),'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix',[data2analyze{d} '_PLS'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
            
             save_all_open_figures_smart(pipeline_resultssubdir,[data2analyze{d} '_PLS'],{'fig','svg'},true);
             
@@ -218,20 +224,22 @@ if do_enet
             end
             
         cd(pipeline_resultssubdir);
+        
+        opts_ENet.selectionTopK = min(20, max(3, ceil(0.25 * p{d})));
 
         ENet_results{d} = ENet_neuroimaging_pipeline(X_vars{d},Y_var,opts_ENet);
         
         if contains(data2analyze{d},'ROI')
     
             ENet_tables{d} = plot_ENet_diagnostics_neuroimaging(ENet_results{d}, X_vars{d},Y_var, roiNames, roiatlasFile, ...
-                'TopN',min(size(X_vars{d},2),20),'TopK',min(size(X_vars{d},2),20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[data2analyze{d} '_ENet'],'RelaxIfEmpty',false);
+                'TopN',min(p{d},20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[data2analyze{d} '_ENet'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
             
             save_all_open_figures_smart(pipeline_resultssubdir,[data2analyze{d} '_ENet'],{'fig','svg'},true);
             
         else
             
             ENet_tables{d} = plot_ENet_diagnostics_neuroimaging(ENet_results{d}, X_vars{d},Y_var, parcelNames, parcelatlasFile, ...
-                'TopN',min(size(X_vars{d},2),20),'TopK',min(size(X_vars{d},2),20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[data2analyze{d} '_ENet'],'RelaxIfEmpty',false);
+                'TopN',min(p{d},20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[data2analyze{d} '_ENet'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
             
             save_all_open_figures_smart(pipeline_resultssubdir,[data2analyze{d} '_ENet'],{'fig','svg'},true);
             

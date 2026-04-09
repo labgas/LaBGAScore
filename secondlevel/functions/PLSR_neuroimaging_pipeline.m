@@ -83,9 +83,6 @@ function results = PLSR_neuroimaging_pipeline(X,Y,opts)
 %     results.featureWeights [p x (nRepeats*outerK)] betas (no intercept),
 %                        stacked across all outer folds/repeats
 %     results.meanFeatureWeight [p x 1] mean featureWeights across runs
-%     results.featureStability  [p x 1] proportion of runs where |beta|>0
-%                        (in PLSR this is typically ~1 because betas are
-%                         rarely exactly zero; included for plot symmetry)
 %
 %   Global baseline (interpretation only):
 %     results.Q2_global   scalar  predictive-style Q2 of linear model on a
@@ -111,8 +108,6 @@ function results = PLSR_neuroimaging_pipeline(X,Y,opts)
 %     results.sdBeta      [p x 1] std beta across outer CV runs
 %     results.stabilityZ  [p x 1] meanBeta ./ sdBeta (stability statistic)
 %     results.signStability [p x 1] proportion of runs matching mean sign
-%     results.selectionFrequency [p x 1] frequency of appearing in topK
-%                        absolute weights across runs (topK fixed at 20)
 %
 %   Permutation test:
 %     results.allpermQ2     [nPerm x 1] permuted Q2 distribution
@@ -345,7 +340,6 @@ results.selectedLV      = selectedLV;
 results.betaStore       = betaStore;
 results.featureWeights  = featureWeights;
 
-results.featureStability  = mean(abs(featureWeights) > 0,2,'omitnan');
 results.meanFeatureWeight = mean(featureWeights,2,'omitnan');
 
 % New: export held-out observed/predicted values
@@ -518,35 +512,9 @@ title('Learning curve')
 
 betaNoIntercept = betaStore(2:end,:,:);
 betaFlat = reshape(betaNoIntercept,p,[]);
+% Compare each fold/repeat sign to the sign of the mean weight
 signStability = mean(sign(results.meanFeatureWeight) == sign(betaFlat),2,'omitnan');
 results.signStability = signStability;
-
-%% ---------------------------
-% 11. Top-K selection Frequency
-%% ---------------------------
-
-if size(X,2) < 20
-    topK = size(X,2);
-else
-    topK = 20;
-end
-
-freq = zeros(size(results.meanFeatureWeight));
-
-nRuns = size(results.featureWeights,2);
-
-for i = 1:nRuns
-    wi = results.featureWeights(:,i);
-    if all(isnan(wi))
-        continue
-    end
-    [~,idx] = sort(abs(wi),'descend');
-    nKeep = min(topK, numel(idx));
-    freq(idx(1:nKeep)) = freq(idx(1:nKeep)) + 1;
-end
-
-freq = freq / nRuns;
-results.selectionFrequency = freq;
 
 end
 

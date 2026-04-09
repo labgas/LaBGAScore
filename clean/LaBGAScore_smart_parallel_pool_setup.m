@@ -15,8 +15,8 @@ end
 
 availableWorkers = maxWorkers - usedWorkers;
 
-% Use 60% of available workers
-nWorkers = floor(0.6 * availableWorkers);
+% Use 66% of available workers
+nWorkers = floor(0.66 * availableWorkers);
 
 % Cap: always leave at least 1 worker free overall
 nWorkers = min(nWorkers, maxWorkers - 1);

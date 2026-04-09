@@ -49,7 +49,6 @@ function ROI_table = plot_ENet_diagnostics_neuroimaging(results, X, Y, roiNames,
 %
 % NAME-VALUE OPTIONS
 %   'TopN'            (default 20)  Number of top rows printed/exported in ROI table.
-%   'TopK'            (default 20)  Number of top features in bar plot/table and post-selection refit.
 %   'FreqThresh'      (default 0.5) Robustness threshold on selectionFrequency.
 %   'WeightThresh'    (default 0)   Robustness threshold on |meanFeatureWeight|.
 %   'MapPrctile'      (default 70)  Threshold mean-weight map by abs percentile.
@@ -106,7 +105,6 @@ function ROI_table = plot_ENet_diagnostics_neuroimaging(results, X, Y, roiNames,
 % --------------------------
 p_input = inputParser;
 addParameter(p_input,'TopN',20,@(x) isnumeric(x) && isscalar(x));
-addParameter(p_input,'TopK',20,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_input,'FreqThresh',0.5,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_input,'WeightThresh',0,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_input,'MapPrctile',70,@(x) isnumeric(x) && isscalar(x));
@@ -117,7 +115,6 @@ addParameter(p_input,'UnderlayFile','',@(x) ischar(x) || isstring(x));
 parse(p_input,varargin{:});
 
 TopN          = p_input.Results.TopN;
-TopK          = p_input.Results.TopK;
 FreqThresh    = p_input.Results.FreqThresh;
 WeightThresh  = p_input.Results.WeightThresh;
 MapPrctile    = p_input.Results.MapPrctile;
@@ -155,6 +152,16 @@ if ~isfield(results,'selectionFrequency')
 end
 if ~isfield(results,'featureStability')
     results.featureStability = mean(abs(results.featureWeights)>0,2);
+end
+
+if isfield(results,'selectionTopK') && ~isempty(results.selectionTopK)
+    TopK = results.selectionTopK;
+else
+    % fallback for backward compatibility
+    p = length(results.meanFeatureWeight);
+    TopK = min(20, max(3, ceil(0.25 * p)));
+    TopK = min(TopK, p-1);
+    TopK = max(1, TopK);
 end
 
 % Convert Y to 0/1 numeric
@@ -199,7 +206,7 @@ disp(['Table exported: ' csvName]);
 % 2. Scatter: |meanWeight| vs selectionFrequency
 % --------------------------
 figure('Color','w','Units','pixels','Position',[100 100 1000 800]); hold on;
-set(gcf,'Name','ENet_importance_vs_robustness','NumberTitle','off');
+set(gcf,'Name','ENet_meanWeight_vs_selectionFrequency','NumberTitle','off');
 
 scatter(absW, selFreq, 60, 'b', 'filled');
 xlabel('|Mean ENet weight|','FontSize',14);
@@ -208,8 +215,15 @@ title('ROI importance and robustness (Elastic Net)','FontSize',16);
 grid on;
 set(gca,'FontSize',14,'LineWidth',1.2);
 
-yline(FreqThresh_vis,'r--',sprintf('freq \\ge %.2f',FreqThresh_vis),'LineWidth',1.2);
-xline(WeightThresh_vis,'r--',sprintf('|w| > %.2f',WeightThresh_vis),'LineWidth',1.2);
+try
+    hy = yline(FreqThresh_vis,'r--','LineWidth',1.2);
+    hx = xline(WeightThresh_vis,'r--','LineWidth',1.2);
+    hy.Label = sprintf('freq >= %.2f', FreqThresh_vis);
+    hx.Label = sprintf('|w| > %.2f', WeightThresh_vis);
+catch
+    yline(FreqThresh_vis,'r--',sprintf('freq >= %.2f', FreqThresh_vis),'LineWidth',1.2);
+    xline(WeightThresh_vis,'r--',sprintf('|w| > %.2f', WeightThresh_vis),'LineWidth',1.2);
+end
 
 robustIdx = find(isRobust);
 for ii = 1:numel(robustIdx)
@@ -445,7 +459,8 @@ for s = 1:nSlices
             [yy,xx] = find(mask);
 
             if numel(xx) >= 8
-                text(axBase, median(xx), median(yy), roiNames{roiID}, ...
+                yPlot = size(mask,1) - median(yy) + 1;
+                text(axBase, median(xx), yPlot, roiNames{roiID}, ...
                     'Color','w', ...
                     'FontSize',8, ...
                     'FontWeight','bold', ...
@@ -489,26 +504,25 @@ end
 % 5. Top-K weight table & bar plot
 % --------------------------
 [~,idx] = sort(absW,'descend');
-topK = min(TopK,p);
 
-weight_table = table(roiNames(idx(1:topK)), ...
-    meanW(idx(1:topK)), ...
-    selFreq(idx(1:topK)), ...
-    stabProp(idx(1:topK)), ...
+weight_table = table(roiNames(idx(1:TopK)), ...
+    meanW(idx(1:TopK)), ...
+    selFreq(idx(1:TopK)), ...
+    stabProp(idx(1:TopK)), ...
     'VariableNames', {'feature label','mean weight','selection frequency','feature stability'});
 
 disp(weight_table);
 
 figure('Color','w','Units','pixels','Position',[100 100 1400 800]);
-set(gcf,'Name',sprintf('ENet_top%d_weights',topK),'NumberTitle','off');
+set(gcf,'Name',sprintf('ENet_top%d_weights',TopK),'NumberTitle','off');
 
-bar(meanW(idx(1:topK)));
-xticks(1:topK);
-xticklabels(roiNames(idx(1:topK)));
+bar(meanW(idx(1:TopK)));
+xticks(1:TopK);
+xticklabels(roiNames(idx(1:TopK)));
 set(gca,'TickLabelInterpreter','none');
 xtickangle(45);
 ylabel('Mean Weight','FontSize',14);
-title(sprintf('Top %d Stable Brain Features (Elastic Net)',topK),'FontSize',16);
+title(sprintf('Top %d Stable Brain Features (Elastic Net)',TopK),'FontSize',16);
 set(gca,'FontSize',14,'LineWidth',1.2);
 
 % --------------------------
@@ -555,14 +569,26 @@ if DoPostSel
     nz = find(meanW ~= 0);
     if ~isempty(nz)
         [~,ord] = sort(absW(nz),'descend');
-        keep = nz(ord(1:min(topK,numel(nz))));
+        keep = nz(ord(1:min(TopK,numel(nz))));
 
         Xsel = X(:,keep);
 
-        mdl = fitglm(Xsel, yNum, ...
-            'Distribution','binomial', ...
-            'Link','logit', ...
-            'LikelihoodPenalty','jeffreys-prior');
+        try
+            % Newer MATLAB versions
+            mdl = fitglm(Xsel, yNum, ...
+                'Distribution','binomial', ...
+                'Link','logit', ...
+                'LikelihoodPenalty','jeffreys-prior');
+        catch ME
+            if contains(ME.message,'LikelihoodPenalty') || contains(ME.identifier,'parseArgs')
+                warning('LikelihoodPenalty not supported in this MATLAB version; falling back to standard logistic regression.');
+                mdl = fitglm(Xsel, yNum, ...
+                    'Distribution','binomial', ...
+                    'Link','logit');
+            else
+                rethrow(ME);
+            end
+        end
 
         c = mdl.Coefficients;
         beta = c.Estimate(2:end);

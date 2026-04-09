@@ -185,12 +185,20 @@ if ~isfield(opts,'lambdaGrid')
     opts.lambdaGrid = logspace(-3,1,25);
 end
 
+if ~isfield(opts,'selectionTopK') || isempty(opts.selectionTopK)
+    p = size(X,2);
+    topK = min(20, max(3, ceil(0.25 * p)));
+    topK = min(topK, p-1);
+else
+    topK = min(opts.selectionTopK, size(X,2)-1);
+    topK = max(1, topK);
+end
+
 % Generic additions (kept minimal)
 if ~isfield(opts,'scale'); opts.scale = 'zscore'; end       % 'zscore'|'center'|'none'
 if ~isfield(opts,'globalFun'); opts.globalFun = 'mean'; end % 'mean'|'median'|function handle
 
 rng(1,'twister')
-LaBGAScore_smart_parallel_pool_setup
 
 %% -------------------------------------------------
 % 1. Outcome preparation
@@ -442,20 +450,16 @@ results.signStability = mean(sign(betaFlat)==sign(results.meanFeatureWeight),2);
 % 6. Top-K selection frequency
 %% -------------------------------------------------
 
-if size(X,2) < 20
-    topK = size(X,2);
-else
-    topK = 20;
-end
+freq = zeros(size(results.featureWeights,1),1);
 
-freq = zeros(p,1);
-
-for i = 1:size(featureWeights,2)
-    [~,idx] = sort(abs(featureWeights(:,i)),'descend');
+for i = 1:size(results.featureWeights,2)
+    [~,idx] = sort(abs(results.featureWeights(:,i)),'descend');
     freq(idx(1:topK)) = freq(idx(1:topK)) + 1;
 end
 
-results.selectionFrequency = freq / size(featureWeights,2);
+freq = freq / size(results.featureWeights,2);
+results.selectionFrequency = freq;
+results.selectionTopK = topK;
 
 %% -------------------------------------------------
 % 7. Permutation testing

@@ -59,7 +59,6 @@ function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, a
 %
 % NAME–VALUE OPTIONS
 %   'TopN'        (20)   Number of ROI-table rows printed to console (CSV exports all rows).
-%   'TopK'        (20)   Number of top features for weight table/bar plot (if available).
 %   'LV'          (1)    LV index to visualize (clamped to valid range).
 %   'OutPrefix'   ('PLSR')  Prefix for exported CSV/NIfTI files.
 %   'VIP_thresh'  (1)    VIP threshold for robust contributor definition/labeling.
@@ -67,6 +66,8 @@ function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, a
 %   'MapPrctile'  (70)   Threshold LV map by abs percentile (keeps top 100-MapPrctile %).
 %   'RelaxIfEmpty'(true) If no ROI passes thresholds, relax thresholds (75th percentiles)
 %                        for visualization/labeling only.
+%   'UnderlayFile' ('')   Optional structural underlay NIfTI for the multi-slice figure.
+%                         Must be in the same voxel space/dimensions as atlasFile.
 %
 % OUTPUT
 %   ROI_table table
@@ -82,7 +83,6 @@ function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, a
 %   <OutPrefix>_stabilityZ_map.nii
 %   <OutPrefix>_LV<LV>_map.nii
 %   <OutPrefix>_LV<LV>_map_thresh.nii
-%   (optional) <OutPrefix>_top<TopK>_weights.csv
 %
 % FIGURES CREATED (interactive)
 %   1) VIP vs stabilityZ scatter (robust ROIs labeled)
@@ -126,23 +126,23 @@ function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, a
 % --------------------------
 p_in = inputParser;
 addParameter(p_in,'TopN',20,@(x) isnumeric(x) && isscalar(x));
-addParameter(p_in,'TopK',20,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_in,'LV',1,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_in,'OutPrefix','PLSR',@(x) ischar(x) || isstring(x));
 addParameter(p_in,'VIP_thresh',1,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_in,'stab_thresh',2,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_in,'MapPrctile',70,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_in,'RelaxIfEmpty',true,@(x) islogical(x) && isscalar(x));
+addParameter(p_in,'UnderlayFile','',@(x) ischar(x) || isstring(x));
 parse(p_in,varargin{:});
 
 TopN         = p_in.Results.TopN;
-TopK         = p_in.Results.TopK;
 LV           = p_in.Results.LV;
 OutPrefix    = char(p_in.Results.OutPrefix);
 VIP_thresh   = p_in.Results.VIP_thresh;
 stab_thresh  = p_in.Results.stab_thresh;
 MapPrctile   = p_in.Results.MapPrctile;
 RelaxIfEmpty = p_in.Results.RelaxIfEmpty;
+UnderlayFile = char(p_in.Results.UnderlayFile);
 
 % --------------------------
 % Checks / fallbacks
@@ -175,10 +175,10 @@ end
 
 % Robust LV selection/clamping
 LV = max(1, min(LV, size(XL,2)));
-if isfield(results,'finalLV') && ~isempty(results.finalLV)
-    LV = max(1, min(LV, results.finalLV));
-    LV = max(1, min(LV, size(XL,2)));
-end
+% if isfield(results,'finalLV') && ~isempty(results.finalLV)
+%     LV = max(1, min(LV, results.finalLV));
+%     LV = max(1, min(LV, size(XL,2)));
+% end
 
 % --------------------------
 % 1. ROI table
@@ -209,26 +209,14 @@ else
     signStability = nan(p,1);
 end
 
-if isfield(results,'selectionFrequency') && ~isempty(results.selectionFrequency)
-    selectionFrequency = results.selectionFrequency(:);
-else
-    selectionFrequency = nan(p,1);
-end
-
-if isfield(results,'featureStability') && ~isempty(results.featureStability)
-    featureStability = results.featureStability(:);
-else
-    featureStability = nan(p,1);
-end
-
 ROI_table = table(roiNames, results.VIP(:), results.stabilityZ(:), meanBeta, ...
-    signStability, selectionFrequency, featureStability, isRobust(:), ...
+    signStability, isRobust(:), ...
     'VariableNames', {'ROI','VIP','stabilityZ','meanBeta','signStability', ...
-    'selectionFrequency','featureStability','RobustContributor'});
+    'RobustContributor'});
 
 % Sort primarily by robustness-relevant quantities
 [~, sortIdx] = sortrows([double(isRobust(:)) results.VIP(:) abs(results.stabilityZ(:)) abs(meanBeta)], ...
-    [-1 -2 -3 -4]); %#ok<ASGLU>
+    [-1 -2 -3 -4]);
 ROI_table = ROI_table(sortIdx,:);
 
 disp(ROI_table(1:min(TopN,height(ROI_table)),:))
@@ -237,21 +225,25 @@ writetable(ROI_table, sprintf('%s_ROI_VIP_stability.csv',OutPrefix));
 % --------------------------
 % 2. Scatter VIP vs stabilityZ
 % --------------------------
-figure('Color','w'); hold on;
-scatter(results.VIP(:), results.stabilityZ(:), 50, 'filled');
-xlabel('VIP');
-ylabel('stabilityZ');
-title('ROI importance vs stability (PLSR)');
+figure('Color','w','Units','pixels','Position',[100 100 1000 800]); hold on;
+scatter(results.VIP(:), results.stabilityZ(:), 60, 'filled');
+xlabel('VIP','FontSize',14);
+ylabel('stabilityZ','FontSize',14);
+title('ROI importance vs stability (PLSR)','FontSize',16);
 grid on;
-xline(VIP_thresh_vis,'r--');
-yline(stab_thresh_vis,'r--');
-yline(-stab_thresh_vis,'r--');
+set(gca,'FontSize',14,'LineWidth',1.2);
+xline(VIP_thresh_vis,'r--','LineWidth',1.2);
+yline(stab_thresh_vis,'r--','LineWidth',1.2);
+yline(-stab_thresh_vis,'r--','LineWidth',1.2);
 
 robustIdx = find(isRobust);
 for ii = 1:length(robustIdx)
     idx = robustIdx(ii);
-    text(results.VIP(idx)+0.02, results.stabilityZ(idx), roiNames{idx}, 'FontSize',9);
+    text(results.VIP(idx)+0.02, results.stabilityZ(idx), roiNames{idx}, ...
+        'FontSize',11, 'Interpreter','none');
 end
+
+set(gcf,'Name','VIP_vs_stability','NumberTitle','off');
 
 % --------------------------
 % 3. Atlas load + sanity checks
@@ -279,6 +271,19 @@ else
     atlasData = [];
     V = [];
     slice_idx = [];
+end
+
+% Optional underlay
+hasUnderlay = doAtlas && ~isempty(UnderlayFile) && exist(UnderlayFile,'file');
+if hasUnderlay
+    Vu = spm_vol(UnderlayFile);
+    underlayData = spm_read_vols(Vu);
+
+    if ~isequal(size(underlayData), size(atlasData))
+        error('Underlay and atlas must have the same dimensions.');
+    end
+else
+    underlayData = [];
 end
 
 % --------------------------
@@ -338,76 +343,221 @@ end
 % 6. Multi-slice figure: LV / VIP / stabilityZ
 % --------------------------
 if doAtlas
+    % Recompute slice selection here so we can avoid extreme inferior/superior slices
+    zHasData = squeeze(any(any(atlasData>0,1),2));
+    zList = find(zHasData);
+
+    if numel(zList) >= 5
+        % Trim lower and upper extremes a bit
+        lo = max(1, round(0.20 * numel(zList)));
+        hi = min(numel(zList), round(0.80 * numel(zList)));
+        keepIdx = zList(lo:hi);
+
+        if numel(keepIdx) >= 5
+            slice_idx = keepIdx(round(linspace(1, numel(keepIdx), 5)));
+        else
+            slice_idx = zList(round(linspace(1, numel(zList), 5)));
+        end
+    else
+        slice_idx = round(linspace(1,size(atlasData,3),5));
+    end
+
     VIPmap_vis = VIPmap;
     VIPmap_vis(VIPmap_vis < VIP_thresh_vis) = 0;
 
     stabMap_vis = stabMap;
     stabMap_vis(abs(stabMap_vis) < stab_thresh_vis) = 0;
 
-    figure('Color','w','Position',[50 50 1200 450]);
-    for s = 1:length(slice_idx)
+    hFig = figure('Color','k','Units','pixels','Position',[50 50 2200 1200]);
+
+    nSlices = length(slice_idx);
+    baseAxes = gobjects(3,nSlices);
+
+    for s = 1:nSlices
         z = slice_idx(s);
 
-        subplot(3,length(slice_idx),s)
-        imagesc(LVmap(:,:,z)'); axis image off
-        title(sprintf('LV%d Z=%d',LV,z))
+        % ---------- Row 1: LV ----------
+        axBase = subplot(3,nSlices,s);
+        baseAxes(1,s) = axBase;
+        hold(axBase,'on');
 
-        subplot(3,length(slice_idx),s+length(slice_idx))
-        imagesc(VIPmap_vis(:,:,z)'); axis image off
-        title(sprintf('VIP Z=%d',z))
+        if hasUnderlay
+            bg = orient_for_display(underlayData(:,:,z));
+            bg = bg - min(bg(:));
+            if max(bg(:)) > 0
+                bg = bg ./ max(bg(:));
+            end
+        else
+            bg = orient_for_display(double(atlasData(:,:,z) > 0));
+        end
 
-        subplot(3,length(slice_idx),s+2*length(slice_idx))
-        imagesc(stabMap_vis(:,:,z)'); axis image off
-        title(sprintf('stabZ Z=%d',z))
+        imagesc(bg,'Parent',axBase);
+        axis(axBase,'image');
+        axis(axBase,'off');
+        colormap(axBase,gray);
 
-        for ii = 1:length(robustIdx)
-            roiID = robustIdx(ii);
-            mask = atlasData(:,:,z) == roiID;
-            [y,x] = find(mask);
-            if ~isempty(x)
-                subplot(3,length(slice_idx),s)
-                text(median(x),median(y),roiNames{roiID},'Color','w', ...
-                    'FontSize',8,'FontWeight','bold','HorizontalAlignment','center');
+        pos = get(axBase,'Position');
+        axOverlay = axes('Position',pos,'Color','none');
+        ov = rot90(orient_for_display(LVmap(:,:,z)), 2);   % 180° flip for overlay only
+        hOv = imagesc(ov,'Parent',axOverlay);
+        axis(axOverlay,'image');
+        axis(axOverlay,'off');
+        colormap(axOverlay,jet);
 
-                subplot(3,length(slice_idx),s+length(slice_idx))
-                text(median(x),median(y),roiNames{roiID},'Color','w', ...
-                    'FontSize',8,'FontWeight','bold','HorizontalAlignment','center');
+        nz = ov(abs(ov) > 0);
+        if ~isempty(nz)
+            cmax = max(abs(nz));
+            if cmax == 0 || isnan(cmax) || isinf(cmax), cmax = 1; end
+            caxis(axOverlay,[-cmax cmax]);
+        end
 
-                subplot(3,length(slice_idx),s+2*length(slice_idx))
-                text(median(x),median(y),roiNames{roiID},'Color','w', ...
-                    'FontSize',8,'FontWeight','bold','HorizontalAlignment','center');
+        set(hOv,'AlphaData', 0.75 * double(abs(ov) > 0));
+
+        % ---------- Row 2: VIP ----------
+        axBase = subplot(3,nSlices,s+nSlices);
+        baseAxes(2,s) = axBase;
+        hold(axBase,'on');
+
+        if hasUnderlay
+            bg = orient_for_display(underlayData(:,:,z));
+            bg = bg - min(bg(:));
+            if max(bg(:)) > 0
+                bg = bg ./ max(bg(:));
+            end
+        else
+            bg = orient_for_display(double(atlasData(:,:,z) > 0));
+        end
+
+        imagesc(bg,'Parent',axBase);
+        axis(axBase,'image');
+        axis(axBase,'off');
+        colormap(axBase,gray);
+
+        pos = get(axBase,'Position');
+        axOverlay = axes('Position',pos,'Color','none');
+        ov = rot90(orient_for_display(VIPmap_vis(:,:,z)), 2);   % 180° flip for overlay only
+        hOv = imagesc(ov,'Parent',axOverlay);
+        axis(axOverlay,'image');
+        axis(axOverlay,'off');
+        colormap(axOverlay,hot);
+
+        nz = ov(ov > 0);
+        if ~isempty(nz)
+            cmin = min(nz);
+            cmax = max(nz);
+            if cmax <= cmin
+                cmax = cmin + eps;
+            end
+            caxis(axOverlay,[cmin cmax]);
+        end
+
+        set(hOv,'AlphaData', 0.75 * double(ov > 0));
+
+        % ---------- Row 3: stabilityZ ----------
+        axBase = subplot(3,nSlices,s+2*nSlices);
+        baseAxes(3,s) = axBase;
+        hold(axBase,'on');
+
+        if hasUnderlay
+            bg = orient_for_display(underlayData(:,:,z));
+            bg = bg - min(bg(:));
+            if max(bg(:)) > 0
+                bg = bg ./ max(bg(:));
+            end
+        else
+            bg = orient_for_display(double(atlasData(:,:,z) > 0));
+        end
+
+        imagesc(bg,'Parent',axBase);
+        axis(axBase,'image');
+        axis(axBase,'off');
+        colormap(axBase,gray);
+
+        pos = get(axBase,'Position');
+        axOverlay = axes('Position',pos,'Color','none');
+        ov = rot90(orient_for_display(stabMap_vis(:,:,z)), 2);   % 180° flip for overlay only
+        hOv = imagesc(ov,'Parent',axOverlay);
+        axis(axOverlay,'image');
+        axis(axOverlay,'off');
+        colormap(axOverlay,jet);
+
+        nz = ov(abs(ov) > 0);
+        if ~isempty(nz)
+            cmax = max(abs(nz));
+            if cmax == 0 || isnan(cmax) || isinf(cmax), cmax = 1; end
+            caxis(axOverlay,[-cmax cmax]);
+        end
+
+        set(hOv,'AlphaData', 0.75 * double(abs(ov) > 0));
+    end
+
+    % Add ROI labels onto the visible base axes
+    for s = 1:nSlices
+        z = slice_idx(s);
+
+        for row = 1:3
+            axBase = baseAxes(row,s);
+            hold(axBase,'on');
+
+            for ii = 1:length(robustIdx)
+                roiID = robustIdx(ii);
+
+                % IMPORTANT: label mask must follow overlay orientation
+                mask = rot90(orient_for_display(atlasData(:,:,z) == roiID), 2);
+                [yy,xx] = find(mask);
+
+                % only label ROIs with enough visible voxels in this slice
+                if numel(xx) >= 8
+                    yPlot = size(mask,1) - median(yy) + 1;
+                    text(axBase, median(xx), yPlot, roiNames{roiID}, ...
+                        'Color','w', ...
+                        'FontSize',8, ...
+                        'FontWeight','bold', ...
+                        'HorizontalAlignment','center', ...
+                        'VerticalAlignment','middle', ...
+                        'Interpreter','none', ...
+                        'BackgroundColor','k', ...
+                        'Margin',0.5);
+                end
             end
         end
     end
-    colormap('jet');
-    colorbar;
-    try
-        sgtitle(sprintf('PLSR LV%d / VIP / stabilityZ (robust ROIs labeled)',LV));
-    catch
-        subtitle(sprintf('PLSR LV%d / VIP / stabilityZ (robust ROIs labeled)',LV));
+
+    % Column headers: show real z in mm once on top row only
+    for s = 1:nSlices
+        ax = baseAxes(1,s);
+        nx = size(atlasData,1);
+        ny = size(atlasData,2);
+        xyz_mm = V.mat * [nx/2; ny/2; slice_idx(s); 1];
+        z_mm = xyz_mm(3);
+
+        title(ax, sprintf('z = %.0f mm', z_mm), ...
+            'Color','w', 'FontSize',16, 'FontWeight','bold');
     end
+
+    % Row labels once at left
+    rowNames = {'LV','VIP','stabZ'};
+    for row = 1:3
+        ax = baseAxes(row,1);
+        text(ax, -0.10, 0.5, rowNames{row}, ...
+            'Units','normalized', ...
+            'Color','w', ...
+            'FontSize',16, ...
+            'FontWeight','bold', ...
+            'HorizontalAlignment','right', ...
+            'VerticalAlignment','middle', ...
+            'Interpreter','none');
+    end
+
+    set(gcf,'Name','PLSR_multislice','NumberTitle','off');
 end
 
 % --------------------------
-% 7. Top-K weights + stability (if present)
+% 7. Top-N weights + stability (if present)
 % --------------------------
-if isfield(results,'meanBeta') && ~isempty(results.meanBeta)
-    mf = results.meanBeta(:);
-elseif isfield(results,'meanFeatureWeight') && ~isempty(results.meanFeatureWeight)
+if isfield(results,'meanFeatureWeight') && ~isempty(results.meanFeatureWeight)
     mf = results.meanFeatureWeight(:);
-else
-    mf = [];
-end
-
-if ~isempty(mf)
     [~,idx] = sort(abs(mf),'descend');
-    topK = min(TopK,p);
-
-    if isfield(results,'selectionFrequency') && ~isempty(results.selectionFrequency)
-        sf = results.selectionFrequency(:);
-    else
-        sf = nan(p,1);
-    end
 
     if isfield(results,'signStability') && ~isempty(results.signStability)
         ss = results.signStability(:);
@@ -415,26 +565,32 @@ if ~isempty(mf)
         ss = nan(p,1);
     end
 
-    weight_table = table(roiNames(idx(1:topK)), mf(idx(1:topK)), sf(idx(1:topK)), ss(idx(1:topK)), ...
-        'VariableNames', {'feature_label','meanBeta','selectionFrequency','signStability'});
+    weight_table = table(roiNames(idx(1:TopN)), mf(idx(1:TopN)), ss(idx(1:TopN)), ...
+        'VariableNames', {'feature label','mean weight','sign stability'});
     disp(weight_table);
-    writetable(weight_table, sprintf('%s_top%d_weights.csv',OutPrefix,topK));
+    writetable(weight_table, sprintf('%s_top%d_weights.csv',OutPrefix,TopN));
 
-    figure('Color','w');
-    bar(mf(idx(1:topK)));
-    xticks(1:topK);
-    xticklabels(roiNames(idx(1:topK)));
+    figure('Color','w','Units','pixels','Position',[100 100 1400 800]);
+    bar(mf(idx(1:TopN)));
+    xticks(1:TopN);
+    xticklabels(roiNames(idx(1:TopN)));
+    set(gca,'TickLabelInterpreter','none');
     xtickangle(45);
-    ylabel('Mean Beta');
-    title(sprintf('Top %d Features (mean beta)',topK));
+    ylabel('Mean Weight','FontSize',14);
+    title(sprintf('Top %d Features (mean weight)',TopN),'FontSize',16);
+    set(gca,'FontSize',14,'LineWidth',1.2);
+    set(gcf,'Name','TopN_weights','NumberTitle','off');
 end
 
-if isfield(results,'featureStability') && ~isempty(results.featureStability)
-    figure('Color','w');
-    stem(results.featureStability(:));
-    xlabel('Feature Index');
-    ylabel('Stability Proportion');
-    title('Feature Stability');
+if isfield(results,'signStability') && ~isempty(results.signStability)
+    figure('Color','w','Units','pixels','Position',[100 100 1400 700]);
+    set(gcf,'Name','PLSR_sign_stability','NumberTitle','off');
+
+    stem(results.signStability(:),'LineWidth',1.2);
+    xlabel('Feature Index','FontSize',14);
+    ylabel('Sign stability proportion','FontSize',14);
+    title('Feature Sign Stability','FontSize',16);
+    set(gca,'FontSize',14,'LineWidth',1.2);
 end
 
 % --------------------------
@@ -480,7 +636,8 @@ if isfield(results,'cvObserved') && isfield(results,'cvPredicted') && ...
 
     if ~isempty(yObs)
 
-        figure('Color','w'); hold on;
+        figure('Color','w','Units','pixels','Position',[100 100 1000 800]); hold on;
+        set(gcf,'Name','PLSR_predicted_vs_observed','NumberTitle','off');
 
         % ---------------------------------
         % Density underlay (2D histogram)
@@ -657,6 +814,7 @@ if isfield(results,'cvObserved') && isfield(results,'cvPredicted') && ...
         ylabel('Predicted Y');
         title(sprintf('Cross-validated predicted vs observed (N = %d)', numel(yObs)));
         grid on;
+        set(gca,'FontSize',14,'LineWidth',1.2);
         axis square;
 
         % ---------------------------------
@@ -708,7 +866,8 @@ if isfield(results,'allpermQ2') && ~isempty(results.allpermQ2)
     permQ2 = permQ2(isfinite(permQ2));
 
     if ~isempty(permQ2)
-        figure('Color','w');
+        figure('Color','w','Units','pixels','Position',[100 100 900 700]);
+        set(gcf,'Name','PLSR_permutation_Q2','NumberTitle','off');
         histogram(permQ2);
         hold on;
         if isfield(results,'Q2') && ~isempty(results.Q2)
@@ -718,6 +877,7 @@ if isfield(results,'allpermQ2') && ~isempty(results.allpermQ2)
         ylabel('Frequency');
         title('Permutation Q2 distribution');
         grid on;
+        set(gca,'FontSize',14,'LineWidth',1.2);
 
         txt = {};
         if isfield(results,'Q2') && ~isempty(results.Q2)
@@ -744,7 +904,8 @@ if isfield(results,'allbootQ2') && ~isempty(results.allbootQ2)
     bootQ2 = bootQ2(isfinite(bootQ2));
 
     if ~isempty(bootQ2)
-        figure('Color','w');
+        figure('Color','w','Units','pixels','Position',[100 100 900 700]);
+        set(gcf,'Name','PLSR_bootstrap_Q2','NumberTitle','off');
         histogram(bootQ2);
         hold on;
         if isfield(results,'Q2') && ~isempty(results.Q2)
@@ -758,6 +919,7 @@ if isfield(results,'allbootQ2') && ~isempty(results.allbootQ2)
         ylabel('Frequency');
         title('Bootstrap OOB Q2 distribution');
         grid on;
+        set(gca,'FontSize',14,'LineWidth',1.2);
 
         txt = {};
         if isfield(results,'Q2') && ~isempty(results.Q2)
@@ -782,12 +944,22 @@ end
 if isfield(results,'learningSizes') && isfield(results,'learningQ2') && ...
         ~isempty(results.learningSizes) && ~isempty(results.learningQ2)
 
-    figure('Color','w');
+    figure('Color','w','Units','pixels','Position',[100 100 1000 700]);
+    set(gcf,'Name','PLSR_learning_curve','NumberTitle','off');
     plot(results.learningSizes(:), results.learningQ2(:), 'o-','LineWidth',1.5);
     xlabel('Sample size');
     ylabel('Q2');
     title('Learning curve');
     grid on;
+    set(gca,'FontSize',14,'LineWidth',1.2);
 end
 
+end
+
+
+% helper function
+
+function img = orient_for_display(vol2d)
+% Keep atlas, overlay, and underlay in the same display orientation
+img = rot90(vol2d,-1);
 end

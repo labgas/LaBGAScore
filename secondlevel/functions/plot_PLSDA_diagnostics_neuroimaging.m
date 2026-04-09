@@ -10,7 +10,6 @@ function ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, XL, roiNames, 
 %   - NIfTI maps: VIP, stabilityZ, LV loadings (raw + thresholded)
 %   - Multi-slice visualization (LV / VIP / stabilityZ) with ROI labels
 %   - Optional: top-K mean weights table/bar plot (if results.meanFeatureWeight exists)
-%   - Optional: feature stability stem plot (if results.featureStability exists)
 %
 % USAGE
 %   ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, XL, roiNames, atlasFile)
@@ -25,8 +24,7 @@ function ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, XL, roiNames, 
 %          results.finalXLoadings    [p x finalLV] used if XL is empty
 %          results.finalLV           scalar       clamps LV selection if present
 %          results.meanFeatureWeight [p x 1] for top-K weight table/bar plot
-%          results.selectionFrequency[p x 1] for top-K table (if available)
-%          results.featureStability  [p x 1] for stability stem plot (if available)
+%          results.signStability  [p x 1] for stability stem plot (if available)
 %
 %   XL   [p x L] numeric
 %        X-loadings from plsregress (columns = LVs). Used to create the LV
@@ -41,7 +39,6 @@ function ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, XL, roiNames, 
 %
 % NAME–VALUE OPTIONS
 %   'TopN'         (20)   Number of ROI-table rows printed to console (CSV exports all rows).
-%   'TopK'         (20)   Number of top features for weight table/bar plot (if available).
 %   'LV'           (2)    LV index to visualize (clamped to valid range).
 %   'OutPrefix'    ('PLSDA')  Prefix for exported CSV/NIfTI files.
 %   'VIP_thresh'   (1)    VIP threshold for robust contributor definition/labeling.
@@ -71,7 +68,7 @@ function ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, XL, roiNames, 
 %   2) Multi-slice 3×N panel: LV map / VIP map / stabilityZ map
 %      with optional structural underlay and robust ROI labels
 %   3) (optional) Top-K mean weight bar plot
-%   4) (optional) Feature stability stem plot
+%   4) (optional) Sign stability stem plot
 %
 % NOTES
 %   - Robust contributors are defined as VIP>VIP_thresh AND |stabilityZ|>stab_thresh.
@@ -91,8 +88,7 @@ function ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, XL, roiNames, 
 % --------------------------
 p_in = inputParser;
 addParameter(p_in,'TopN',20,@(x) isnumeric(x) && isscalar(x));
-addParameter(p_in,'TopK',20,@(x) isnumeric(x) && isscalar(x));
-addParameter(p_in,'LV',2,@(x) isnumeric(x) && isscalar(x));
+addParameter(p_in,'LV',1,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_in,'OutPrefix','PLSDA',@(x) ischar(x) || isstring(x));
 addParameter(p_in,'VIP_thresh',1,@(x) isnumeric(x) && isscalar(x));
 addParameter(p_in,'stab_thresh',2,@(x) isnumeric(x) && isscalar(x));
@@ -102,7 +98,6 @@ addParameter(p_in,'UnderlayFile','',@(x) ischar(x) || isstring(x));
 parse(p_in,varargin{:});
 
 TopN         = p_in.Results.TopN;
-TopK         = p_in.Results.TopK;
 LV           = p_in.Results.LV;
 OutPrefix    = char(p_in.Results.OutPrefix);
 VIP_thresh   = p_in.Results.VIP_thresh;
@@ -430,7 +425,8 @@ for s = 1:nSlices
 
             % only label ROIs with enough visible voxels in this slice
             if numel(xx) >= 8
-                text(axBase, median(xx), median(yy), roiNames{roiID}, ...
+                yPlot = size(mask,1) - median(yy) + 1;
+                text(axBase, median(xx), yPlot, roiNames{roiID}, ...
                     'Color','w', ...
                     'FontSize',8, ...
                     'FontWeight','bold', ...
@@ -473,44 +469,44 @@ end
 set(gcf,'Name','PLSDA_multislice','NumberTitle','off');
 
 % --------------------------
-% 7. Top-K weights + stability (if present)
+% 7. Top-N weights + stability (if present)
 % --------------------------
 if isfield(results,'meanFeatureWeight') && ~isempty(results.meanFeatureWeight)
     mf = results.meanFeatureWeight(:);
     [~,idx] = sort(abs(mf),'descend');
-    topK = min(TopK,p);
 
-    if isfield(results,'selectionFrequency') && ~isempty(results.selectionFrequency)
-        sf = results.selectionFrequency(:);
+    if isfield(results,'signStability') && ~isempty(results.signStability)
+        ss = results.signStability(:);
     else
-        sf = nan(p,1);
+        ss = nan(p,1);
     end
 
-    weight_table = table(roiNames(idx(1:topK)), mf(idx(1:topK)), sf(idx(1:topK)), ...
-        'VariableNames', {'feature label','mean weight','selection frequency'});
+    weight_table = table(roiNames(idx(1:TopN)), mf(idx(1:TopN)), ss(idx(1:TopN)), ...
+        'VariableNames', {'feature label','mean weight','sign stability'});
     disp(weight_table);
-    writetable(weight_table, sprintf('%s_top%d_weights.csv',OutPrefix,topK));
+    writetable(weight_table, sprintf('%s_top%d_weights.csv',OutPrefix,TopN));
 
     figure('Color','w','Units','pixels','Position',[100 100 1400 800]);
-    bar(mf(idx(1:topK)));
-    xticks(1:topK);
-    xticklabels(roiNames(idx(1:topK)));
+    bar(mf(idx(1:TopN)));
+    xticks(1:TopN);
+    xticklabels(roiNames(idx(1:TopN)));
     set(gca,'TickLabelInterpreter','none');
     xtickangle(45);
     ylabel('Mean Weight','FontSize',14);
-    title(sprintf('Top %d Features (mean weight)',topK),'FontSize',16);
+    title(sprintf('Top %d Features (mean weight)',TopN),'FontSize',16);
     set(gca,'FontSize',14,'LineWidth',1.2);
-    set(gcf,'Name','Top20_weights','NumberTitle','off');
+    set(gcf,'Name','TopN_weights','NumberTitle','off');
 end
 
-if isfield(results,'featureStability') && ~isempty(results.featureStability)
+if isfield(results,'signStability') && ~isempty(results.signStability)
     figure('Color','w','Units','pixels','Position',[100 100 1400 700]);
-    stem(results.featureStability(:),'LineWidth',1.2);
+    set(gcf,'Name','PLSDA_sign_stability','NumberTitle','off');
+
+    stem(results.signStability(:),'LineWidth',1.2);
     xlabel('Feature Index','FontSize',14);
-    ylabel('Stability Proportion','FontSize',14);
-    title('Feature Selection Stability','FontSize',16);
+    ylabel('Sign stability proportion','FontSize',14);
+    title('Feature Sign Stability','FontSize',16);
     set(gca,'FontSize',14,'LineWidth',1.2);
-    set(gcf,'Name','Feature_stability','NumberTitle','off');
 end
 
 end

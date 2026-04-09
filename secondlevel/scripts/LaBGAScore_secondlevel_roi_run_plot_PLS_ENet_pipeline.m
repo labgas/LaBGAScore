@@ -30,8 +30,8 @@
 % date: KU Leuven, March 2026    
 %
 %__________________________________________________________________________
-% @(#)% LaBGAScore_secondlevel_roi_run_PLS_ENet_pipeline.m          v1.0
-% last modified: 2026/03/07
+% @(#)% LaBGAScore_secondlevel_roi_run_PLS_ENet_pipeline.m          v1.1
+% last modified: 2026/04/08
 
 
 %% ========================================================================
@@ -95,6 +95,7 @@ cons2analyze = 1:5; % indices from DAT.conditions or DAT.contrasts, depending on
 % pre-allocate
 
 X_vars = cell(1, size(cons2analyze,2));
+p = cell(1, size(cons2analyze,2));
 
 % load results file
 
@@ -106,6 +107,7 @@ varnames = input_data{1}.Properties.VariableNames(1:end-1); % group var always l
 
 for x = 1:size(X_vars,2)
     X_vars{x} = table2array(input_data{x}(:,varnames)); % group var always last
+    p{x} = size(X_vars{x},2); % number of features
 end
 
 Y_var = input_data{1}.(group_ID);
@@ -120,8 +122,8 @@ opts_PLS.outerK = 4;
 opts_PLS.innerK = 4;
 opts_PLS.nrepeats = 50;
 opts_PLS.maxLV = 3;
-opts_PLS.nPerm = 10000;
-opts_PLS.nBoot = 10000;
+opts_PLS.nPerm = 5000;
+opts_PLS.nBoot = 5000;
 opts_PLS.learningSteps = 6;
 
 % Elastic Net
@@ -159,6 +161,11 @@ pipeline_resultsdir = fullfile(resultsdir,'pls_enet_pipeline');
     if ~exist(pipeline_resultsdir,'dir')
         mkdir(pipeline_resultsdir);
     end
+
+    
+% START PARALLEL POOL SMARTLY
+
+LaBGAScore_smart_parallel_pool_setup;
 
 
 %% ========================================================================
@@ -206,7 +213,7 @@ if do_pls
         fprintf('\nPlotting latent variable %d explaining %.2f%% of the variance in Y\n\n', idx_LV, max_varY*100);
     
         PLS_tables{d} = plot_PLSDA_diagnostics_neuroimaging(PLS_results{d}, [], roiNames, roiatlasFile, ...
-            'LV',idx_LV,'TopN',min(size(X_vars{d},2),20),'TopK',min(size(X_vars{d},2),20),'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix',[num2str(cons2analyze(1,d)) '_PLS'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
+            'LV',idx_LV,'TopN',min(p{d},20),'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix',[num2str(cons2analyze(1,d)) '_PLS'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
 
         save_all_open_figures_smart(pipeline_resultssubdir,[num2str(cons2analyze(1,d)) '_PLS'],{'fig','svg'},true);
         
@@ -251,15 +258,17 @@ if do_enet
                 cd(pipeline_resultssubdir);
                 
         end
-
-     ENet_results{d} = ENet_neuroimaging_pipeline(X_vars{d},Y_var,opts_ENet);
-
-     ENet_tables{d} = plot_ENet_diagnostics_neuroimaging(ENet_results{d}, X_vars{d},Y_var, roiNames, roiatlasFile, ...
-        'TopN',min(size(X_vars{d},2),20),'TopK',min(size(X_vars{d},2),20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[num2str(cons2analyze(1,d)) '_ENet'],'RelaxIfEmpty',false);
-    
-    save_all_open_figures_smart(pipeline_resultssubdir,[num2str(cons2analyze(1,d)) '_ENet'],{'fig','svg'},true);
         
-    clear pipeline_resultssubdir
+        opts_ENet.selectionTopK = min(20, max(3, ceil(0.25 * p{d})));
+
+        ENet_results{d} = ENet_neuroimaging_pipeline(X_vars{d},Y_var,opts_ENet);
+
+        ENet_tables{d} = plot_ENet_diagnostics_neuroimaging(ENet_results{d}, X_vars{d},Y_var, roiNames, roiatlasFile, ...
+            'TopN',min(p{d},20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[num2str(cons2analyze(1,d)) '_ENet'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
+
+        save_all_open_figures_smart(pipeline_resultssubdir,[num2str(cons2analyze(1,d)) '_ENet'],{'fig','svg'},true);
+
+        clear pipeline_resultssubdir
     
     end
     
