@@ -2,8 +2,8 @@
 % Smart parallel pool setup (60% + cap)
 % -----------------------------------------
 
-c = parcluster;
-maxWorkers = c.NumWorkers;
+pc = parcluster;
+maxWorkers = pc.NumWorkers;
 
 pool = gcp('nocreate');
 
@@ -29,7 +29,7 @@ if isempty(pool) || pool.NumWorkers ~= nWorkers
     if ~isempty(pool)
         delete(pool);
     end
-    parpool(c, nWorkers);
+    parpool(pc, nWorkers);
 end
 
 fprintf('Using %d/%d workers (%.0f%% of available, capped)\n', ...
