@@ -1,6 +1,6 @@
 function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
    fmri_dat_subj, design, group, covariates, nPerm, varargin)
-% GROUP_TFCE_FROM_SUBJECT_MAPS_FL
+% GROUP_TFCE_FROM_SUBJECT_MAPS
 %
 % Group-level TFCE permutation inference starting from subject-level
 % contrast images, with optional Freedman–Lane covariate control.
