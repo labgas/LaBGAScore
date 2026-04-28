@@ -1,4 +1,34 @@
 function [stat_img, fmri_dat, region_obj, region_table] = thresholded_fmri_data_from_pval_nii (fullpath_to_pval_nii, stat_vec, mask_obj, atlas_obj, p, p_type, stat_type, thr_type, k)
+%
+% USAGE
+%
+% Create thresholded fmri_dat_st and region object for non-standard test statistic
+% types (AUC, TFCE, etc) which can be used for visualization purposes
+%
+% INPUTS
+%
+% - fullpath_to_pval_nii:       fullpath to a .nii file with p-values calculated on stat_vec thresholded at a value p of type thr_type
+% - stat_vec:                   vector containing test statistic values on which the p-values in fullpath_to_pval_nii have been calculated
+% - mask_obj:                   CANlab mask_image object for masking fullpath_to_pval_nii
+% - atlas_obj:                  CANlab atlas object for labeling purposes
+% - p:                          scalar: threshold p-value used on fullpath_to_pval_nii
+% - p_type:                     char array describing the method used to calculated p-values in fullpath_to_pval_nii, for example 'based on 1000 permutations' 
+% - stat_type:                  char array describing the type of test statistic in stat_vec
+% - thr_type:                   char array describing the type of correction done on p_stat_img, for example 'unc','fdr','fwe'
+%                               only used for fmri_dat.fullpath and .dat_descrip here
+% - k:                          integer: additional extent-level threshold you may want to apply to fmri_dat, in voxels
+%
+% OUTPUTS
+%
+% -fmri_dat:                    CANlab fmri_data_st object with stat_vec values in .dat
+%                               thresholded at the threshold previously applied to the fullpath_to_pval_nii input (reflected in p, p_type, and thr_type) 
+%                               with additional extent-level threshold k
+% -region_obj:                  CANlab region object containing a region per significant cluster in fmri_dat for visualization purposes
+% -region_table:                summary table summarizing the results in region_obj
+%
+% AUTHOR
+% 
+% Lukas Van Oudenhove, KU Leuven, 04/28/2023
 
         stat_img = statistic_image(fullpath_to_pval_nii,'type','p');
         stat_img = apply_mask(stat_img,mask_obj);
