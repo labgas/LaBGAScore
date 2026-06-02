@@ -27,8 +27,8 @@ cd(sourcedir);
     if contains(cmdout,'**/DICOM') % DICOMS are gitignored -> simply delete, but keep folder structure
        !find sub-* -type f -delete
        !datalad save -m "deleted sourcedata files to save space as they are backed up on the J-drive"
-    else                           % DICOMS are not gitignored -> drop annexed content (but classic DICOMS stored in git rather than git annex will remain present I guess)
-       !datalad drop --reckless availability 
+    else                           % DICOMS are not gitignored -> datalad remove annexed content (but classic DICOMS stored in git rather than git annex will remain present I guess)
+       !datalad remove --drop all --reckless kill -m "datalad remove sourcedata files to save space as they are backed up on the J-drive" 
     end
 
 end
