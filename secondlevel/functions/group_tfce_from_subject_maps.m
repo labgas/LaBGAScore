@@ -43,6 +43,8 @@ function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
 %  - voxelwise TFCE permutation p-values
 %
 % info : struct
+%  - TFCE_real
+%  - TFCE_null
 %  - TFCE_real_max
 %  - TFCE_null_max
 %  - p_TFCE_global
@@ -224,6 +226,8 @@ p_img.dat = p_vox;
 p_img.p  = p_vox;
 p_img.sig = logical(true(size(p_img.dat,1),1));
 
+info.TFCE_real = tfce_real;
+info.TFCE_null = TFCE_null;
 info.TFCE_real_max = TFCE_real_max;
 info.TFCE_null_max = TFCE_null_max;
 info.p_TFCE_global = p_global;
