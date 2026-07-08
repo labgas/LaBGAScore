@@ -227,7 +227,7 @@ p_img.p  = p_vox;
 p_img.sig = logical(true(size(p_img.dat,1),1));
 
 info.TFCE_real = tfce_real;
-info.TFCE_null = TFCE_null;
+info.TFCE_null = TFCE_perm;
 info.TFCE_real_max = TFCE_real_max;
 info.TFCE_null_max = TFCE_null_max;
 info.p_TFCE_global = p_global;
