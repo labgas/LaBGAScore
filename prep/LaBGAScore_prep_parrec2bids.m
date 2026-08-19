@@ -1,33 +1,53 @@
-%%% LaBGAScore_prep_parrec2bids
+%% LaBGAScore_prep_parrec2bids.m
+%
+%
+% *USAGE*
 %
 % This script converts Philips PARREC files to Nifti files and names and
-% organizes them according to BIDS specification
-%
-% USAGE
+% organizes them according to BIDS specification.
 %
 % Script should be run from the root directory of the superdataset, in this
-% example case /data/proj_bitter-reward, and assumes that 
+% example case /data/proj_bitter-reward, and assumes that
 % 1. the sourcedata, BIDS, and code subdataset are already created (using datalad if you use it)
 % 2. the sourcedata subdataset is organized according to LaBGAS convention
 % - see fmri analysis workflow Google doc on LaBGAS drive
 %
 % The script is study-specific, I indicate in the code below where
-% study-specific changes will need to be made
+% study-specific changes will need to be made.
 %
-% DEPENDENCIES
-% 
+%
+% *OPTIONS*
+%
+% * nr_sess                        number of sessions for each subject
+%
+% * task1name                      name of first task
+%
+% * task2name                      name of second task
+%
+% * slice_scan_order_exam_card     slice scan order from exam card, options 'FH' (ascending), 'HF' (descending), or 'interleaved'
+%
+% * fold_over_direction_exam_card  fold-over direction from exam card, e.g. 'AP' (currently only 'AP' implemented)
+%
+% * fat_shift_direction_exam_card  fat-shift direction from exam card, 'P' or 'A'
+%
+%
+% *DEPENDENCIES*
+%
 % 1. spm on your Matlab path
 %       https://www.fil.ion.ucl.ac.uk/spm/
 % 2. Xiangruili's dicm2nii Github repo on your Matlab path
 %       https://github.com/xiangruili/dicm2nii
 %
-%__________________________________________________________________________
+% -------------------------------------------------------------------------
 %
-% author: lukas.vanoudenhove@kuleuven.be
-% date: August, 2022
+% modified by: lukas.vanoudenhove@kuleuven.be
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_prep_parrec2bids.m           v1.2
+% date:   August, 2022
+%
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_prep_parrec2bids.m         v1.2
+%
 % last modified: 2022/12/07
 %
 %

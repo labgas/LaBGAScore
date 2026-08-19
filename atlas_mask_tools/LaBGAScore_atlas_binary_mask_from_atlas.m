@@ -1,6 +1,8 @@
 %% LaBGAScore_atlas_binary_mask_from_atlas.m
 %
 %
+% *USAGE*
+%
 % This script creates a binary mask by combining regions from one or more
 % atlases, and automatically saves the fmri_mask_image, and .nii versions
 % of it in maskdir of your dataset
@@ -10,39 +12,43 @@
 % create your mask), or an atlas object created from the fmri_mask_image
 % object after merging the original parcels, i.e. with one index for the
 % entire mask
-% 
-% USAGE
 %
 % Script should be run from the root directory of the superdataset, e.g.
 % /data/proj_discoverie
 %
-% DEPENDENCIES
+%
+% *OPTIONS*
+%
+% * save_original_atlas_obj = true/false        saves original atlas object (i.e. BEFORE merging selected parcels into one fmri_mask_image object, hence one index per parcel)
+%                                                 useful/needed if you want to label your parcel- or voxel-wise analyses with the labels included in your mask
+%
+% * save_merged_atlas_obj = true/false          saves merged atlas object (i.e. AFTER merging selected parcels into one fmri_mask_image object, hence one index for the entire mask)
+%                                                 useful/needed if you want to extract roi averages
+%
+% * singleroi = true/false                      set to true if you are writing a mask/roi with one single contiguous region
+%
+%
+% *DEPENDENCIES*
 %
 % CANlab's CanlabCore and Neuroimaging_Pattern_Masks Github repos on your Matlab path
 % if needed, clone from https://github.com/canlab
 %
-% RESOURCES
+%
+% *NOTES*
 %
 % help atlas.select_atlas_subset
 % https://canlab.github.io/_pages/using_canlab_atlases/using_canlab_atlases.html
 %
-% OPTIONS
+% -------------------------------------------------------------------------
 %
-% save_original_atlas_obj = true/false        saves original atlas object (i.e. BEFORE merging selected parcels into one fmri_mask_image object, hence one index per parcel) 
-%                                               useful/needed if you want to label your parcel- or voxel-wise analyses with the labels included in your mask
+% modified by: Aleksandra Budzinska, Lukas Van Oudenhove
 %
-% save_merged_atlas_obj = true/false          saves merged atlas object (i.e. AFTER merging selected parcels into one fmri_mask_image object, hence one index for the entire mask)
-%                                               useful/needed if you want to extract roi averages 
-%
-% singleroi = true/false                      set to true if you are writing a mask/roi with one single contiguous region
-%
-%__________________________________________________________________________
-%
-% authors: Aleksandra Budzinska, Lukas Van Oudenhove
 % date:   KU Leuven, July, 2022
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_binary_mask_from_atlas.m         v3.1       
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_atlas_binary_mask_from_atlas.m         v3.1
+%
 % last modified: 2024/06/03
 
 

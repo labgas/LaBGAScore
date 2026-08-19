@@ -1,3 +1,33 @@
+%% cluster_surface_plots.m
+%
+%
+% *USAGE*
+%
+% Study-specific ad hoc plotting script: loads a "FAPS.nii" statistical map
+% and plots 2D surface renderings of several hand-picked sagittal/coronal
+% slices (insula, amygdala/hypothalamus, PCC, hypothalamus) through hardcoded
+% voxel indices and axis limits, using the CANlab colormap (canlabCmap)
+%
+%
+% *NOTES*
+%
+% Slice indices, bounding boxes, and color-axis limits are hardcoded for the
+% specific map/study this was written for and will need to be adapted for
+% other data
+%
+% -------------------------------------------------------------------------
+%
+% modified by: Lukas Van Oudenhove
+%
+% date:   May, 2025
+%
+% -------------------------------------------------------------------------
+%
+% cluster_surface_plots.m
+%
+% last modified: 2025/05/28
+%
+%
 FAPS = spm_read_vols(spm_vol('FAPS.nii'));
 
 %% INS (sagittal) R

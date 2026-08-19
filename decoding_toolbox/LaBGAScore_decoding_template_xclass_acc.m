@@ -35,7 +35,7 @@
 %
 % -------------------------------------------------------------------------
 %
-% Lukas Van Oudenhove adapted from decoding_template.m
+% modified by: Lukas Van Oudenhove (adapted from decoding_template.m)
 %
 % date:   KU Leuven, June, 2023
 %

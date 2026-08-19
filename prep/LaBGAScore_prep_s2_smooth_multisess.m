@@ -1,18 +1,32 @@
-%% LaBGAScore_prep_s2_smooth_multisess
+%% LaBGAScore_prep_s2_smooth_multisess.m
 %
-% This script unzips fMRIprep output images, smooth them, zip the
-% smoothed images, and delete all the unzipped images again, for datasets
-% with multiple sessions
 %
-% USAGE
+% *USAGE*
+%
+% This script unzips fMRIprep output images, smooths them, zips the
+% smoothed images, and deletes all the unzipped images again, for datasets
+% with multiple sessions.
 %
 % Script should be run from the root directory of the superdataset, e.g.
 % /data/proj_discoverie
 % The script is generic, i.e. it does not require study-specific adaptions,
-% but you can change some default options if required
+% but you can change some default options if required.
 %
 %
-% DEPENDENCIES
+% *OPTIONS*
+%
+% * study_prefix    prefix used for all scripts of a given study
+%
+% * fwhm            smoothing kernel width in mm
+%
+% * prefix          string defining prefix of choice for smoothing images
+%
+% * subjs2smooth    cell array of subjects in derivdir you want to smooth, empty cell array (default) if you want to loop over all subjects
+%
+% * nr_sess         number of sessions in your experiment
+%
+%
+% *DEPENDENCIES*
 %
 % 1. LaBGAScore Github repo on Matlab path, with subfolders
 %   https://github.com/labgas/LaBGAScore
@@ -20,42 +34,27 @@
 %   will be checked by calling LaBGAScore_prep_s0_define_directories
 %
 %
-% INPUTS
+% *NOTES*
 %
-% preprocessed .nii.gz images outputted by fMRIprep
-% variables created by running LaBGAScore_prep_s0_define_directories from
-% the root directory of your (super)dataset
+% INPUTS: preprocessed .nii.gz images outputted by fMRIprep; variables
+% created by running LaBGAScore_prep_s0_define_directories from the root
+% directory of your (super)dataset
 %
+% OUTPUT: smoothed .nii.gz images
 %
-% OUTPUT
+% -------------------------------------------------------------------------
 %
-% smoothed .nii.gz images
+% modified by: Lukas Van Oudenhove
 %
-%
-% OPTIONS
-%
-% 1. study_prefix 
-%   prefix used for all scripts of a given study
-% 2. fwhm
-%   smoothing kernel width in mm
-% 3. prefix
-%   string defining prefix of choice for smoothing images
-% 4. subjs2smooth
-%   cell array of subjects in derivdir you want to smooth, empty cell array
-%   if you want to loop over all subjects
-% 5. nr_sess
-%   number of sessions in your experiment
-%
-%__________________________________________________________________________
-%
-% author: Lukas Van Oudenhove
 % date:   November, 2021
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s2_smooth_multisess.m         v1.1       
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_prep_s2_smooth_multisess.m         v1.1
+%
 % last modified: 2025/07/02
-
-
+%
+%
 %% SET SMOOTHING OPTIONS, AND SUBJECTS
 %--------------------------------------------------------------------------
 

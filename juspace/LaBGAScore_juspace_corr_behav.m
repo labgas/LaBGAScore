@@ -32,7 +32,7 @@
 %
 % -------------------------------------------------------------------------
 %
-% author: Lukas Van Oudenhove
+% modified by: Lukas Van Oudenhove
 %
 % date:   KU Leuven, September, 2023
 %
@@ -43,7 +43,7 @@
 % last modified: 2023/09/14
 %
 %
-%% OPTIONS
+%% SET OPTIONS
 % -------------------------------------------------------------------------
 
 mygroupfieldname = 'contrasts';

@@ -1,7 +1,7 @@
 %% LaBGAScore_secondlevel_roi_run_plot_PLS_ENet_pipeline.m
 %
 %
-% USAGE
+% *USAGE*
 %
 % This script serves as a simple wrapper to run the PLS-DA and Elastic Net
 % neuroimaging pipeline functions and their plotting functions on fMRI ROI
@@ -11,12 +11,12 @@
 % script!
 %
 % For more info, type the following in your Matlab command window
-% 
+%
 % help PLSDA_neuroimaging_pipeline
 % help plot_PLSDA_diagnostics_neuroimaging
 % help ENet_neuroimaging_pipeline
 % help plot_ENet_diagnostics_neuroimaging
-% 
+%
 % or check the READMEs in the LaBGAScore Github repo
 %
 % https://github.com/labgas/LaBGAScore/blob/main/secondlevel/README_PLSDA_neuroimaging_pipeline.md
@@ -24,13 +24,31 @@
 % https://github.com/labgas/LaBGAScore/blob/main/secondlevel/README_ENet_neuroimaging_pipeline.md
 % https://github.com/labgas/LaBGAScore/blob/main/secondlevel/README_ENet_plotting.md
 %
-%__________________________________________________________________________
 %
-% Author: Lukas Van Oudenhove
-% date: KU Leuven, March 2026    
+% *OPTIONS*
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_secondlevel_roi_run_PLS_ENet_pipeline.m          v1.1
+% * do_pls                 run the PLS-DA pipeline, default true
+% * do_enet                run the Elastic Net pipeline, default false
+% * group_ID                name of the group-membership variable in the saved roi_stats_*.mat table
+% * mygroupnamefield        'conditions' or 'contrasts', must match corresponding prep_3a script
+% * results_suffix          suffix used when saving prep_3a results, must match corresponding prep_3a script
+% * myscaling_glm           'raw' | 'scaled' | 'scaled_contrasts', must match corresponding prep_3a script (or a2_set_default_options)
+% * roi_modelname           prefix of the saved roi files from the corresponding LaBGAScore_atlas_rois_from_atlas script
+% * roi_set_name            descriptive name for the set of rois, from the corresponding LaBGAScore_atlas_rois_from_atlas script
+% * cons2analyze            indices from DAT.conditions or DAT.contrasts (depending on mygroupnamefield) to run the pipeline(s) on
+% * opts_PLS                struct of PLS-DA pipeline options (outerK, innerK, nrepeats, maxLV, nPerm, nBoot, learningSteps) — see help PLSDA_neuroimaging_pipeline
+% * opts_ENet               struct of Elastic Net pipeline options (outerK, innerK, nrepeats, alphaGrid, lambdaGrid, nPerm, nBoot, learningSteps) — see help ENet_neuroimaging_pipeline
+%
+% -------------------------------------------------------------------------
+%
+% modified by: Lukas Van Oudenhove
+%
+% date:   KU Leuven, March 2026
+%
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_secondlevel_roi_run_plot_PLS_ENet_pipeline.m          v1.1
+%
 % last modified: 2026/04/08
 
 

@@ -1,15 +1,18 @@
+%% LaBGAScore_secondlevel_MS_mat_pipeline.m
+%
+%
+% *USAGE*
+%
 % MACS Toolbox: Model Space Pipeline
-% _
-% LaBGAS version adapted by lukasvo76, June 2022 
 %
 % This script assists in setting up a batch for defining a model space that
 % can be viewed and executed in the SPM batch editor. It is particularly
 % advantageous when the number of subjects or the number of models in your
 % analyses is very large.
-% 
+%
 % This script assumes that you have organized your data in the form of a
 % subject-model hierarchy looking like this:
-% 
+%
 %     [stat_dir]\
 %     [work_dir]\
 %         sub01\
@@ -30,15 +33,27 @@
 %         sub24\
 %         sub25\
 %
-%
 % If this is the case, you can simply enter
 % - the statistics directory into "stat_dir",
 % - the working directory into "work_dir",
 % - the subject folder names into "subj_ids" and
 % - the model folder names into "mod_nams" below.
 %
-% NOTE lukasvo76
-% We have a model-subject hierarchy in our firstlevel subdataset, i.e.
+%
+% *OPTIONS*
+%
+% * ms_name     model space name, used together with stat_dir to determine where the model space directory/file is written
+% * ms_suff     model space suffix, used together with ms_name to distinguish different model spaces/analyses from each other
+%
+%
+% *DEPENDENCIES*
+%
+% MACS Toolbox (SPM batch editor module `spm.tools.MACS.MA_model_space`)
+%
+%
+% *NOTES*
+%
+% lukasvo76: we have a model-subject hierarchy in our firstlevel subdataset, i.e.
 %
 %       firstleveldir/
 %           mod01/
@@ -49,25 +64,16 @@
 %           mod02/
 %               ...
 %           ...
-% 
-% In addition, you will have to specify
-% - a model space name as "ms_name" and
-% - a model space suffix as "ms_suff"
-% which, together with the statistics directory, will determine where the
-% model space directory will be located and the model space file will be
-% written. Use these two parameters to distinguish different model space
-% and analyses from each other.
-% 
-% Author: Joram Soch, BCCN Berlin
-% E-Mail: joram.soch@bccn-berlin.de
-% 
-% First edit: 18/08/2017, 17:35 (V1.1/V17)
-%  Last edit: 11/06/2018, 15:35 (V1.2/V18)
 %
-% Adapted by Lukas Van Oudenhove, KU Leuven
-% E-Mail: lukas.vanoudenhove@kuleuven.be
-% 
-% First edit: 28/06/2022
+% -------------------------------------------------------------------------
+%
+% modified by: Joram Soch (joram.soch@bccn-berlin.de), BCCN Berlin
+%              Lukas Van Oudenhove (lukas.vanoudenhove@kuleuven.be), KU Leuven
+%
+% date:   Joram Soch first edit 18/08/2017, last edit 11/06/2018 (V1.2/V18)
+%         Lukas Van Oudenhove adaptation first edit 28/06/2022
+%
+% -------------------------------------------------------------------------
 
 
 %%% Step 0: Study parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

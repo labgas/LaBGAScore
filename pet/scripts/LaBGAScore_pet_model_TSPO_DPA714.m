@@ -1,59 +1,74 @@
-% LaBGAScore_pet_s2_model_TSPO_DPA714.m
+%% LaBGAScore_pet_model_TSPO_DPA714.m
 %
-% assumptions: 
-%	    Data are organized according to BIDS.
+%
+% *USAGE*
+%
+% Assumptions:
+%       Data are organized according to BIDS.
 %       You have to specify a main directory where al the folders of the
-%       subjects can be found. 
-%       In the folder of each subject, there might be a folder ses-xx 
-%       which contains the folder anat with the T1 weighted structural MRI 
-%       and a folder pet which contains the dynamic PET images. 
+%       subjects can be found.
+%       In the folder of each subject, there might be a folder ses-xx
+%       which contains the folder anat with the T1 weighted structural MRI
+%       and a folder pet which contains the dynamic PET images.
 %       If the folder ses-xx is not existing, we assume that the subfolder
 %       anat and pet are directly under the main folder of the subject.
-%       
+%
 %       The data are preprocessed using LCN12_PET_preprocess_data.m
 %
-%       A template for the PET naming should be specified. PET data are 
-%       acquired dynamically from the start of the injection. The unit of 
-%       the PET data is expresses as Bq/ml.Images are decay corrected to 
+%       A template for the PET naming should be specified. PET data are
+%       acquired dynamically from the start of the injection. The unit of
+%       the PET data is expresses as Bq/ml.Images are decay corrected to
 %       the start of the injection/begin of scanning.
 %       We assume that PET data are in 4D nifti format.
 %       In the pet folder, there must be a .m file containing the frame
-%       defintion by specifying the variable frames_timing which is a N x 2 
-%       or N x 3 array (N = number of frames) for which the first column is 
-%       the start time of the frame in seconds post injection, the second 
-%       column is the end time of each frame and the third column is 
+%       defintion by specifying the variable frames_timing which is a N x 2
+%       or N x 3 array (N = number of frames) for which the first column is
+%       the start time of the frame in seconds post injection, the second
+%       column is the end time of each frame and the third column is
 %       optional with the weight for the frame (positive values). If
 %       weights are not specified, all frames are weighted in the same way.
-%               
-% author: Patrick Dupont, Lukas Van Oudenhove, Lixin Qiu
-% date: October 2023
-% history: February 2024: an excel file is written which contains for all 
-%                         subjects and all regions, the volume of distribution
-%                         and the error of the fit.
-%          March 2024:    adapted to work with standard LaBGAS file
-%                         organization (LVO) and adapted version of
-%                         preprocessing script
-%                         LaBGAScore_pet_preprocess_data
-%                         built in check for enough frames after
-%                         logan_start_time (LVO)
-%          May 2024       further adaptations to fit LaBGAS file organization (LVO)
-%                         built in more options for automatic subject and ROI definition (LVO)
-%          November 2024: removal of Global variables and adding parallel processing
-%          January 2025:  weights for excluded frames set to zero and decay
-%                         between measurement samples and start scan is now 
-%                         taken into account
-%          April 2025:    Logan is also done voxel based
-%          May 2025:      Built in option to work with canlab atlas objects (LVO)
-%                         Final adaptations to fit LaBGAS file organisation (LVO)
-%                         Added atlas labels automatically to output files (LVO)
-%          Sept 2025:     Integration of LCN12_PET_TSPO_DPA714_compare_models.m (v0.2)
-%                         ~ includes 2T4k models with (ir)reversible endothelial binding
-%                         component and fit statistics to compare models
-%                         (LVO)
 %
-% THIS IS RESEARCH SOFTWARE
-%__________________________________________________________________________
-% @(#)LCN12_PET_TSPO_DPA714.m       v2.0          last modified: 2025/09/22
+%
+% *NOTES*
+%
+% THIS IS RESEARCH SOFTWARE. Originated as LCN12_PET_TSPO_DPA714.m (v2.0).
+%
+% History:
+% February 2024: an excel file is written which contains for all
+%                subjects and all regions, the volume of distribution
+%                and the error of the fit.
+% March 2024:    adapted to work with standard LaBGAS file
+%                organization (LVO) and adapted version of
+%                preprocessing script
+%                LaBGAScore_pet_preprocess_data
+%                built in check for enough frames after
+%                logan_start_time (LVO)
+% May 2024       further adaptations to fit LaBGAS file organization (LVO)
+%                built in more options for automatic subject and ROI definition (LVO)
+% November 2024: removal of Global variables and adding parallel processing
+% January 2025:  weights for excluded frames set to zero and decay
+%                between measurement samples and start scan is now
+%                taken into account
+% April 2025:    Logan is also done voxel based
+% May 2025:      Built in option to work with canlab atlas objects (LVO)
+%                Final adaptations to fit LaBGAS file organisation (LVO)
+%                Added atlas labels automatically to output files (LVO)
+% Sept 2025:     Integration of LCN12_PET_TSPO_DPA714_compare_models.m (v0.2)
+%                ~ includes 2T4k models with (ir)reversible endothelial binding
+%                component and fit statistics to compare models
+%                (LVO)
+%
+% -------------------------------------------------------------------------
+%
+% modified by: Patrick Dupont, Lukas Van Oudenhove, Lixin Qiu
+%
+% date:   October 2023
+%
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_pet_model_TSPO_DPA714.m         v2.0
+%
+% last modified: 2025/09/22
 
 clear
 close all

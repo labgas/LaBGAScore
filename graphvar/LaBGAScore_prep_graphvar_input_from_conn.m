@@ -77,10 +77,10 @@
 %                           files, enter the project name in this option
 %                           otherwise, comment out
 %
-% 
+%
 % -------------------------------------------------------------------------
 %
-% author: Lukas Van Oudenhove
+% modified by: Lukas Van Oudenhove
 %
 % date:   KU Leuven, July, 2023
 %

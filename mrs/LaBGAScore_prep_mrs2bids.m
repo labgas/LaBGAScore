@@ -46,6 +46,15 @@
 % with MR8 (Philips) & PET/MR (GE) data
 %
 %
+% *OPTIONS*
+%
+% voxelnames    cell array with voxel names, IN THE SAME ORDER AS THEY WERE ACQUIRED, default {'pACC'}
+%
+% acq_type      type of MRS sequence, used in the 'acq-' BIDS label as 'acq-[vox1][acq_type]', default 'press'
+%
+% nr_sess       number of sessions in the experiment, default 1
+%
+%
 % -------------------------------------------------------------------------
 %
 % based on script by Melina Hehl

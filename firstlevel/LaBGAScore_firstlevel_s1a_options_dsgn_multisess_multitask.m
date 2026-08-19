@@ -1,11 +1,12 @@
 %% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m
 %
+%
+% *USAGE*
+%
 % This script sets the options and creates a CANlab-style DSGN structure
 % variable, which are used by the subsequent script in the standard LaBGAS
 % workflow, LaBGAScore_firstlevel_s2_fit_model, to fit first level models
 % using CANlab and SPM functions
-%
-% USAGE
 %
 % Script should be run from the root directory of the superdataset, e.g.
 % /data/proj_discoverie
@@ -15,13 +16,15 @@
 % downloaded and adapted to the code subdataset for your study/project
 % This example is from LaBGAS proj_erythritol_4a
 % (https://gin.g-node.org/labgas/proj_erythritol_4a)
-% 
 %
-% DEPENDENCIES
+%
+% *DEPENDENCIES*
 %
 % LaBGAScore Github repo on Matlab path, with subfolders
 % https://github.com/labgas/LaBGAScore
 %
+%
+% *OPTIONS*
 %
 % LABGAS_OPTIONS STRUCTURE
 %
@@ -158,6 +161,8 @@
 %   image you want to mask with
 % 
 %
+% *NOTES*
+%
 % DSGN STRUCTURE
 %
 %   The example below is maximally annotated, but more info on how to set up
@@ -168,19 +173,22 @@
 %   3. CANlabReposGuide_Hackpad.pdf
 %       LaBGAS url: https://drive.google.com/drive/folders/1-M5UvibmsWXVCIrR31-qJNu506pDA_0t
 %       CANlab url: https://drive.google.com/drive/folders/1G-_aDsylwOagCrS3ZMPPOmGsc2_eC4Nr
-%   
+%
 %   For info on contrast specification
 %
 %   1. help canlab_spm_contrast_job_luka in Matlab terminal
 %   2. https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_example_DSGN_setup.txt
 %
-%__________________________________________________________________________
+% -------------------------------------------------------------------------
 %
-% authors: Lukas Van Oudenhove
+% modified by: Lukas Van Oudenhove
+%
 % date:   September, 2023
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m    v1.1
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m         v1.1
+%
 % last modified: 2026/02/06
 %
 %

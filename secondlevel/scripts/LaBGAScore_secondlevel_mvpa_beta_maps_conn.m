@@ -13,13 +13,17 @@
 % publish('LaBGAScore_mvpa_beta_maps_conn','outputDir',htmlsavedir)
 %
 %
-% *NOTE*
-% 
+% *DEPENDENCIES*
+%
+% https://github.com/canlab/ooFmriDataObjML (required only when ml_method option below is set to 'oofmridataobj')
+%
+%
+% *NOTES*
+%
 % This script is not yet adapted to standard dataset organization on the
 % LaBGAS server, but this can easily be adapted.
 %
-% 
-% *TUTORIALS AND DOCUMENTATION*
+% Tutorials and documentation:
 %
 % A. CANLAB'S PREDICT FUNCTION
 %
@@ -88,7 +92,7 @@
 %
 % -------------------------------------------------------------------------
 %
-% written by: Lukas Van Oudenhove
+% modified by: Lukas Van Oudenhove
 %
 % date:   KU Leuven, September, 2023
 %

@@ -55,7 +55,7 @@
 %
 % -------------------------------------------------------------------------
 %
-% Lukas Van Oudenhove
+% modified by: Lukas Van Oudenhove
 %
 % date:   KU Leuven, June, 2023
 %

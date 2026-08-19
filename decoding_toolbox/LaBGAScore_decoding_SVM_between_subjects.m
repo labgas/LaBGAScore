@@ -1,4 +1,7 @@
-%% LaBGAScore_decoding_SVM_between_subjects
+%% LaBGAScore_decoding_SVM_between_subjects.m
+%
+%
+% *USAGE*
 %
 % BETWEEN-SUBJECT SVM DECODING WITH PERMUTATION-BASED TFCE INFERENCE
 %
@@ -16,9 +19,6 @@
 % The pipeline is designed for reproducibility, scalability, and integration
 % with the Canlab neuroimaging framework.
 %
-% -------------------------------------------------------------------------
-% OVERVIEW
-% -------------------------------------------------------------------------
 % The script executes the following steps:
 %
 % 1. Data Preparation
@@ -94,9 +94,28 @@
 %        * region objects with atlas-based labels
 %        * summary tables for reporting and visualization
 %
-% -------------------------------------------------------------------------
-% INPUT REQUIREMENTS
-% -------------------------------------------------------------------------
+%
+% *OPTIONS*
+%
+% Set in the "0. USER SETTINGS" section below:
+%
+% * K                       number of cross-validation folds, balanced between patients and controls, default 5
+% * con2use                 contrast image filename (con_XXXX.nii) to decode on
+% * performance_metric      TDT performance metric, script only tested with {'AUC_minus_chance'}
+% * unbalanced               true/false, whether to allow unbalanced group sizes in cfg.design
+% * analysis_mode           'searchlight' | 'roi' | 'wholebrain'
+%                               if 'searchlight': searchlight_radius (mm), mask_file (whole-brain mask for the searchlight)
+%                               if 'roi': roi_list (cell array of ROI mask paths)
+%                               if 'wholebrain': mask_file
+% * n_perms                 number of permutations for the null distribution, default 1000
+% * atlas                   CANlab atlas used for region labeling, default 'canlab2024'
+% * unc_p / unc_k            uncorrected p-value / extent threshold for output fmri_data objects
+% * fdr_p / fdr_k            FDR-corrected p-value / extent threshold for output fmri_data objects
+% * fwe_p / fwe_k            TFCE FWE-corrected p-value / extent threshold for output fmri_data objects
+%
+%
+% *DEPENDENCIES*
+%
 % - MATLAB R2018a or newer
 % - The Decoding Toolbox (TDT)
 % - pTFCE toolbox on MATLAB path
@@ -111,9 +130,9 @@
 % - First-level contrast images (con_XXXX.nii) for all subjects
 % - Valid brain mask (whole-brain / searchlight) or ROI masks
 %
-% -------------------------------------------------------------------------
-% OUTPUTS
-% -------------------------------------------------------------------------
+%
+% *NOTES*
+%
 % All outputs are written to tdt_resultsdir/, including:
 %
 % - NIfTI files:
@@ -133,9 +152,6 @@
 %      * region objects (TFCE- or voxel-wise thresholded clusters)
 %      * summary tables with atlas-based annotations
 %
-% -------------------------------------------------------------------------
-% NOTES
-% -------------------------------------------------------------------------
 % - All statistical inference is non-parametric and permutation-based.
 % - TFCE is used as the primary method for spatial inference, with explicit
 %   control of family-wise error via the permutation-derived max-statistic.
@@ -144,11 +160,16 @@
 %   decoding.
 %
 % -------------------------------------------------------------------------
-% AUTHOR
+%
+% modified by: Lukas Van Oudenhove
+%
+% date:   Leuven, Belgium, 2026
+%
 % -------------------------------------------------------------------------
-% Lukas Van Oudenhove
-% Leuven, Belgium
-% 2026
+%
+% LaBGAScore_decoding_SVM_between_subjects.m
+%
+% last modified: 2026/04/24
 %
 %
 %% ========================================================================

@@ -1,4 +1,4 @@
-%% ery_ph_firstlevel_s1_fit_phMRI_model.m
+%% LaBGAScore_firstlevel_s1b_fit_phMRI_model.m
 %
 %
 % *USAGE*

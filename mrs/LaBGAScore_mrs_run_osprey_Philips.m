@@ -39,7 +39,7 @@
 %       needs to be set differently for both scanners
 %
 %
-% *OPTION*
+% *OPTIONS*
 %
 % scanner = 'Philips'/'GE'                      brand of scanner on which data were acquired
 %

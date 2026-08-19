@@ -1,22 +1,26 @@
-% LaBGAScore_pet_s1_preprocess_data.m
+%% LaBGAScore_pet_preprocess_data.m
 %
-% assumptions:
-%   Data-organisation:
-%	    Data are transformed to nifti format and organized according to BIDS.
+%
+% *USAGE*
+%
+% Assumptions:
+%
+% Data organization:
+%       Data are transformed to nifti format and organized according to BIDS.
 %       You have to specify a main directory where al the folders of the
-%       subjects can be found. 
-%       In the folder of each subject, there might be a folder ses-xx 
-%       which contains the folder anat with the T1 weighted structural MRI 
-%       and a folder pet_"infostring_tracer" which contains the PET data 
-%       measured with the specified tracer. If the folder ses-xx is not 
-%       existing, we assume that the subfolder anat and 
+%       subjects can be found.
+%       In the folder of each subject, there might be a folder ses-xx
+%       which contains the folder anat with the T1 weighted structural MRI
+%       and a folder pet_"infostring_tracer" which contains the PET data
+%       measured with the specified tracer. If the folder ses-xx is not
+%       existing, we assume that the subfolder anat and
 %       pet_"infostring_tracer" are directly under the main folder of the subject.
-%       
-%   PET acquisition, units, format, frame definition
-%       A template for the PET naming should be specified. The PET data are 
+%
+% PET acquisition, units, format, frame definition:
+%       A template for the PET naming should be specified. The PET data are
 %       named as 'subjectname*"infostring_PET"*.nii'.
 %
-%       PET data are acquired dynamically either from the start of the 
+%       PET data are acquired dynamically either from the start of the
 %       injection or as a number of frames between two time points.
 %
 %       The unit of the PET data is Bq/ml.
@@ -26,38 +30,49 @@
 %       PET data are in 4D nifti format.
 %
 %       In the pet folder, there must be a .m file containing the frame
-%       defintion by specifying the variable frames_timing which is a N x 2 
-%       or N x 3 array (N = number of frames) for which the first column is 
-%       the start time of the frame in seconds post injection, the second 
-%       column is the end time of each frame in seconds post injection and 
-%       the third column is optional with the weight for the frame (positive 
-%       values). If weights are not specified, all frames are weighted in 
-%       the same way. The frame definition file (in the same directory as 
-%       the dynamic PET data) is named as 
+%       defintion by specifying the variable frames_timing which is a N x 2
+%       or N x 3 array (N = number of frames) for which the first column is
+%       the start time of the frame in seconds post injection, the second
+%       column is the end time of each frame in seconds post injection and
+%       the third column is optional with the weight for the frame (positive
+%       values). If weights are not specified, all frames are weighted in
+%       the same way. The frame definition file (in the same directory as
+%       the dynamic PET data) is named as
 %       subjectname_*"infostring_tracer"_"infostring_PET"_"infostring_frames".m
 %
 %       It has been checked that the CT or MRI (used for attenuation correction)
 %       and the PET data are aligned.
 %
-%       After the previous check, the origin of the PET and MRI data have 
-%       been set to AC and if necessary the pitch (and yaw and roll) have 
-%       been adapted so that the initial orientation is more similar to the 
+%       After the previous check, the origin of the PET and MRI data have
+%       been set to AC and if necessary the pitch (and yaw and roll) have
+%       been adapted so that the initial orientation is more similar to the
 %       templates in MNI.
 %
-%               
-% author: Patrick Dupont, Lukas Van Oudenhove
-% date: September 2023
-% history: October 2023     cleaning code
-%                           taking into account the naming of the pet folder
-%          March 2024       adapted to work with standard LaBGAS file
-%                           organization (LVO)
-%                           adapted to move output to derivatives
-%          May 2024         temp bug fix in copying code line 163- (LVO), currently does not copy anat, batch and tmp folders to derivatives, should be adapted to do this
-%          December 2024    permanently fixed the above bug
 %
-% THIS IS RESEARCH SOFTWARE
-%__________________________________________________________________________
-% @(#)LCN12_PET_preprocess_data.m       v0.15     last modified: 2024/12/19
+% *NOTES*
+%
+% THIS IS RESEARCH SOFTWARE. Originated as LCN12_PET_preprocess_data.m (v0.15).
+%
+% History:
+% October 2023     cleaning code
+%                   taking into account the naming of the pet folder
+% March 2024        adapted to work with standard LaBGAS file
+%                   organization (LVO)
+%                   adapted to move output to derivatives
+% May 2024          temp bug fix in copying code line 163- (LVO), currently does not copy anat, batch and tmp folders to derivatives, should be adapted to do this
+% December 2024     permanently fixed the above bug
+%
+% -------------------------------------------------------------------------
+%
+% modified by: Patrick Dupont, Lukas Van Oudenhove
+%
+% date:   September 2023
+%
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_pet_preprocess_data.m         v0.15
+%
+% last modified: 2024/12/19
 
 clear
 close all

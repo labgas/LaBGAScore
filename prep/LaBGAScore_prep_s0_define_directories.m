@@ -1,33 +1,42 @@
-%% LaBGAScore_prep_s0_define_directories
+%% LaBGAScore_prep_s0_define_directories.m
+%
+%
+% *USAGE*
 %
 % This script defines the paths for the standard BIDS-compliant
-% directory structure for LaBGAS neuroimaging (datalad) datasets
-% 
-% USAGE
+% directory structure for LaBGAS neuroimaging (datalad) datasets.
 %
 % Script should be run from the root directory of the superdataset, e.g.
 % /data/proj_discoverie
 % It can be used standalone, but is typically called from the subsequent
-% scripts in the standard LaBGAScore workflow
-% The script is generic, i.e. it does not require study-specific adaptions
+% scripts in the standard LaBGAScore workflow.
+% The script is generic, i.e. it does not require study-specific adaptions.
 %
 %
-% DEPENDENCIES
+% *OPTIONS*
+%
+% * study_prefix    prefix used for all scripts of a given study, STUDY-SPECIFIC
+%
+%
+% *DEPENDENCIES*
 %
 % spm12 on Matlab path WITHOUT subdirectories
-% no spm functions are called by this script, 
+% no spm functions are called by this script,
 % but spmrootdir is defined automatically, for use in later scripts
 %
-%__________________________________________________________________________
+% -------------------------------------------------------------------------
 %
-% author: Lukas Van Oudenhove
+% modified by: Lukas Van Oudenhove
+%
 % date:   November, 2021
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s0_define_directories.m         v1.2      
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_prep_s0_define_directories.m         v1.2
+%
 % last modified: 2025/07/12
-
-
+%
+%
 %% SET STUDY PREFIX FOR USE IN ALL SUBSEQUENT SCRIPTS
 %--------------------------------------------------------------------------
 study_prefix = ''; % STUDY-SPECIFIC

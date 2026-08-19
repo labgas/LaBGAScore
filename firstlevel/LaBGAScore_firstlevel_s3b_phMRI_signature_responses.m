@@ -34,7 +34,7 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s3_phMRI_signature_responses.m         v2.0
+% LaBGAScore_firstlevel_s3b_phMRI_signature_responses.m         v2.0
 %
 % last modified: 2025/07/02
 %

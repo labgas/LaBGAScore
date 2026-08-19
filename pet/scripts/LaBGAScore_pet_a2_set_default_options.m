@@ -1,17 +1,17 @@
 %% LaBGAScore_pet_a2_set_default_options.m
 %
 %
-% USAGE
+% *USAGE*
 %
 % * Set default options used in various core secondlevel pet analysis
 % scripts included in LaBGAScore repo
-% * This script is automatically called by many other scripts, including 
+% * This script is automatically called by many other scripts, including
 % LaBGAScore_pet_a_set_up_paths_always_run_first, hence it does not often need to run
 % standalone
-% 
 %
-% NOTES
-% 
+%
+% *NOTES*
+%
 % * Always make a study-specific copy of this script in your code subdataset, do NOT edit in the repo!
 % * The below can be considered LaBGAS default options, but decisions will be study- or model-specific!
 % * If the title of the section below has the LaBGAScore_pet prefix,
@@ -20,10 +20,13 @@
 % -------------------------------------------------------------------------
 %
 % modified for pet data by: Lukas Van Oudenhove
+%
 % date:   KU Leuven, June 2024
 %
 % -------------------------------------------------------------------------
+%
 % LaBGAScore_pet_a2_set_default_options.m         v1.0
+%
 % last modified: 2024/06/05
 %
 %

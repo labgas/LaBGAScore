@@ -1,19 +1,21 @@
 %% LaBGAScore_pet_a_set_up_paths_always_run_first.m
 %
-% 
-% USAGE
-% 
+%
+% *USAGE*
+%
 % Always run this first before you run other LaBGAScore pet second level batch scripts.
 %
 %
-% CANLAB NOTES
+% *NOTES*
+%
+% CANlab notes:
 %
 % - standard folders and variable names are created by these scripts
 %
-% - in "prep_" scripts: 
+% - in "prep_" scripts:
 %   image names, conditions, contrasts, colors, global gray/white/CSF
 %   values are saved automatically in a DAT structure
-% 
+%
 % - extracted fmri_data objects are saved in DATA_OBJ variables
 % - contrasts are estimated and saved in DATA_OBJ_CON variables
 %
@@ -22,9 +24,9 @@
 %   meta-data saved in image_names_and_setup.mat
 %   image data saved in data_objects.mat
 %
-% - you only need to run the prep_ scripts once.  After that, use 
+% - you only need to run the prep_ scripts once.  After that, use
 %   b_reload_saved_matfiles.m to re-load saved files
-% 
+%
 % - when all scripts working properly, run z_batch_publish_analyses.m
 %   to create html report.  customize by editing z_batch_list_to_publish.m
 %
@@ -32,19 +34,21 @@
 %   figures
 %   html report with figures and stats, in "published_output"
 %
-%
-% LaBGAS NOTES
+% LaBGAS notes:
 %
 % - script to be run from rootdir of superdataset for your study
 % - DO NOT FORGET TO MAKE STUDY-SPECIFIC CHANGES INDICATED BELOW
 %
-%__________________________________________________________________________
+% -------------------------------------------------------------------------
 %
 % modified for pet data by: Lukas Van Oudenhove
-% date: KU Leuven, June 2024    
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_pet_a_set_up_paths_always_run_first.m         v1.0
+% date:   KU Leuven, June 2024
+%
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_pet_a_set_up_paths_always_run_first.m         v1.0
+%
 % last modified: 2024/06/05
 
 

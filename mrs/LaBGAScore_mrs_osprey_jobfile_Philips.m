@@ -1,4 +1,8 @@
-%% jobSDAT.m
+%% LaBGAScore_mrs_osprey_jobfile_Philips.m
+%
+%
+% *USAGE*
+%
 %   This function describes an Osprey job defined in a MATLAB script.
 %
 %   A valid Osprey job contains four distinct classes of items:
@@ -60,6 +64,9 @@
 %   on your machine directly. To set up your own Osprey job supply the
 %   specific locations as described above.
 %
+%
+% -------------------------------------------------------------------------
+%
 %   AUTHOR:
 %       Dr. Georg Oeltzschner (Johns Hopkins University, 2019-07-15)
 %       goeltzs1@jhmi.edu
@@ -88,6 +95,8 @@
 %       --> Made changes to perform segmentation afresh using spm routines
 %       as using existing fmriprep segmentations caused dimensionality
 %       errors
+%
+% -------------------------------------------------------------------------
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%% DEFINE SOME VARS & PREP WORK %%%%%%

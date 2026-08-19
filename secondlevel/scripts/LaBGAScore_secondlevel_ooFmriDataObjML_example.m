@@ -1,29 +1,41 @@
-%%% LaBGAScore_secondlevel_ooFmriDataObjML_example.m
+%% LaBGAScore_secondlevel_ooFmriDataObjML_example.m
 %
-% This is merely and example script to illustrate the object-oriented ML
+%
+% *USAGE*
+%
+% This is merely an example script to illustrate the object-oriented ML
 % toolkit for fmri_data objects (and beyond), developed by Bogdan Petre
 % @CANlab.
 %
 % This is a toolkit inspired by Python's scikit-learn, including more
-% flexible options for algorithm and feature selection, 
-% hyperparameter optimization, nested cross-validation, etc, compared to CANlab's predict function. 
+% flexible options for algorithm and feature selection,
+% hyperparameter optimization, nested cross-validation, etc, compared to CANlab's predict function.
 % However, it does require more advanced programming skills and understanding the logic
 % of the method.
 %
-% Dependency: https://github.com/canlab/ooFmriDataObjML
-% Also lots of useful examples there!
+%
+% *DEPENDENCIES*
+%
+% https://github.com/canlab/ooFmriDataObjML (also lots of useful examples there)
+%
+%
+% *NOTES*
 %
 % Tutorial: https://canlab.github.io/_pages/canlab_pipelines_walkthrough/estimateBestRegionPerformance.html
 % Method also implemented in
 % https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/c2f_run_MVPA_regression_single_trial.m,
 % including some more info as well
-% 
-%__________________________________________________________________________
 %
-% author: lukas.vanoudenhove@kuleuven.be & bogpetre@gmail.com
+% -------------------------------------------------------------------------
+%
+% modified by: lukas.vanoudenhove@kuleuven.be & bogpetre@gmail.com
+%
 % date:   June, 2022
-%__________________________________________________________________________
-% @(#)% LaBGAScore_secondlevel_ooFmriDataObjML_example     v2.0        
+%
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_secondlevel_ooFmriDataObjML_example.m          v2.0
+%
 % last modified: 2022/08/04
 
 

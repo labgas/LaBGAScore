@@ -1,10 +1,10 @@
 %% LaBGAScore_pet_run_plot_PLS_ENet_pipeline.m
 %
 %
-% USAGE
+% *USAGE*
 %
 % This script serves as a simple wrapper to run the PLS-DA and Elastic Net
-% neuroimaging pipeline functions and their plotting functions on parcel-wise 
+% neuroimaging pipeline functions and their plotting functions on parcel-wise
 % (whole-brain or ROI) PET data.
 %
 % The script takes excel outputs from the LaBGAScore_pet_model_TSPO_DPA714.m script
@@ -12,12 +12,12 @@
 % needs to be done PRIOR to using this script!
 %
 % For more info, type the following in your Matlab command window
-% 
+%
 % help PLSDA_neuroimaging_pipeline
 % help plot_PLSDA_diagnostics_neuroimaging
 % help ENet_neuroimaging_pipeline
 % help plot_ENet_diagnostics_neuroimaging
-% 
+%
 % or check the READMEs in the LaBGAScore Github repo
 %
 % https://github.com/labgas/LaBGAScore/blob/main/secondlevel/README_PLSDA_neuroimaging_pipeline.md
@@ -25,13 +25,26 @@
 % https://github.com/labgas/LaBGAScore/blob/main/secondlevel/README_ENet_neuroimaging_pipeline.md
 % https://github.com/labgas/LaBGAScore/blob/main/secondlevel/README_ENet_plotting.md
 %
-%__________________________________________________________________________
 %
-% Author: Lukas Van Oudenhove
-% date: KU Leuven, March 2026    
+% *OPTIONS*
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_pet_run_PLS_ENet_pipeline.m          v1.1
+% * do_pls              default true, run the PLS-DA pipeline
+% * do_enet             default false, run the Elastic Net pipeline
+% * data2analyze         cell array of variable-set names to analyze, e.g. {'K1_ROI','K1_parcel','DV_ROI','DV_parcel'}
+% * group_ID            name of the outcome/group column in the input excel file
+% * opts_PLS            struct of PLS-DA pipeline options (outerK, innerK, nrepeats, maxLV, nPerm, nBoot, learningSteps) - see help PLSDA_neuroimaging_pipeline
+% * opts_ENet           struct of Elastic Net pipeline options (outerK, innerK, nrepeats, alphaGrid, lambdaGrid, nPerm, nBoot, learningSteps) - see help ENet_neuroimaging_pipeline
+%
+% -------------------------------------------------------------------------
+%
+% modified by: Lukas Van Oudenhove
+%
+% date:   KU Leuven, March 2026
+%
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_pet_run_plot_PLS_ENet_pipeline.m          v1.1
+%
 % last modified: 2026/04/08
 
 

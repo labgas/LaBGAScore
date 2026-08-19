@@ -1,15 +1,22 @@
 %% LaBGAScore_pet_prep_1_dat_behavioral_data.m
-% 
 %
-% USAGE
+%
+% *USAGE*
 %
 % This script sets up the DAT structure for second level analysis of PET
 % data using CANlab tools in a single PET session design
 %
 %
-% CANLAB NOTES
+% *OPTIONS*
 %
-% Optional: Run these load and attach behavioral data from files (e.g., from Excel)            
+% * behavioral_data_filename    name of the .tsv file in BIDS/phenotype containing subject ratings, default 'ratings_means.tsv'
+%
+%
+% *NOTES*
+%
+% CANlab notes:
+%
+% Optional: Run these load and attach behavioral data from files (e.g., from Excel)
 %
 % This script is an example script only. You should modify it to fit your
 % needs, which will depend on which types of behavioral/non-imaging data
@@ -46,21 +53,24 @@
 %   prep_3...) process will be missing, and you will need to re-run the whole
 %   prep sequence.
 %
-% LABGAS NOTES
+% LaBGAS notes:
 %
 % - Always make a study-specific copy of this script in your code subdataset, do NOT edit in the repo!
 % - This script is highly study-specific, but since we use a fixed
 %       BIDS-compatible directory structure and format for the phenotype
 %       files, there should be common elements across studies
-% - This is an example from a design with a single PET session 
+% - This is an example from a design with a single PET session
 %
-%__________________________________________________________________________
+% -------------------------------------------------------------------------
 %
 % modified for pet data by: Lukas Van Oudenhove
+%
 % date:   KU Leuven, June 2024
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_pet_prep_1_dat_behavioral_data.m         v1.0
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_pet_prep_1_dat_behavioral_data.m         v1.0
+%
 % last modified: 2024/06/05
 %
 %

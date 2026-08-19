@@ -1,3 +1,32 @@
+%% print_LEAR_matrix.m
+%
+%
+% *USAGE*
+%
+% Small demo script that builds and displays a Linear Exponential
+% AutoRegressive (LEAR)-style correlation matrix, in which off-diagonal
+% entries decay exponentially with distance from the diagonal
+% (base_corr ^ abs(i-j))
+%
+%
+% *OPTIONS*
+%
+% * base_corr        base correlation used for the exponential decay, default 0.85
+% * n                 size of the (square) LEAR matrix, default 5
+%
+% -------------------------------------------------------------------------
+%
+% modified by: Lukas Van Oudenhove
+%
+% date:   May, 2025
+%
+% -------------------------------------------------------------------------
+%
+% print_LEAR_matrix.m
+%
+% last modified: 2025/05/08
+%
+%
 % Parameters
 base_corr = 0.85;
 decay_rate = 1; % This doesn't matter when decay rate is 1 — simplifies to abs(i-j)

@@ -1,52 +1,66 @@
-%% LaBGAScore_prep_s1_write_events_tsv_multisess_multitask
+%% LaBGAScore_prep_s1_write_events_tsv_multisess_multitask.m
+%
+%
+% *USAGE*
 %
 % This script reads logfiles, extracts the onsets, durations, and ratings for
 % different conditions, and writes events.tsv files to the BIDS dir for
-% each subject
-% It also contains an option to write a single phenotype file with
-% trial-by-trial ratings for all subjects
-% 
-% USAGE
+% each subject, for a multi-session, multi-task design. It also contains an
+% option to write a single phenotype file with trial-by-trial ratings for
+% all subjects.
 %
 % Script should be run from the root directory of the superdataset, e.g.
 % /data/proj_discoverie
 % The script is highly study-specific, as logfiles will vary with design,
-% stimulus presentation software used, etc
+% stimulus presentation software used, etc.
 % Hence, it is provided in LaBGAScore as an example and needs to be
-% downloaded and adapted to the code subdataset for your study/project
+% downloaded and adapted to the code subdataset for your study/project.
 % This example is from LaBGAS proj_bitter-reward
 % (https://gin.g-node.org/labgas/proj_bitter-reward)
 %
 %
-% DEPENDENCIES
+% *OPTIONS*
+%
+% * subjs2write     cell array of subjects to write files for, empty cell array (default) loops over all subjects
+%
+% * pheno_tsv       default true; set to false to skip generating a phenotype.tsv file (only works when subjs2write is empty)
+%
+% * pheno_name      filename of the phenotype.tsv file
+%
+% * nr_sess         number of sessions in the experiment
+%
+% The remaining variables in the first code section (logfile column names/types, condition/event labels, ...) are
+% specific to this study's Presentation/E-Prime logfile formats (food-images and FID tasks) and need to be adapted study by study.
+%
+%
+% *DEPENDENCIES*
 %
 % LaBGAScore Github repo on Matlab path, with subfolders
 % https://github.com/labgas/LaBGAScore
 %
 %
-% INPUTS
+% *NOTES*
 %
-% Presentation .log files in sourcedata dir for each subject
+% INPUTS: Presentation .log files in sourcedata dir for each subject
 %
-%
-% OUTPUTS
-%
-% events.tsv files for each run in BIDS dir for each subject
+% OUTPUTS: events.tsv files for each run in BIDS dir for each subject;
 % phenotype.tsv file in BIDS/phenotype dir (optional)
 %
-%__________________________________________________________________________
+% Adapted from LCN12_JULIE_first_level_analysis script by Patrick Dupont.
 %
-% author: Lukas Van Oudenhove
+% -------------------------------------------------------------------------
+%
+% modified by: Lukas Van Oudenhove
+%
 % date:   January, 2023
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_prep_s1_write_events_tsv_multisess_multitask.m    v1.1        
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_prep_s1_write_events_tsv_multisess_multitask.m    v1.1
+%
 % last modified: 2025/07/02
 %
-% adapted from LCN12_JULIE_first_level_analysis script by Patrick Dupont
 %
-
-
 %% DEFINE DIRECTORIES, SUBJECTS, RUNS, CONDITIONS, AND IMPORT OPTIONS
 %--------------------------------------------------------------------------
 

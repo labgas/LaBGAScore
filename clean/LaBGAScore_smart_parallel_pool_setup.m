@@ -1,6 +1,24 @@
-% -----------------------------------------
-% Smart parallel pool setup (60% + cap)
-% -----------------------------------------
+%% LaBGAScore_smart_parallel_pool_setup.m
+%
+%
+% *USAGE*
+%
+% This script sets up (or resizes) a Matlab parallel pool sized to a
+% capped fraction of available workers, so that parallel jobs don't
+% claim every core on a shared machine. Uses 66% of currently available
+% workers, always leaving at least 1 worker free overall.
+%
+% -------------------------------------------------------------------------
+%
+% modified by: Lukas Van Oudenhove
+%
+% date:   April, 2026
+%
+% -------------------------------------------------------------------------
+%
+%
+%% SET UP PARALLEL POOL
+% -------------------------------------------------------------------------
 
 pc = parcluster;
 maxWorkers = pc.NumWorkers;

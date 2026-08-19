@@ -1,20 +1,36 @@
 %% LaBGAScore_secondlevel_extractparcels_sessions.m
 %
 %
-% USAGE
+% *USAGE*
 %
 % This simple script allows you to extract parcel- and roi-wise
 % within-session contrasts based on the results of a between-session
 % contrast and create a results table that can be flexibly used for
 % plotting, stats, etc
 %
-%__________________________________________________________________________
 %
-% Author: Lukas Van Oudenhove
-% date: KU Leuven, April 2026    
+% *OPTIONS*
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_secondlevel_extractparcels_sessions.m          v1.0
+% * do_parcel                          run parcel-wise extraction, default true
+% * parcel_type                        significance level used to select parcels, 'unc' | 'fdr' | 'Bayes'
+% * do_roi                             run roi-wise extraction, default true
+% * nr_sess                            number of within-subject sessions
+% * names_sess                         cell array of session names, e.g. {'ses-01','ses-02'}
+% * within_session_contrast_idx        indices from DAT.contrastnames for the within-session contrasts
+% * between_session_contrast_idx       index from DAT.contrastnames for the between-session contrast
+% * mygroupnamefield                   'conditions' or 'contrasts', must match corresponding prep_3a script
+% * results_suffix                     suffix used when saving prep_3a results, must match corresponding prep_3a script
+%
+% -------------------------------------------------------------------------
+%
+% modified by: Lukas Van Oudenhove
+%
+% date:   KU Leuven, April 2026
+%
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_secondlevel_extractparcels_sessions.m          v1.0
+%
 % last modified: 2026/04/07
 
 

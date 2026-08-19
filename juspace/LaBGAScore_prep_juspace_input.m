@@ -31,7 +31,7 @@
 %
 % -------------------------------------------------------------------------
 %
-% author: Lukas Van Oudenhove
+% modified by: Lukas Van Oudenhove
 %
 % date:   KU Leuven, August, 2023
 %

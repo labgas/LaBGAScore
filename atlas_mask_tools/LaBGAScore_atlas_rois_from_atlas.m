@@ -1,46 +1,50 @@
 %% LaBGAScore_atlas_rois_from_atlas.m
 %
 %
-% This script creates rois by combining regions from one or more atlases, 
+% *USAGE*
+%
+% This script creates rois by combining regions from one or more atlases,
 % and automatically saves the rois as atlas objects and optionallly as .nii files
 % in maskdir of secondlevel model
 %
 % There is an option to save a single file including all flat rois
 % (i.e. with one index per newly created roi) as atlas object and/or .nii
 % file
-% 
-% USAGE
 %
 % Script should be run from the root directory of the superdataset, e.g.
 % /data/proj_discoverie
 %
-% DEPENDENCIES
+%
+% *OPTIONS*
+%
+% * save_original_roi_atlas_obj = true/false      saves original roi atlas objects (i.e. BEFORE merging selected parcels into one roi atlas object, hence one index per parcel)
+%                                                  useful/needed if you want to label your voxel-wise analyses with the labels included in your mask
+%
+%                                                  flat roi atlas objects (i.e. AFTER merging selected parcels into one roi atlas object, hence one index for the entire roi)
+%                                                  will always be saved as they are needed to extract roi averages using functionality in prep_3a script
+%
+% * write_roi2nii = true/false                    writes .nii files for each of the flat roi atlas objects, which can be useful for some purposes
+%
+% * save_combined_roi_atlas_obj = true/false      saves a single atlas object combining all flat roi atlas objects, useful for doing parcel-wise analyses in all rois
+%
+% * write_combinedroi2nii = true/false            writes .nii file for the combined flat roi atlas object, which can be useful for some purposes
+%
+%
+% *DEPENDENCIES*
 %
 % CANlab's CanlabCore and Neuroimaging_Pattern_Masks Github repos on your Matlab path
 % if needed, clone from https://github.com/canlab
 %
-% OPTIONS
+% -------------------------------------------------------------------------
 %
-% save_original_roi_atlas_obj = true/false      saves original roi atlas objects (i.e. BEFORE merging selected parcels into one roi atlas object, hence one index per parcel) 
-%                                               useful/needed if you want to label your voxel-wise analyses with the labels included in your mask
+% modified by: Aleksandra Budzinska, Lukas Van Oudenhove
 %
-%                                               flat roi atlas objects (i.e. AFTER merging selected parcels into one roi atlas object, hence one index for the entire roi)
-%                                               will always be saved as they are needed to extract roi averages using functionality in prep_3a script
-%
-% write_roi2nii = true/false                    writes .nii files for each of the flat roi atlas objects, which can be useful for some purposes
-%
-% save_combined_roi_atlas_obj = true/false      saves a single atlas object combining all flat roi atlas objects, useful for doing parcel-wise analyses in all rois
-%
-% write_combinedroi2nii = true/false            writes .nii file for the combined flat roi atlas object, which can be useful for some purposes
-%                                               
-%
-%__________________________________________________________________________
-%
-% authors: Aleksandra Budzinska, Lukas Van Oudenhove
 % date:   KU Leuven, July, 2022
 %
-%__________________________________________________________________________
-% @(#)% LaBGAScore_atlas_rois_from_atlas.m         v1.4       
+% -------------------------------------------------------------------------
+%
+% LaBGAScore_atlas_rois_from_atlas.m         v1.4
+%
 % last modified: 2025/05/07
 
 
