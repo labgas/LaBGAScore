@@ -136,5 +136,5 @@ DAT.BETWEENPERSON.groupcolors = {};
 printhdr('Save DAT structure and directory names in image_names_and_setup.mat');
 
 savefilename = fullfile(resultsdir, 'image_names_and_setup.mat');
-save(savefilename, 'dashes','printstr','printhdr','DAT', 'basedir', 'datadir', 'maskdir', 'resultsdir', 'scriptsdir', 'figsavedir', 'htmlsavedir', '-v7.3');
+save(savefilename, 'dashes','printstr','printhdr','DAT', 'basedir', 'datadir', 'maskdir', 'resultsdir', 'figsavedir', 'htmlsavedir', '-v7.3');
 

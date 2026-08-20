@@ -563,9 +563,9 @@ else
             end
 
             % LOOP OVER SESSIONS
-            
-            for ses = 1:2
-                
+
+            for ses = 1:nr_sess
+
             if pheno_tsv
                 pheno_file_ses = table();
             end

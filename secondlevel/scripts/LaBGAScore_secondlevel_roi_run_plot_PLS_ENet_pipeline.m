@@ -204,12 +204,14 @@ if do_pls
     PLS_results = cell(1, size(cons2analyze,2));
     PLS_tables = cell(1, size(cons2analyze,2));
     
-    for d = cons2analyze
-        
+    for idx = 1:numel(cons2analyze)
+
+        d = cons2analyze(idx); % d = actual condition/contrast index into DAT; idx = position in cons2analyze, used to index X_vars/p/PLS_results/PLS_tables (which are built by position, not by value)
+
         switch mygroupnamefield
-            
+
             case 'conditions'
-        
+
                 pipeline_resultssubdir = fullfile(pipeline_resultsdir,DAT.conditions{d});
 
                     if ~exist(pipeline_resultssubdir,'dir')
@@ -217,9 +219,9 @@ if do_pls
                     end
 
                 cd(pipeline_resultssubdir);
-                
+
             case 'contrasts'
-                
+
                 pipeline_resultssubdir = fullfile(pipeline_resultsdir,DAT.contrastnames{d});
 
                     if ~exist(pipeline_resultssubdir,'dir')
@@ -227,23 +229,23 @@ if do_pls
                     end
 
                 cd(pipeline_resultssubdir);
-                
+
         end
-                
 
-        PLS_results{d} = PLSDA_neuroimaging_pipeline(X_vars{d},Y_var,opts_PLS);
-        
-        [max_varY, idx_LV] = max(PLS_results{d}.varExplainedY); 
-        
+
+        PLS_results{idx} = PLSDA_neuroimaging_pipeline(X_vars{idx},Y_var,opts_PLS);
+
+        [max_varY, idx_LV] = max(PLS_results{idx}.varExplainedY);
+
         fprintf('\nPlotting latent variable %d explaining %.2f%% of the variance in Y\n\n', idx_LV, max_varY*100);
-    
-        PLS_tables{d} = plot_PLSDA_diagnostics_neuroimaging(PLS_results{d}, [], roiNames, roiatlasFile, ...
-            'LV',idx_LV,'TopN',min(p{d},20),'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix',[num2str(cons2analyze(1,d)) '_PLS'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
 
-        save_all_open_figures_smart(pipeline_resultssubdir,[num2str(cons2analyze(1,d)) '_PLS'],{'fig','svg'},true);
-        
+        PLS_tables{idx} = plot_PLSDA_diagnostics_neuroimaging(PLS_results{idx}, [], roiNames, roiatlasFile, ...
+            'LV',idx_LV,'TopN',min(p{idx},20),'VIP_thresh',0.8,'stab_thresh',1.5,'MapPrctile',70,'OutPrefix',[num2str(d) '_PLS'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
+
+        save_all_open_figures_smart(pipeline_resultssubdir,[num2str(d) '_PLS'],{'fig','svg'},true);
+
         clear pipeline_resultssubdir
-        
+
     end
     
     saveplsfilename = fullfile(pipeline_resultsdir,'PLS_DA.mat');
@@ -258,12 +260,14 @@ if do_enet
     ENet_results = cell(1, size(cons2analyze,2));
     ENet_tables = cell(1, size(cons2analyze,2));
     
-    for d = cons2analyze
-        
+    for idx = 1:numel(cons2analyze)
+
+        d = cons2analyze(idx); % d = actual condition/contrast index into DAT; idx = position in cons2analyze, used to index X_vars/p/ENet_results/ENet_tables (which are built by position, not by value)
+
         switch mygroupnamefield
-            
+
             case 'conditions'
-        
+
                 pipeline_resultssubdir = fullfile(pipeline_resultsdir,DAT.conditions{d});
 
                     if ~exist(pipeline_resultssubdir,'dir')
@@ -271,9 +275,9 @@ if do_enet
                     end
 
                 cd(pipeline_resultssubdir);
-                
+
             case 'contrasts'
-                
+
                 pipeline_resultssubdir = fullfile(pipeline_resultsdir,DAT.contrastnames{d});
 
                     if ~exist(pipeline_resultssubdir,'dir')
@@ -281,20 +285,20 @@ if do_enet
                     end
 
                 cd(pipeline_resultssubdir);
-                
+
         end
-        
-        opts_ENet.selectionTopK = min(20, max(3, ceil(0.25 * p{d})));
 
-        ENet_results{d} = ENet_neuroimaging_pipeline(X_vars{d},Y_var,opts_ENet);
+        opts_ENet.selectionTopK = min(20, max(3, ceil(0.25 * p{idx})));
 
-        ENet_tables{d} = plot_ENet_diagnostics_neuroimaging(ENet_results{d}, X_vars{d},Y_var, roiNames, roiatlasFile, ...
-            'TopN',min(p{d},20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[num2str(cons2analyze(1,d)) '_ENet'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
+        ENet_results{idx} = ENet_neuroimaging_pipeline(X_vars{idx},Y_var,opts_ENet);
 
-        save_all_open_figures_smart(pipeline_resultssubdir,[num2str(cons2analyze(1,d)) '_ENet'],{'fig','svg'},true);
+        ENet_tables{idx} = plot_ENet_diagnostics_neuroimaging(ENet_results{idx}, X_vars{idx},Y_var, roiNames, roiatlasFile, ...
+            'TopN',min(p{idx},20),'FreqThresh',0.5,'WeightThresh',0,'MapPrctile',70,'DoPostSelection',true,'OutPrefix',[num2str(d) '_ENet'],'RelaxIfEmpty',false,'UnderlayFile',T1_downsample);
+
+        save_all_open_figures_smart(pipeline_resultssubdir,[num2str(d) '_ENet'],{'fig','svg'},true);
 
         clear pipeline_resultssubdir
-    
+
     end
     
     saveenetfilename = fullfile(pipeline_resultsdir,'ENet.mat');

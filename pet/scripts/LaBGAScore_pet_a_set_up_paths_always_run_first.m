@@ -222,8 +222,8 @@ maskdir = fullfile(basedir,'masks');
         mkdir(maskdir); 
     end
 roidir = fullfile(maskdir,'rois');
-    if ~exist(maskdir, 'dir')
-        mkdir(maskdir); 
+    if ~exist(roidir, 'dir')
+        mkdir(roidir);
     end
 addpath(genpath(maskdir),'-end');
 resultsdir = fullfile(basedir, 'results');
