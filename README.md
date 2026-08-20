@@ -51,7 +51,7 @@ Most domains split into `<domain>/scripts/` (or top-level `.m` scripts) and `<do
 
 ## Dependencies
 
-Most workflows require **CANlabCore** and **SPM12** on the MATLAB path. Neither is vendored into this repo — both must be cloned/installed separately and added to the path (see `prep/LaBGAScore_prep_s0_define_directories.m` and `pet/scripts/LaBGAScore_pet_a_set_up_paths_always_run_first.m`, which check for and set up these paths per study).
+Most workflows require **[CanlabCore](https://github.com/canlab/CanlabCore)** and **[SPM12](https://www.fil.ion.ucl.ac.uk/spm/)** on the MATLAB path. Neither is vendored into this repo — both must be cloned/installed separately and added to the path (see `prep/LaBGAScore_prep_s0_define_directories.m` and `pet/scripts/LaBGAScore_pet_a_set_up_paths_always_run_first.m`, which check for and set up these paths per study).
 
 Several domain folders assume their own external toolbox, also not vendored, expected pre-installed and on the path:
 
@@ -109,7 +109,7 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 
 ## Relationship to `CANlab_help_examples` (LaBGAS fork)
 
-`CANlab_help_examples` (local path `/data/master_github_repos/CANlab_help_examples`, upstream `github.com/labgas/CANlab_help_examples`) is a sibling repo whose `Second_level_analysis_template_scripts/` directory provides LaBGAS's group-level (second-level) fMRI analysis templates — univariate GLM, cross-validated SVM, CANlab signature-pattern responses, searchlight correlation, and single-trial/runwise MVPA and mediation. Several of those scripts depend directly on LaBGAScore:
+`CANlab_help_examples` (local path `/data/master_github_repos/CANlab_help_examples`, upstream [github.com/labgas/CANlab_help_examples](https://github.com/labgas/CANlab_help_examples)) is a sibling repo whose `Second_level_analysis_template_scripts/` directory provides LaBGAS's group-level (second-level) fMRI analysis templates — univariate GLM, cross-validated SVM, CANlab signature-pattern responses, searchlight correlation, and single-trial/runwise MVPA and mediation. Several of those scripts depend directly on LaBGAScore:
 
 | LaBGAScore function/script | Called from (in CANlab_help_examples) | Purpose |
 |---|---|---|
@@ -119,7 +119,7 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 | `LaBGAScore_atlas_binary_mask_from_atlas.m` (`atlas_mask_tools/`) | referenced via `atlasname_glm`/`atlasname_svm` options in `a2_set_default_options.m` | Generates custom `.mat` atlas/mask objects usable as GLM/SVM masks |
 | `LaBGAScore_atlas_rois_from_atlas.m` (`atlas_mask_tools/`) | referenced via `roi_names`/`roi_modelname`/`roi_set_name` options | Generates per-ROI atlas objects for ROI-average analysis |
 
-In short: LaBGAScore owns study setup, first-level modeling, and atlas/mask generation; `CANlab_help_examples` (LaBGAS fork) owns the second-level/group analysis templates built on top of LaBGAScore's outputs. For that repo's own internals, see its own `README.md`/`CLAUDE.md` under `Second_level_analysis_template_scripts/`.
+In short: LaBGAScore owns study setup, first-level modeling, and atlas/mask generation; `CANlab_help_examples` (LaBGAS fork) owns the second-level/group analysis templates built on top of LaBGAScore's outputs. For that repo's own internals, see its own [`README.md`](https://github.com/labgas/CANlab_help_examples/blob/main/Second_level_analysis_template_scripts/README.md)/`CLAUDE.md` under `Second_level_analysis_template_scripts/`.
 
 ## Tests and CI
 
