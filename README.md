@@ -109,7 +109,7 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 
 ## Relationship to `CANlab_help_examples` (LaBGAS fork)
 
-`CANlab_help_examples` (local path `/data/master_github_repos/CANlab_help_examples`, upstream [github.com/labgas/CANlab_help_examples](https://github.com/labgas/CANlab_help_examples)) is a sibling repo whose `Second_level_analysis_template_scripts/` directory provides LaBGAS's group-level (second-level) fMRI analysis templates — univariate GLM, cross-validated SVM, CANlab signature-pattern responses, searchlight correlation, and single-trial/runwise MVPA and mediation. Several of those scripts depend directly on LaBGAScore:
+[`CANlab_help_examples`](https://github.com/labgas/CANlab_help_examples) is a sibling repo whose `Second_level_analysis_template_scripts/` directory provides LaBGAS's group-level (second-level) fMRI analysis templates — univariate GLM, cross-validated SVM, CANlab signature-pattern responses, searchlight correlation, and single-trial/runwise MVPA and mediation. Several of those scripts depend directly on LaBGAScore:
 
 | LaBGAScore function/script | Called from (in CANlab_help_examples) | Purpose |
 |---|---|---|
