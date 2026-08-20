@@ -17,7 +17,7 @@ Core scripts (and templates for them) for LaBGAS's (Laboratory for Brain-Gut Axi
 
 LaBGAScore is a curated collection of MATLAB scripts and helper functions implementing LaBGAS's standard neuroimaging analysis workflow, spanning BIDS conversion, first-level and second-level fMRI modeling, MVPA/machine-learning pipelines, PET, MRS, and several auxiliary toolkits. Scripts can either be run directly from this repo, or — more commonly for a real study — copied into that study's own project repo and adapted there for study-specific purposes.
 
-This is not a packaged software product: there is no build system, linter, or automated test suite, and none should be added (see [Tests and CI](#tests-and-ci)).
+This is not a packaged software product: there is no build system or automated test suite. A lightweight static-analysis helper is available (see [Tests and CI](#tests-and-ci)).
 
 ## Typical LaBGAS project structure
 
@@ -124,6 +124,8 @@ In short: LaBGAScore owns study setup, first-level modeling, and atlas/mask gene
 ## Tests and CI
 
 There is no automated test suite and no CI pipeline in this repo. Verify changes manually by running the affected script against real or study data; several scripts support MATLAB's `publish()` to generate a date-stamped HTML report of their output (e.g. `cosmomvpa/LaBGAScore_cosmomvpa_searchlight_rsa.m`, `decoding_toolbox/LaBGAScore_decoding_template_xclass_acc.m`).
+
+`clean/LaBGAScore_check_all_scripts.m` runs MATLAB's built-in Code Analyzer (`checkcode`) across every `.m` file in the repo (or a subtree you pass it) and reports the results, with genuine syntax errors called out separately from style/performance suggestions. It reliably catches parse errors — a file that cannot run past the flagged line — but does **not** catch undefined variables used at runtime, calls to functions that don't exist or aren't on the path, or logic bugs; those still require reading the code. Run it before committing as a fast baseline check, not a substitute for review.
 
 ## License
 

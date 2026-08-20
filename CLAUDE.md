@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-LaBGAScore holds LaBGAS's (Laboratory for Brain-Gut Axis Studies, KU Leuven) core/template MATLAB scripts for its standard neuroimaging analysis workflow. Scripts are either run directly from this repo, or (more commonly, for a real study) downloaded and adapted into that study's own `code` subdataset — every LaBGAS project is a DataLad superdataset (`proj_xxx`) with subdatasets `sourcedata`, `BIDS`, `derivatives`, `code`, `firstlevel`, `secondlevel`. GPLv3. No build system, linter, test suite, or CI — none should be added; this is a curated collection of runnable/copyable `.m` scripts, not a packaged product.
+LaBGAScore holds LaBGAS's (Laboratory for Brain-Gut Axis Studies, KU Leuven) core/template MATLAB scripts for its standard neuroimaging analysis workflow. Scripts are either run directly from this repo, or (more commonly, for a real study) downloaded and adapted into that study's own `code` subdataset — every LaBGAS project is a DataLad superdataset (`proj_xxx`) with subdatasets `sourcedata`, `BIDS`, `derivatives`, `code`, `firstlevel`, `secondlevel`. GPLv3. No build system, test suite, or CI; this is a curated collection of runnable/copyable `.m` scripts, not a packaged product. One lightweight exception: `clean/LaBGAScore_check_all_scripts.m` (see "Static analysis" below).
 
 ## Dependencies (not vendored)
 
@@ -34,12 +34,16 @@ Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlev
 
 LaBGAScore = study setup + first-level + atlas/mask generation; CANlab_help_examples (LaBGAS fork) = second-level templates built on top. See that repo's own `README.md`/`CLAUDE.md` under `Second_level_analysis_template_scripts/` for its internals.
 
-## Current objectives in this repo
+## Documentation & audit history
 
-Three documentation goals, mirroring work already done for `CANlab_help_examples`:
+Three documentation goals, mirroring work already done for `CANlab_help_examples` — all now complete:
 
 1. **Rewrite `README.md`.** ✅ Done (commit `6edd5c5`). Replaced the 3-line stub with an extensive document covering: what this repo is; the DataLad project structure; repository structure/naming conventions; dependencies; a domain-by-domain overview (one paragraph per top-level folder, its entry-point script(s), pointers to richer docs like `secondlevel/README_*.md`); the `CANlab_help_examples` dependency table above; the no-tests/CI note; license. Modeled on `CANlab_help_examples/Second_level_analysis_template_scripts/README.md`'s structure (TOC with anchors).
 
 2. **Normalize script header comments — structural pass.** ✅ Done (commit `654f450`). Scope: the 47 true MATLAB **script** files repo-wide (no `function`/`classdef` declaration — see "Script conventions" above; function files and `ProgressTracker.m` are out of scope). Standardized separator style (dashes, not the old `%____...` underscore block), section-label formatting (asterisked `*USAGE*`/`*OPTIONS*`/`*DEPENDENCIES*`/`*NOTES*`, not plain), and dropped the old `@(#)%` SCCS-style prefix on the version-stamp line. This was a structural/formatting pass only — it preserved existing substantive content and did not verify that content was accurate or complete.
 
-3. **Review script header content against actual code — accuracy pass (current).** For the same 47 script files, read each script's full body and check whether its now-structurally-normalized header content is accurate, complete, and current: does `*USAGE*` still describe what the code does; is every user-configurable variable actually listed under `*OPTIONS*` (with a correct default); are all real external dependencies named under `*DEPENDENCIES*`; is `*NOTES*` still true (no stale caveats, dead links, or references to renamed files/variables). Produce findings script-by-script (what's wrong or missing, not a rewritten header) for human review — do not silently rewrite header content as part of this pass.
+3. **Review script header content against actual code — accuracy pass.** ✅ Done (commits `27d8d8a`, `f53dacb`). For the same 47 script files, read each script's full body and checked whether its structurally-normalized header content was accurate, complete, and current. This also surfaced 19 real code defects (undefined variables, wrong/nonexistent function calls, hardcoded study-specific setup calls left in generic templates, copy-paste errors) unrelated to documentation, all fixed alongside the header content.
+
+## Static analysis
+
+`clean/LaBGAScore_check_all_scripts.m` runs MATLAB's built-in Code Analyzer (`checkcode`) across every `.m` file in the repo (or a subtree passed as its `rootdir` argument) and prints a report, separating genuine syntax errors from style/performance suggestions. Calibrated against real bugs found during the accuracy pass above: `checkcode` reliably catches parse errors (e.g. it did catch the `sort{}` syntax bug fixed in commit `27d8d8a`) but does **not** catch undefined variables used at runtime, calls to functions that don't exist or aren't on the path, or logic bugs (e.g. wrong array indexing) — those all had to be found by reading the code, not by static analysis. Treat it as a fast baseline check run before committing, not a substitute for the kind of full read-through that found the 19 defects above.
