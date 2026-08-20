@@ -3,10 +3,9 @@ function ROI_table = plot_ENet_diagnostics_neuroimaging(results, X, Y, roiNames,
 % Plotting + diagnostics for Elastic Net neuroimaging pipelines.
 %
 % This function visualizes and exports diagnostics from Elastic Net pipelines
-% (e.g., TSPO_ENet_pipeline / ENet_neuroimaging_pipeline). It mirrors the
-% architecture of the TSPO-specific ENet plotting script while remaining generic
-% to any neuroimaging feature matrix where columns correspond to atlas ROI labels
-% (1..p). Outputs include:
+% such as ENet_neuroimaging_pipeline (or a study-specific adaptation of it).
+% It is generic to any neuroimaging feature matrix where columns correspond
+% to atlas ROI labels (1..p). Outputs include:
 %   - ROI table export (mean weights + selection frequency + stability + robust flag)
 %   - |mean weight| vs selection frequency scatter with robust ROI labels
 %   - NIfTI maps: mean weights, selection frequency, feature stability (raw + thresholded)
@@ -56,6 +55,13 @@ function ROI_table = plot_ENet_diagnostics_neuroimaging(results, X, Y, roiNames,
 %   'OutPrefix'       (default 'ENet') Prefix for exported files.
 %   'RelaxIfEmpty'    (default true) If no ROI passes thresholds, relax thresholds
 %                                  for visualization/labels ONLY (75th percentiles).
+%   'UnderlayFile'    (default '')  Optional structural underlay NIfTI for the
+%                                  multi-slice figure. Must match atlasFile's
+%                                  voxel space/dimensions.
+%
+%   Note: the number of top features shown in plots/tables ("TopK") is NOT a
+%   name-value option here. It is taken from results.selectionTopK if present,
+%   otherwise auto-computed as min(20, max(3, ceil(0.25*p))).
 %
 % OUTPUT
 %   ROI_table table

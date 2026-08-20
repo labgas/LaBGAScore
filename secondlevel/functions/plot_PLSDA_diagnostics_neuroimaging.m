@@ -3,8 +3,8 @@ function ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, XL, roiNames, 
 % Plot/diagnose PLS-DA neuroimaging results (ROI/parcellation).
 %
 % This function provides generic visualization and diagnostics for PLS-DA
-% results produced by pipelines such as PLSDA_neuroimaging_pipeline /
-% TSPO_PLSDA_pipeline. It creates:
+% results produced by PLSDA_neuroimaging_pipeline (or a study-specific
+% adaptation of it). It creates:
 %   - ROI table export (VIP + stabilityZ + robust flag)
 %   - VIP vs stabilityZ scatter with robust ROI labeling
 %   - NIfTI maps: VIP, stabilityZ, LV loadings (raw + thresholded)
@@ -39,7 +39,7 @@ function ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, XL, roiNames, 
 %
 % NAME–VALUE OPTIONS
 %   'TopN'         (20)   Number of ROI-table rows printed to console (CSV exports all rows).
-%   'LV'           (2)    LV index to visualize (clamped to valid range).
+%   'LV'           (1)    LV index to visualize (clamped to valid range).
 %   'OutPrefix'    ('PLSDA')  Prefix for exported CSV/NIfTI files.
 %   'VIP_thresh'   (1)    VIP threshold for robust contributor definition/labeling.
 %   'stab_thresh'  (2)    stabilityZ threshold for robust contributor definition/labeling.

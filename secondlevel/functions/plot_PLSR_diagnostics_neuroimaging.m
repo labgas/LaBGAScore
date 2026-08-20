@@ -5,12 +5,12 @@ function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, a
 % This function provides generic visualization and diagnostics for PLSR
 % results produced by pipelines such as PLSR_neuroimaging_pipeline.
 % It creates:
-%   - ROI table export (VIP + stabilityZ + robust flag, plus optional beta/stability fields)
+%   - ROI table export (VIP + stabilityZ + meanBeta + signStability + robust flag)
 %   - VIP vs stabilityZ scatter with robust ROI labeling
 %   - NIfTI maps: VIP, stabilityZ, LV loadings (raw + thresholded)
 %   - Multi-slice visualization (LV / VIP / stabilityZ) with ROI labels
-%   - Optional: top-K mean weights table/bar plot (if results.meanFeatureWeight or results.meanBeta exists)
-%   - Optional: feature stability stem plot (if results.featureStability exists)
+%   - Optional: top-K mean weights table/bar plot (if results.meanFeatureWeight exists)
+%   - Optional: sign stability stem plot (if results.signStability exists)
 %   - Optional: predicted vs observed scatter (if held-out CV predictions are stored)
 %   - Optional: permutation Q2 histogram with observed Q2 overlay
 %   - Optional: bootstrap Q2 histogram with observed Q2 overlay
@@ -29,10 +29,9 @@ function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, a
 %          results.finalXLoadings     [p x finalLV] used if XL is empty
 %          results.finalLV            scalar       clamps LV selection if present
 %          results.meanFeatureWeight  [p x 1] for top-K weight table/bar plot
-%          results.meanBeta           [p x 1] preferred over meanFeatureWeight if present
-%          results.selectionFrequency [p x 1] for ROI table / top-K table
-%          results.signStability      [p x 1] for ROI table / top-K table
-%          results.featureStability   [p x 1] for stability stem plot
+%          results.meanBeta           [p x 1] for ROI table's meanBeta column,
+%                                      preferred over meanFeatureWeight if present
+%          results.signStability      [p x 1] for ROI table column and stem plot
 %          results.cvObserved         [N x 1] observed Y values from outer CV (optional)
 %          results.cvPredicted        [N x 1] predicted Y values from outer CV (optional)
 %          results.cvRepeatID         [N x 1] repeat index for each held-out prediction (optional)
@@ -71,10 +70,10 @@ function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, a
 %
 % OUTPUT
 %   ROI_table table
-%        Core columns:
-%          ROI, VIP, stabilityZ, RobustContributor
-%        Additional columns included if available:
-%          meanBeta, signStability, selectionFrequency, featureStability
+%        Columns:
+%          ROI, VIP, stabilityZ, meanBeta, signStability, RobustContributor
+%          (meanBeta falls back to results.meanFeatureWeight if results.meanBeta
+%           is absent; signStability is NaN if results.signStability is absent)
 %        Also written to: <OutPrefix>_ROI_VIP_stability.csv
 %
 % FILES WRITTEN (requires SPM for NIfTI I/O)
@@ -87,8 +86,8 @@ function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, a
 % FIGURES CREATED (interactive)
 %   1) VIP vs stabilityZ scatter (robust ROIs labeled)
 %   2) Multi-slice 3×N panel: LV map / VIP map / stabilityZ map (robust ROIs labeled)
-%   3) (optional) Top-K mean beta/weight bar plot
-%   4) (optional) Feature stability stem plot
+%   3) (optional) Top-K mean weight bar plot
+%   4) (optional) Sign stability stem plot
 %   5) (optional) Predicted vs observed scatter
 %      - held-out predictions stacked across repeated outer CV
 %      - identity line
