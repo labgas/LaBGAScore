@@ -65,6 +65,16 @@
 %   specific locations as described above.
 %
 %
+% *NOTES*
+%
+%   The commented-out results_suffix assignment near the top of the
+%   variable-definition section (e.g. results_suffix = 'Prob_L1';) is a
+%   manual toggle: uncomment and set it to run multiple analyses with
+%   different settings on the same voxel, writing to a separate
+%   stat-file/output-folder suffix. Leave it commented out to run a
+%   single analysis per voxel.
+%
+%
 % -------------------------------------------------------------------------
 %
 %   AUTHOR:

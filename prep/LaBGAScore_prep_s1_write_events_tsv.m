@@ -20,6 +20,8 @@
 %
 % *OPTIONS*
 %
+% * study_prefix    prefix used for all scripts of a given study, STUDY-SPECIFIC
+%
 % * subjs2write     cell array of subjects to write files for, empty cell array (default) loops over all subjects
 %
 % * pheno_tsv       default true; set to false to skip generating a phenotype.tsv file (only works when subjs2write is empty)

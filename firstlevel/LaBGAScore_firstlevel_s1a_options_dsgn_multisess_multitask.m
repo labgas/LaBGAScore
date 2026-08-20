@@ -159,7 +159,28 @@
 %
 % 6. mask
 %   image you want to mask with
-% 
+%
+%
+% MULTI-SESSION/MULTI-TASK OPTIONS (specific to this script, set in the
+% "DEFINE DIRECTORIES AND RUNDIRNAMES" section below)
+%
+% 1. rundirnames
+%   cell array of run directory names within each session; if you only
+%   have one task, use 'run-1', 'run-2', etc; if you have more than one
+%   task, use one model/script per task, and add _<taskname> (as in your
+%   filenames in derivdir) to rundirnames
+%
+% 2. nr_sess
+%   number of sessions (e.g. drug/placebo, or timepoints)
+%
+% 3. tasknames
+%   cell array of all task names present (as in BIDS-compliant naming of
+%   your functional files in BIDSdir)
+%
+% 4. taskname
+%   single task name, taken from tasknames, for which you want to run
+%   firstlevel analysis with this script/model
+%
 %
 % *NOTES*
 %
@@ -272,13 +293,13 @@ githubrootdir = '/data/master_github_repos';
         if ~isfield(LaBGAS_options,'subjs2analyze')
             DSGN.subjects = derivsubjdirs';
         elseif ~isempty(LaBGAS_options.subjs2analyze)
-            [C,~,~] = intersect(derivsubjs,LaBGAS_options.mandatory.subjs2analyze);
-            if ~isequal(C',LaBGAS_options.mandatory.subjs2analyze)
-                error('\n subject %s defined in LaBGAS_options.mandatory.subjs2analyze not present in %s, please check before proceeding',LaBGAS_options.mandatory.subj2analyze{~ismember(LaBGAS_options.mandatory.subjs2analyze,C)},derivdir);
+            [C,~,~] = intersect(derivsubjs,LaBGAS_options.subjs2analyze);
+            if ~isequal(C',LaBGAS_options.subjs2analyze)
+                error('\n subject %s defined in LaBGAS_options.subjs2analyze not present in %s, please check before proceeding',LaBGAS_options.subj2analyze{~ismember(LaBGAS_options.subjs2analyze,C)},derivdir);
             else
-                DSGN.subjects = cell(1,size(LaBGAS_options.mandatory.subjs2analyze,2));
+                DSGN.subjects = cell(1,size(LaBGAS_options.subjs2analyze,2));
                     for sub = 1:size(DSGN.subjects,2)
-                        DSGN.subjects{sub} = fullfile(derivdir,LaBGAS_options.mandatory.subjs2analyze{sub});
+                        DSGN.subjects{sub} = fullfile(derivdir,LaBGAS_options.subjs2analyze{sub});
                     end
             end
         else

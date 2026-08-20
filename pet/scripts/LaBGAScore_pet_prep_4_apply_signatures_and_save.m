@@ -18,7 +18,6 @@
 % options, e.g. scaling, and save your new version of the script with a
 % letter index
 %
-% * myscaling_sigs             'raw'/'scaled'
 % * similarity_metric_sigs     'dotproduct'/'cosine_similarity'/'correlation'
 % * keyword_sigs                'all'/any option from load_image_set
 %
@@ -104,7 +103,7 @@ if sum(contains(keyword_sigs,'nps')) > 0 || isequal(keyword_sigs{1},'all')
 
             [~, ~, ~, DAT.SIG.NPSsubregions.npspos_by_region, DAT.SIG.NPSsubregions.npsneg_by_region] = apply_nps(DATA_OBJ{1}, 'noverbose', 'notables');
 
-        case 'cosine_similatiry'
+        case 'cosine_similarity'
 
             [~, ~, ~, DAT.SIG.NPSsubregions.npspos_by_region, DAT.SIG.NPSsubregions.npsneg_by_region] = apply_nps(DATA_OBJ{1}, 'noverbose', 'notables', similarity_metric_sigs);
 

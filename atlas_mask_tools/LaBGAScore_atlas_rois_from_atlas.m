@@ -29,11 +29,23 @@
 %
 % * write_combinedroi2nii = true/false            writes .nii file for the combined flat roi atlas object, which can be useful for some purposes
 %
+% * roi_modelname                                 prefix added to names of saved roi files written to model-specific maskdir
+%
+% * roi_set_name                                  descriptive name for the set of rois, included in the saved filenames
+%
 %
 % *DEPENDENCIES*
 %
 % CANlab's CanlabCore and Neuroimaging_Pattern_Masks Github repos on your Matlab path
 % if needed, clone from https://github.com/canlab
+%
+%
+% *NOTES*
+%
+% This script is checked in as a worked example for one specific study/model
+% (roi_modelname 'bit_rew_m1m', reward-region roi labels, etc.) rather than a
+% fully generic template - the atlas/label/ROI names in the body below are
+% study-specific and need adapting for your own study
 %
 % -------------------------------------------------------------------------
 %
@@ -54,6 +66,7 @@
 save_original_roi_atlas_obj = true;
 write_roi2nii = true;
 save_combined_roi_atlas_obj = true;
+write_combinedroi2nii = true;
 
 
 % STUDY- AND MODEL-SPECIFIC SCRIPTS/VARS
@@ -378,7 +391,7 @@ roi = 2;
     end
     
     if save_combined_roi_atlas_obj
-        savecombinedfiledata = fullfile(maskdir,[roi_modelname '_combined' roi_set_name '.mat']);
+        savecombinedfilenamedata = fullfile(maskdir,[roi_modelname '_combined' roi_set_name '.mat']);
         save(savecombinedfilenamedata, 'roi_atlas', '-v7.3');
         fprintf('\nSaved combined roi atlas object\n');
     end

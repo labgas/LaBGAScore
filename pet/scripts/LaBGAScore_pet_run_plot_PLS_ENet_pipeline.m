@@ -35,6 +35,26 @@
 % * opts_PLS            struct of PLS-DA pipeline options (outerK, innerK, nrepeats, maxLV, nPerm, nBoot, learningSteps) - see help PLSDA_neuroimaging_pipeline
 % * opts_ENet           struct of Elastic Net pipeline options (outerK, innerK, nrepeats, alphaGrid, lambdaGrid, nPerm, nBoot, learningSteps) - see help ENet_neuroimaging_pipeline
 %
+%
+% *DEPENDENCIES*
+%
+% * secondlevel/functions/: PLSDA_neuroimaging_pipeline, ENet_neuroimaging_pipeline,
+%   plot_PLSDA_diagnostics_neuroimaging, plot_ENet_diagnostics_neuroimaging
+% * CanlabCore atlas functions: load_atlas, downsample_parcellation, fmri_data, resample_space
+% * clean/LaBGAScore_smart_parallel_pool_setup.m
+%
+%
+% *NOTES*
+%
+% * STUDY-SPECIFIC: the input filename ('Discoverie_PET_final_datafile.xlsx'),
+%   group_ID ('patient'), and the hardcoded atlas-region-exclusion index
+%   list (idx_excluded_regions) below are all pinned to one particular
+%   study/dataset and must be adapted before reuse.
+% * This script defines its own local copy of save_all_open_figures_smart
+%   (bottom of file) rather than calling the shared
+%   figures/save_all_open_figures_smart.m - keep the two in sync manually
+%   if either is changed.
+%
 % -------------------------------------------------------------------------
 %
 % modified by: Lukas Van Oudenhove
@@ -60,7 +80,7 @@ do_enet = false;
 
 % INPUT DIRECTORIES
 
-LaBGAScore_pet_s3_a_set_up_paths_always_run_first;
+LaBGAScore_pet_a_set_up_paths_always_run_first;
 
 roi_resultsdir = fullfile(resultsdir,'results_master_files');
 

@@ -39,9 +39,14 @@
 %
 % 7. define and estimate first level model and save the spm batches
 %   NOTE: CANlab functions called by this script in this step
-%       a) https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_subject_levels.m
+%       a) canlab_glm_subject_levels_old.m (firstlevel/functions/) - an
+%          older CANlab version kept because the current
+%          canlab_glm_subject_levels.m errors out on this repo's
+%          handling of missing onset/duration files (see inline comment
+%          at the call site)
 %       b) https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_subject_levels_run1subject.m
-%       c) https://github.com/canlab/CanlabPrivate/blob/master/spmUtility/canlab_spm_contrast_job_luka.m
+%       c) canlab_spm_contrast_job_single_trials_lukasvo (called only
+%          when DSGN.singletrials is set, to build per-trial contrasts)
 %
 % 8. run diagnostics on first level model and publish the output as html report by calling
 %   the subsequent LaBGAScore_firstlevel_s3_diagnose_model script
@@ -54,8 +59,8 @@
 % This script is generic, i.e. it should not need any study-specific
 % modifcations in principle, except for changing the names of generic
 % scripts into study-specific ones on
-% - line 112-
-% - line 920-
+% - line 117-
+% - line 982-
 %   NOTE: LaBGAScore first level scripts have been tested on Ubuntu 20.04.3
 %           and Windows 10 (thanks to Anne Willems), NOT (yet) on Mac OS X
 %

@@ -12,8 +12,30 @@
 %
 %
 % *OPTIONS*
-% 
-% For more info on the CANlab-style DSGN structure, see the scripts below
+%
+% For more info on the CANlab-style DSGN structure and phDSGN fields, see
+% LaBGAScore_firstlevel_s1b_fit_phMRI_model.m, from which phDSGN should be
+% copied (see "SET COVARIATE INFO" section below)
+%
+% Covariate options (STUDY-SPECIFIC, set in the "SET COVARIATE INFO"
+% section below):
+%
+% * name_covars       cell array of covariate column names, as they appear in covars_filename
+% * nr_noise_reg      number of noise regressors already in the first-level model (e.g. 24 head motion params + csf, no spikes for phMRI)
+% * covars_filename   name of the .csv file with covariate values, located in BIDSdir
+%
+% *NOTES*
+%
+% The final contrast-batch loop (`for sub = 3:num_subs_included`) starts
+% at subject index 3, i.e. it silently skips the first two subjects in
+% subs2include - this is the script's current behavior, not necessarily
+% intentional; check before relying on it for a new study.
+%
+% *DEPENDENCIES*
+%
+% MATLAB Report Generator toolbox (mlreportgen.utils.capitalizeFirstChar)
+% git-annex on the system path (the script shells out to
+% `git annex unannex *.mat` before writing results)
 %
 % -------------------------------------------------------------------------
 %
@@ -80,7 +102,7 @@ covars_filename = 'blood_hormones_msd.csv';
 %% GET & SET PATHS
 % -------------------------------------------------------------------------
 
-ery_ph_prep_s0_define_directories;
+LaBGAScore_prep_s0_define_directories;
 
 firstleveldir = fullfile(rootdir, 'firstlevel');
 

@@ -25,7 +25,7 @@
 % * save_merged_atlas_obj = true/false          saves merged atlas object (i.e. AFTER merging selected parcels into one fmri_mask_image object, hence one index for the entire mask)
 %                                                 useful/needed if you want to extract roi averages
 %
-% * singleroi = true/false                      set to true if you are writing a mask/roi with one single contiguous region
+% * single_roi = true/false                     set to true if you are writing a mask/roi with one single contiguous region
 %
 %
 % *DEPENDENCIES*
@@ -38,6 +38,12 @@
 %
 % help atlas.select_atlas_subset
 % https://canlab.github.io/_pages/using_canlab_atlases/using_canlab_atlases.html
+%
+% This script is checked in as a worked example for one specific study/model
+% (reward-region atlas labels, maskname 'bit_rew_m1m', etc.) rather than a fully
+% generic template - the atlas/label/ROI names in the body below are
+% study-specific and need adapting for your own study even though the
+% directory-setup calls above have been genericized
 %
 % -------------------------------------------------------------------------
 %
@@ -63,8 +69,8 @@ single_roi = false;
 % Define maskname and directory where mask will be written
 %--------------------------------------------------------------------------
 
-bit_rew_prep_s0_define_directories;
-bit_rew_secondlevel_m1m_s0_a_set_up_paths_always_run_first;
+LaBGAScore_prep_s0_define_directories;
+a_set_up_paths_always_run_first;
 
 modelname = 'bit_rew_m1m';
 
@@ -156,6 +162,7 @@ atlas3_subset_flat = atlas3_subset_flat.threshold(0.20); % canlab2024 is a proba
 atlases = {atlas1_subset, atlas2_subset, atlas3_subset};
 atlases_flat = {atlas1_subset_flat, atlas2_subset_flat, atlas3_subset_flat};
 
+nr_atlases = numel(atlases);
 atlas_nr = 1;
 
 combined_atlas = atlases{1};

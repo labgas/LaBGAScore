@@ -77,6 +77,25 @@
 %                           files, enter the project name in this option
 %                           otherwise, comment out
 %
+% * projrootdir             root directory of your study project (hardcoded
+%                           local path, change to your own)
+%
+% * graphvarrootdir         root directory of your GraphVar installation
+%                           (hardcoded local path, change to your own)
+%
+% * phenofilename2write     filename of the phenotype/Variables file
+%                           written for GraphVar
+%
+% * conn_condition_name     name of the CONN condition to read results for,
+%                           e.g. 'Condition001'
+%
+%
+% *NOTES*
+%
+% * phenofilename2load is set above but currently only referenced inside a
+%   commented-out block at the end of the script ("load and add CONN
+%   Subj_ID") - effectively unused in the active code path
+%
 %
 % -------------------------------------------------------------------------
 %

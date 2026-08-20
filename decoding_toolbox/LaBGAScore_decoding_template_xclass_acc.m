@@ -27,6 +27,11 @@
 % * conds2include                   indices of conditions in DSGN.conditions (or SPM.Sess(x).U.name); assumes all conditions are present in all runs!
 % * mask_name                       absolute path to mask, or name of mask file if already on Matlab path
 %
+%
+% *DEPENDENCIES*
+%
+% The Decoding Toolbox (TDT), CANlab's CanlabCore (fmri_mask_image, fmri_data)
+%
 % For more info on TDT, check out the
 % <https://www.frontiersin.org/articles/10.3389/fninf.2014.00088/full
 % accompanying paper> and/or
@@ -78,7 +83,7 @@ end
 
 if ~exist('DSGN','var')
     warning('\nDSGN variable not found in Matlab workspace, running LaBGAScore_firstlevel_s1_options_dsgn_struct.m before proceeding')
-    LaBGAScore_s1_options_dsgn_struct;
+    LaBGAScore_firstlevel_s1_options_dsgn_struct;
 end
 
 % check whether LaBGAScore_firstlevel_s0_a_set_up_paths_always_run_first.m has been run

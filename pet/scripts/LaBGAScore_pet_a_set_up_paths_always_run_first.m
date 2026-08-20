@@ -6,9 +6,21 @@
 % Always run this first before you run other LaBGAScore pet second level batch scripts.
 %
 %
-% *NOTES*
+% *OPTIONS*
 %
-% CANlab notes:
+% * modelname       default 'trc-DPA714' (line ~73) - rename to your tracer's
+%                   identifier (must match the naming used by the
+%                   LaBGAScore_pet_model_* script for this tracer)
+%
+%
+% *DEPENDENCIES*
+%
+% * SPM12 (canonical/config/matlabbatch/toolbox subdirs added to path if missing)
+% * auto-clones (if not already present under githubrootdir) and adds to path:
+%   CanlabCore, CanlabPrivate, CANlab_help_examples (LaBGAS fork), canlab_single_trials
+%
+%
+% *NOTES*
 %
 % - standard folders and variable names are created by these scripts
 %
@@ -23,12 +35,6 @@
 %   run the scripts
 %   meta-data saved in image_names_and_setup.mat
 %   image data saved in data_objects.mat
-%
-% - you only need to run the prep_ scripts once.  After that, use
-%   b_reload_saved_matfiles.m to re-load saved files
-%
-% - when all scripts working properly, run z_batch_publish_analyses.m
-%   to create html report.  customize by editing z_batch_list_to_publish.m
 %
 % - saved in results folder:
 %   figures

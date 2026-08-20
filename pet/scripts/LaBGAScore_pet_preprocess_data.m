@@ -49,6 +49,29 @@
 %       templates in MNI.
 %
 %
+% *OPTIONS*
+%
+% All set between the `LaBGAScore_prep_s0_define_directories` call and the
+% "END OF SETTINGS" marker:
+%
+% * sessiondir             default '', session subfolder name (empty = no session level)
+% * infostring_tracer      default 'trc-DPA714', tracer identifier used in filenames
+% * infostring_PET         default 'rec-acdyn_pet', PET-image filename suffix
+% * infostring_frames      default 'frames', frame-definition .m filename suffix
+% * SUBJECTS               cell array of subject IDs to preprocess - the checked-in
+%                          default is a single hardcoded example subject,
+%                          'sub-TSPOHC017' (STUDY-SPECIFIC: replace before
+%                          running for a new study/tracer); commented-out
+%                          alternatives show a "select all PET subjects in
+%                          BIDS" strategy and two other tracers' settings
+%
+%
+% *DEPENDENCIES*
+%
+% * SPM (spm.m location used to find the tissue-probability-map priors)
+% * pet/functions/LCN12_PET_preprocessing.m (vendored)
+%
+%
 % *NOTES*
 %
 % THIS IS RESEARCH SOFTWARE. Originated as LCN12_PET_preprocess_data.m (v0.15).

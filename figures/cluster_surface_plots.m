@@ -9,6 +9,11 @@
 % voxel indices and axis limits, using the CANlab colormap (canlabCmap)
 %
 %
+% *DEPENDENCIES*
+%
+% SPM (spm_read_vols, spm_vol), this repo's own figures/canlabCmap.m
+%
+%
 % *NOTES*
 %
 % Slice indices, bounding boxes, and color-axis limits are hardcoded for the

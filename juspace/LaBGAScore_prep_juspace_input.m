@@ -24,6 +24,10 @@
 %
 % *atlasname_glm
 % *maskname_glm
+% *myscaling_glm             equally essential: selects between 'raw' and
+%                            'scaled' condition images for the spatial
+%                            correlations (switch statement, errors on any
+%                            other value)
 %
 % Help prep_3a_run_second_level_regression_and_save for more info about
 % these options

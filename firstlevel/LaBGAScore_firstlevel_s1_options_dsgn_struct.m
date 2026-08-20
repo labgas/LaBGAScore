@@ -23,6 +23,9 @@
 % LaBGAScore Github repo on Matlab path, with subfolders
 % https://github.com/labgas/LaBGAScore
 %
+% SPM12 on Matlab path, required by LaBGAScore_prep_s0_define_directories,
+% which this script calls
+%
 %
 % *OPTIONS*
 %
@@ -201,7 +204,7 @@ LaBGAS_options.mandatory.vif_thresh=2;
 LaBGAS_options.movement_reg_quadratic = true; % change to false if you don't want to add quadratic terms for movement parameters and their first-order derivatives
 
 % OPTIONAL
-LaBGAS_options.subjs2analyze = sort{}; % enter subjects separated by comma if you only want to analyze selected subjects e.g. sort({'sub-01','sub-02'}); leave cell array empty or comment out to loop over all subjects
+LaBGAS_options.subjs2analyze = sort({}); % enter subjects separated by comma if you only want to analyze selected subjects e.g. sort({'sub-01','sub-02'}); leave cell array empty or comment out to loop over all subjects
 
 % SPIKE OPTIONS
 LaBGAS_options.spikes.dvars_threshold = 2; % REQUIRED if spike_def = 'CANlab'

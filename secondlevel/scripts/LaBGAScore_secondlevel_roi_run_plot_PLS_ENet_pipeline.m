@@ -39,6 +39,13 @@
 % * opts_PLS                struct of PLS-DA pipeline options (outerK, innerK, nrepeats, maxLV, nPerm, nBoot, learningSteps) — see help PLSDA_neuroimaging_pipeline
 % * opts_ENet               struct of Elastic Net pipeline options (outerK, innerK, nrepeats, alphaGrid, lambdaGrid, nPerm, nBoot, learningSteps) — see help ENet_neuroimaging_pipeline
 %
+%
+% *DEPENDENCIES*
+%
+% Requires prior output from prep_3a_run_second_level_regression_and_save.m
+% and LaBGAScore_atlas_rois_from_atlas.m; calls LaBGAScore_smart_parallel_pool_setup.m
+% and save_all_open_figures_smart.m
+%
 % -------------------------------------------------------------------------
 %
 % modified by: Lukas Van Oudenhove

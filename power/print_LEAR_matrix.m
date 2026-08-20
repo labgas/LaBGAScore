@@ -14,6 +14,14 @@
 % * base_corr        base correlation used for the exponential decay, default 0.85
 % * n                 size of the (square) LEAR matrix, default 5
 %
+%
+% *NOTES*
+%
+% * decay_rate is defined in the code but is currently a no-op - the matrix
+%   formula (base_corr ^ abs(i-j)) never references it, so changing its
+%   value has no effect
+%
+%
 % -------------------------------------------------------------------------
 %
 % modified by: Lukas Van Oudenhove

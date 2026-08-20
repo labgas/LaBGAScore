@@ -55,7 +55,7 @@ covs2use = 'delta_rating';
 
 % GET MODEL-SPECIFIC PATHS AND OPTIONS
 
-ery_4a_secondlevel_m6m_s0_a_set_up_paths_always_run_first;
+a_set_up_paths_always_run_first;
 
 
 % LOAD DSGN, DAT, AND DATA OBJECTS

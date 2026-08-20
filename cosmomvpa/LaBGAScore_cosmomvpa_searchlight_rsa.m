@@ -50,6 +50,11 @@
 % * phenofile_st_condid             single variable name containing condition identifiers
 % * do_null_data                    true/false - the former generates null data for every subject and uses it for the purpose of group level permutation stats, see docs cosmo_montecarlo_cluster_stats
 %
+%
+% *DEPENDENCIES*
+%
+% CoSMoMVPA, CANlab's CanlabCore (fmri_mask_image, canlab_results_fmridisplay, region, title_montage)
+%
 % For more info on CoSMoMVPA, check out the
 % <frontiersin.org/articles/10.3389/fninf.2016.00027/full accompanying paper>
 %

@@ -29,6 +29,38 @@
 %       weights are not specified, all frames are weighted in the same way.
 %
 %
+% *OPTIONS*
+%
+% All set in the "PREP WORK, SET INFO AND OPTIONS" section, above the
+% "DO NOT CHANGE BELOW THIS LINE" marker:
+%
+% * sessiondir                  default '', session subfolder name (empty = no session level)
+% * infostring_tracer           default 'trc-DPA714', tracer identifier used in filenames
+% * infostring_PET              default 'rec-acdyn_pet', PET-image filename suffix
+% * infostring_frames           default 'frames', frame-definition .m filename suffix
+% * infostring_input            default 'data_blood', arterial input function filename suffix (only needed for models requiring one)
+% * infostring_metab            default 'data_metab', metabolite filename suffix (only needed for models requiring one)
+% * SUBJECTS                    which subjects to analyze - three alternative strategies in-code (all-PET-in-BIDS, all-in-derivatives, or manual list); default uses "all subjects in derivatives/pet"
+% * figures_on                  default 0, show per-region figures and pause (needs keypress) if 1
+% * save_figures                default 1, save figures to file (overrules pausing)
+% * save_parcelimgs             default 0, save parcel-wise images per parameter/model/subject if 1
+% * do_voxelwise_logan          default 0, also run voxel-wise Logan analysis if 1
+% * pet_space_reference         default 0, read atlas in PET space (1) vs. atlas space (0)
+% * suffix                      default 'atlas_space', label used when running multiple models
+% * atlas_name                  default 'canlab2024_fine_2mm' - option (a) whole-brain atlas name for load_atlas.m, or option (b, commented) a combined-ROI .nii from LaBGAScore_atlas_rois_from_atlas.m
+% * intersect_GM / intersect_WM default 0/0, intersect VOI/parametric image with subject-specific GM/WM mask
+% * GM_CUTOFF / WM_CUTOFF       default 0.3/0.3, thresholds for the above
+% * additional_smooth_parametric default 6 (mm), isotropic Gaussian smoothing kernel for voxel-based parametric Logan images
+% * nr_parpool                  default 12 (LaBGAS server default), number of parallel workers
+%
+%
+% *DEPENDENCIES*
+%
+% * CanlabCore: load_atlas, downsample_parcellation
+% * SPM: spm_vol
+% * vendored pet/functions/LCN_*.m: LCN12_read_image, LCN_check_filename, LCN_calc_intact_tracer_hill (and related LCN model-fitting functions)
+%
+%
 % *NOTES*
 %
 % THIS IS RESEARCH SOFTWARE. Originated as LCN12_PET_TSPO_DPA714.m (v2.0).

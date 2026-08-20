@@ -48,7 +48,9 @@
 %
 % *DEPENDENCIES*
 %
-% MACS Toolbox (SPM batch editor module `spm.tools.MACS.MA_model_space`)
+% MACS Toolbox (SPM batch editor module `spm.tools.MACS.MA_model_space`).
+% Also requires rootdir/derivdir/derivsubjs already defined in the workspace,
+% normally set by LaBGAScore_prep_s0_define_directories.
 %
 %
 % *NOTES*
@@ -79,7 +81,7 @@
 %%% Step 0: Study parameters %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % load LaBGAS standard directory structure
-test_prep_s0_define_directories
+LaBGAScore_prep_s0_define_directories
 firstleveldir = fullfile(rootdir,'firstlevel');
 
 % output directory

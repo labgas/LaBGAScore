@@ -10,6 +10,23 @@
 % standalone
 %
 %
+% *OPTIONS*
+%
+% The entire ~280-line body of this script IS the option set: every
+% variable assigned below is a user-configurable option, organized into
+% one section per consuming script (e.g. LaBGASCORE_PET_PREP_2_LOAD_IMAGE_DATA_AND_SAVE,
+% PREP_3A_RUN_SECOND_LEVEL_REGRESSION_AND_SAVE, ...). See the in-line
+% comments next to each variable for its default and meaning.
+%
+%
+% *DEPENDENCIES*
+%
+% * CANlab canlab2023/canlab2024 atlases (via load_atlas/which)
+% * gm_mask_*/brain_mask_* NIfTIs shipped in atlas_mask_tools/
+% * https://github.com/canlab/ooFmriDataObjML (for ML-pipeline options)
+% * CANlab's predict() function (for cross-validated prediction options)
+%
+%
 % *NOTES*
 %
 % * Always make a study-specific copy of this script in your code subdataset, do NOT edit in the repo!

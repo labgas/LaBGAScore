@@ -10,7 +10,7 @@
 % by the CONN toolbox
 %
 % Run this script with Matlab's publish function to generate html report of results:
-% publish('LaBGAScore_mvpa_beta_maps_conn','outputDir',htmlsavedir)
+% publish('LaBGAScore_secondlevel_mvpa_beta_maps_conn','outputDir',htmlsavedir)
 %
 %
 % *DEPENDENCIES*
@@ -60,7 +60,7 @@
 % Dependency: https://github.com/canlab/ooFmriDataObjML
 %
 % Tutorial: https://canlab.github.io/_pages/canlab_pipelines_walkthrough/estimateBestRegionPerformance.html
-% Example script: https://github.com/labgas/LaBGAScore/blob/main/secondlevel/LaBGAScore_secondlevel_ooFmriDataObjML_example.m
+% Example script: https://github.com/labgas/LaBGAScore/blob/main/secondlevel/scripts/LaBGAScore_secondlevel_ooFmriDataObjML_example.m
 % 
 %
 % *OPTIONS*
@@ -82,6 +82,17 @@
 %       * nfolds                        number of cross-validation folds for kfold
 %
 %       * algorithm_name                e.g. 'cv_pcr', or other option passed into predict function (help fmri_data.predict for options)
+%
+%       * maskname                      path to mask image applied to the connectivity beta maps before analysis
+%
+%       * behav_filename                filename of the behavioral data spreadsheet (in inputdir)
+%       * behav_outcome_varname         variable name in behav_filename holding the continuous outcome Y
+%       * behav_qc_varname              variable name in behav_filename used to exclude subjects failing QC (NaN = excluded)
+%       * behav_group_varname           variable name in behav_filename used for group-balanced cross-validation folds (holdout_set_method 'group')
+%
+%       * nr_seeds                      number of connectivity seeds to loop over
+%       * source_indices_conn           CONN seed/source indices used to match beta filenames to seednames
+%       * seednames                     cell array of seed labels, same length/order as source_indices_conn
 %
 % For more extensive information about these options, see also the
 % documentation for the following scripts in the CANlab_help_examples

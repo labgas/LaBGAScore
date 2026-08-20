@@ -15,11 +15,17 @@
 % * parcel_type                        significance level used to select parcels, 'unc' | 'fdr' | 'Bayes'
 % * do_roi                             run roi-wise extraction, default true
 % * nr_sess                            number of within-subject sessions
-% * names_sess                         cell array of session names, e.g. {'ses-01','ses-02'}
 % * within_session_contrast_idx        indices from DAT.contrastnames for the within-session contrasts
 % * between_session_contrast_idx       index from DAT.contrastnames for the between-session contrast
 % * mygroupnamefield                   'conditions' or 'contrasts', must match corresponding prep_3a script
 % * results_suffix                     suffix used when saving prep_3a results, must match corresponding prep_3a script
+%
+%
+% *DEPENDENCIES*
+%
+% Requires myscaling_glm, atlasname_glm, and atlas_granularity already in the
+% workspace (normally set via a2_set_default_options.m/a_set_up_paths_always_run_first),
+% and .mat result files already produced by prep_3a_run_second_level_regression_and_save.m
 %
 % -------------------------------------------------------------------------
 %
@@ -46,14 +52,13 @@ do_roi = true;
 
 % INPUT DIRECTORIES
 
-moodbugs2_prep_s0_define_directories;
-moodbugs2_secondlevel_m1_s0_a_set_up_paths_always_run_first;
+LaBGAScore_prep_s0_define_directories;
+a_set_up_paths_always_run_first;
 load(fullfile(resultsdir,'image_names_and_setup.mat'));
 
 % SESSION INFO
 
-nr_sess = 2; 
-names_sess = {'ses-01','ses-02'};
+nr_sess = 2;
 within_session_contrast_idx = [1,2]; % indices from DAT.contrastnames
 between_session_contrast_idx = 5;
 

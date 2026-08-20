@@ -65,6 +65,16 @@
 %   specific locations as described above.
 %
 %
+% *NOTES*
+%
+%   The commented-out results_suffix assignment near the top of the
+%   variable-definition section (e.g. results_suffix = 'Prob_L1';) is a
+%   manual toggle: uncomment and set it to run multiple analyses with
+%   different settings on the same voxel, writing to a separate
+%   stat-file/output-folder suffix. Leave it commented out to run a
+%   single analysis per voxel.
+%
+%
 % -------------------------------------------------------------------------
 %
 %   AUTHOR:
@@ -287,7 +297,7 @@ for kk = 1:length(subs)
 
             % Specify metabolite data
             % (MANDATORY)
-            dir_metabolite = dir([sess(ll).folder filesep sess(ll).name filesep 'mrs' filesep subs(kk).name '_' sess(ll).name '_acq-' voxelname acq_type '_svs.SDAT']); %MH 2023-02-19 AND %LVO 2024-02-16
+            dir_metabolite = dir([sess(ll).folder filesep sess(ll).name filesep 'mrs' filesep subs(kk).name '_' sess(ll).name '_acq-' voxelname acq_type '.7']); %LVO 2024-10-24, fixed to GE .7 format 2026-08-19
             dir_nii = dir([sess(ll).folder filesep sess(ll).name filesep 'anat' filesep subs(kk).name '_' sess(ll).name '_T1w.nii*']); %LVO 2025-01-09 wildcard to accept both zipped and unzipped format
                 if isempty(dir_metabolite) || isempty(dir_nii) % LVO 2024-10-24 & 2025-01-08
                     fprintf('\n');
@@ -297,13 +307,11 @@ for kk = 1:length(subs)
                 else
                     files(counter) = {[dir_metabolite(end).folder filesep dir_metabolite(end).name]};
                 end
-            
+
             % Specify water reference data for eddy-current correction (same sequence as metabolite data!)
             % (OPTIONAL)
             % Leave empty for GE P-files (.7) - these include water reference data by
             % default.
-            dir_ref    = dir([sess(ll).folder filesep sess(ll).name filesep 'mrs' filesep subs(kk).name '_' sess(ll).name '_acq-' voxelname acq_type '_ref.SDAT']);  %MH 2023-02-19 AND %LVO 2024-02-16
-            files_ref(counter)  = {[dir_ref(end).folder filesep dir_ref(end).name]};
 
             % Specify water data for quantification (e.g. short-TE water scan)
             % (OPTIONAL)

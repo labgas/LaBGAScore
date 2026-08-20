@@ -4,8 +4,11 @@
 % *USAGE*
 %
 % This script runs Osprey analysis of mrs data organized according to
-% standard LaBGAS file organization by calling an Osprey jobfile
-% (LaBGAScore_mrs_s0_osprey_jobfile) - one jobfile per voxel.
+% standard LaBGAS file organization by calling, for each voxel, that
+% study's own renamed copy of the Osprey jobfile template
+% (LaBGAScore_mrs_osprey_jobfile_Philips.m or, if nr_sess = 1,
+% LaBGAScore_mrs_osprey_single_sess_jobfile_Philips.m, renamed per study to
+% [study_prefix]_mrs_s0_osprey_jobfile_[voxel]_Philips.m).
 %
 % As is the standard, it should be run for the rootdir of the superdataset.
 %
@@ -43,7 +46,17 @@
 %
 % scanner = 'Philips'/'GE'                      brand of scanner on which data were acquired
 %
-% quant_method = 'TissCorrWaterScaled'/'tCr'    quantification method used when writing results file, TissCorrWaterScaled can be considered the LaBGAS default, but to be discussed with Lukas (and Melina) per study!  
+% study_prefix                                  prefix used for all scripts in this study; eval()'d to call '[study_prefix]_prep_s0_define_directories'
+%
+% results_suffix                                optional, commented out by default; set to run multiple analyses with different settings on the same voxel, writing to a separate stat-file/output-folder suffix; leave commented out to run a single analysis per voxel
+%
+% voxelnames                                    cell array with voxel names, in the same order as they were acquired
+%
+% acq_type                                      type of MRS sequence, used in the 'acq-' BIDS label as 'acq-[vox1][acq_type]'
+%
+% quant_method = 'TissCorrWaterScaled'/'tCr'    quantification method used when writing results file, TissCorrWaterScaled can be considered the LaBGAS default, but to be discussed with Lukas (and Melina) per study!
+%
+% nr_sess                                       number of sessions in the experiment
 %
 %
 % -------------------------------------------------------------------------
@@ -58,9 +71,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_mrs_run_osprey_Philips.m                        v1.8
+% LaBGAScore_mrs_run_osprey_Philips.m                        v1.9
 %
-% last modified: 2025/02/10
+% last modified: 2026/08/19
 %
 %
 %% SET OPTIONS & VARIABLES

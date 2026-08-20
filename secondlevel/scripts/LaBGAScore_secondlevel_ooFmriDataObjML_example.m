@@ -26,6 +26,11 @@
 % https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/c2f_run_MVPA_regression_single_trial.m,
 % including some more info as well
 %
+% This script does not run standalone: it assumes fmri_dat,
+% holdout_set_method_mvpa_reg_st, nfolds_mvpa_reg_st, group_identifier, and
+% (Example 2) subj_identifier already exist in the workspace, and (Example 1)
+% that fmri_dat.metadata_table has a subject_id column
+%
 % -------------------------------------------------------------------------
 %
 % modified by: lukas.vanoudenhove@kuleuven.be & bogpetre@gmail.com

@@ -3,22 +3,35 @@
 %
 % *USAGE*
 %
-% This script does everything to fit and diagnose first level models,
-% more specifically
+% This is the multi-session/multi-task variant of
+% LaBGAScore_firstlevel_s2_fit_model.m: same overall pipeline (fit and
+% diagnose first level models), but branching on nr_sess (from
+% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m) so that a
+% design with more than one session (e.g. drug/placebo, or timepoints) is
+% handled by an explicit `for ses = 1:nr_sess` loop nested inside the
+% subject loop, in addition to the single-session code path shared with
+% s2_fit_model.m. Within each subject/session, image, noise, and events
+% file discovery is additionally filtered by `taskname` (one task per
+% run of this script; see LaBGAScore_firstlevel_s1a_..._multitask.m's
+% `tasknames`/`taskname` options) rather than assuming a single task.
+% The subject loop itself iterates over `LaBGAS_options.subjs2analyze`
+% (not over all of `derivsubjs` as in s2_fit_model.m).
 %
-% 1. checking dependencies, cloning CANlab Github repos if not yet present,
+% Step by step, this script:
+%
+% 1. checks dependencies, cloning CANlab Github repos if not yet present,
 %   and adding all necessary (sub)folders to Matlab path if needed
 %
-% 2. creating the first level directory structure
+% 2. creates the first level directory structure
 %   NOTE: if you are using datalad (LaBGAS default), create the firstlevel
 %   directory (without subdirectories) first using datalad commands from
 %   your Linux terminal
 %
-% 3. reorganize derivdirs and their content for each subject, with
-%   run-specific subdirs
+% 3. reorganizes derivdirs and their content for each subject (and, for
+%   nr_sess > 1, each session), with run-specific subdirs
 %
-% 4. extract noise regressors from fMRIprep output or create them using
-%   CANlab functions (option specified in previous script) and save them in
+% 4. extracts noise regressors from fMRIprep output or creates them using
+%   CANlab functions (option specified in previous script) and saves them in
 %   the correct format to the run-specific directories for each subject
 %   NOTE: by default we use the following noise regressors
 %       a) global CSF signal
@@ -28,34 +41,37 @@
 %           NOTE: for more info: https://canlab.github.io/_pages/tutorials/html/first_level_spm12.html
 %       c) dummy spike regressors
 %
-% 5. extract onsets, durations, and (if applicable) parametric modulators
+% 5. extracts onsets, durations, and (if applicable) parametric modulators
 %   from events.tsv files created by LaBGAScore_prep_s1_write_events.tsv, and
-%   save them in the correct format to the run-specific directories for each
+%   saves them in the correct format to the run-specific directories for each
 %   subject
 %
-% 6. plot design (matrix) of conditions and their parametric modulators for each run, and
-%   save the output to model-specific subdir within run-specific subdirs in
+% 6. plots design (matrix) of conditions and their parametric modulators for each run, and
+%   saves the output to model-specific subdir within run-specific subdirs in
 %   derivdir
 %
-% 7. define and estimate first level model and save the spm batches
-%   NOTE: CANlab functions called by this script in this step
-%       a) https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_subject_levels.m
-%       b) https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_subject_levels_run1subject.m
-%       c) https://github.com/canlab/CanlabPrivate/blob/master/spmUtility/canlab_spm_contrast_job_luka.m
+% 7. defines and estimates the first level model and saves the spm batches
+%   NOTE: CANlab function called by this script in this step:
+%       canlab_glm_subject_levels_old.m (firstlevel/functions/) - an
+%       older CANlab version kept because the current
+%       canlab_glm_subject_levels.m errors out on this repo's handling
+%       of missing onset/duration files (see inline comment at the call
+%       site)
 %
-% 8. run diagnostics on first level model and publish the output as html report by calling
-%   the subsequent LaBGAScore_firstlevel_s3_diagnose_model script
+% 8. runs diagnostics on the first level model and publishes the output as
+%   an html report by calling the subsequent
+%   LaBGAScore_firstlevel_s3_diagnose_model script
 %   NOTE: CANlab function called by this script
 %       https://github.com/canlab/CanlabCore/blob/master/CanlabCore/diagnostics/scn_spm_design_check.m
 %
-% LaBGAS_firstlevel_s1_options_dsgn_struct.m should always be run prior to
-% this script, which will check whether this is the case, and run
-% LaBGAS_firstlevel_s1_options_dsgn_struct.m if not
+% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m should always
+% be run prior to this script, which will check whether this is the case,
+% and run it if not
 % This script is generic, i.e. it should not need any study-specific
 % modifcations in principle, except for changing the names of generic
 % scripts into study-specific ones on
-% - line 112-
-% - line 920-
+% - line 116-
+% - line 1792-
 %   NOTE: LaBGAScore first level scripts have been tested on Ubuntu 20.04.3
 %           and Windows 10 (thanks to Anne Willems), NOT (yet) on Mac OS X
 %
@@ -117,7 +133,7 @@
 
 if ~exist('DSGN','var')
     warning('\nDSGN structure variable not found in Matlab workspace, running LaBGAScore_firstlevel_s1a_options_dsgn_struct_multisess_multitask before proceeding')
-    LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m;
+    LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask;
     cd(rootdir);
 else
     cd(rootdir);

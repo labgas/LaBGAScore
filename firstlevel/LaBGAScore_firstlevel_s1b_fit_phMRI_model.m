@@ -8,9 +8,28 @@
 % conditions (more than three would need hard-coded adaptations).
 %
 % *OPTIONS*
-% 
-% For more info on the CANlab-style DSGN and LaBGAS_options structure, see
-% the scripts below
+%
+% For LaBGAS_options fields (mandatory.omit_spike_trials,
+% mandatory.spikes_percent_threshold, mandatory.vif_thresh,
+% movement_reg_quadratic, spikes.dvars_threshold,
+% spikes.spike_additional_vols), see LaBGAScore_firstlevel_s1_options_dsgn_struct.m
+%
+% phDSGN fields (this script's own struct, all STUDY-SPECIFIC unless noted):
+%
+% * modelingfilesdir    name of subfolder within firstlevel dir where model output is saved
+% * tr                  repetition time (TR) in seconds
+% * t                   microtime resolution, set to nr of slices if slice timing was performed
+% * t0                  microtime onset - reference slice used in slice timing correction
+% * hpf                 high pass filter length in seconds; very long in case of phMRI
+% * multireg            name for the noise-regressor matfile written per session
+% * nr_dyns             nr of dynamics (volumes) per run
+% * start_dyn           dynamic (volume) number where administration starts
+% * timebin_length      length of each post-administration timebin, in seconds
+% * sessions            cell array of condition names, in order of corresponding sessions
+%
+% *DEPENDENCIES*
+%
+% SPM12 on Matlab path (spm_jobman, cfg_dep, spm_select)
 %
 % -------------------------------------------------------------------------
 %
@@ -78,7 +97,7 @@ LaBGAS_options.spikes.spike_additional_vols=0; % OPTIONAL, NOT RECOMMENDED TO TU
 %% GET & SET PATHS
 % -------------------------------------------------------------------------
 
-ery_ph_prep_s0_define_directories;
+LaBGAScore_prep_s0_define_directories;
 
 firstleveldir = fullfile(rootdir, 'firstlevel');
 

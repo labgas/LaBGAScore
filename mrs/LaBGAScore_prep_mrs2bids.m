@@ -3,8 +3,9 @@
 %
 % *USAGE*
 %
-% This script converts raw mrs data (as exported from Philips scanner and stored 
-% in sourcedata folder under standard LaBGAS file organization) to BIDS structure.
+% This script converts raw mrs data (as exported from Philips or GE scanners
+% and stored in sourcedata folder under standard LaBGAS file organization)
+% to BIDS structure.
 %
 % MRS sourcedata need to be in a separate subfolder 'mrs', for example
 % (Philips data)
@@ -72,9 +73,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_mrs2bids.m                        v1.4
+% LaBGAScore_prep_mrs2bids.m                        v1.5
 %
-% last modified: 2025/01/09
+% last modified: 2026/08/19
 %
 %
 %% GET PATHS AND DEFINE VOXEL NAMES
@@ -263,12 +264,12 @@ for sub = 1:size(sourcesubjdirs,1)
                     
                     voxelcounter = m;
                     plist_voxel = plist(m);
-                    
+
 %                     cd(mrs_subjsourcedir);
 %                     GEDeIdentify;
 %                     cd(rootdir);
-                    
-                    for p = 1:size(plist,1)
+
+                    for p = 1:size(plist_voxel,1)
                         sourcepname = char(plist_voxel(p).name);
                         sourcepnameparts = strsplit(sourcepname,'.');
                         sourcepext = sourcepnameparts{end};
@@ -358,13 +359,13 @@ for sub = 1:size(sourcesubjdirs,1)
                     
                     voxelcounter = m;
                     plist_voxel = plist(m);
-                    
+
 %                     cd(mrs_subjsourcedir);
 %                     GEDeIdentify;
 %                     cd(rootdir);
-                    
-                    for p = 1:size(plist,1)
-                        sourcepname = char(plist_voxel(n).name);
+
+                    for p = 1:size(plist_voxel,1)
+                        sourcepname = char(plist_voxel(p).name);
                         sourcepnameparts = strsplit(sourcepname,'.');
                         sourcepext = sourcepnameparts{end};
 %                         sourcepname_noID = [sourcepnameparts{1} '_noID.' sourcepext];

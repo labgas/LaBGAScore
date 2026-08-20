@@ -10,7 +10,8 @@
 % /data/proj_discoverie
 % It can be used standalone, but is typically called from the subsequent
 % scripts in the standard LaBGAScore workflow.
-% The script is generic, i.e. it does not require study-specific adaptions.
+% The directory-detection logic itself is generic and does not require
+% study-specific adaptions, beyond setting study_prefix below.
 %
 %
 % *OPTIONS*
@@ -23,6 +24,13 @@
 % spm12 on Matlab path WITHOUT subdirectories
 % no spm functions are called by this script,
 % but spmrootdir is defined automatically, for use in later scripts
+%
+%
+% *NOTES*
+%
+% githubrootdir is hardcoded to '/data/master_github_repos', i.e. it
+% assumes all LaBGAS Github repos are cloned locally under that path;
+% adapt this line if your local repo location differs
 %
 % -------------------------------------------------------------------------
 %

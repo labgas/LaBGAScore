@@ -11,9 +11,27 @@
 % covariates using splines and add the interpolated values to the same
 % table
 %
-% It needs to be run after first-level model definition and estimation using 
+% It needs to be run after first-level model definition and estimation using
 % LaBGAScore_firstlevel_s1b_fit_phMRI_model.m
 %
+%
+% *OPTIONS*
+%
+% All STUDY-SPECIFIC, set in the sections below:
+%
+% * study_prefix       prefix of your study-specific <study_prefix>_prep_s0_define_directories.m script, called dynamically via eval()
+% * modelingfilesdir   name of subfolder within firstlevel dir where first-level model output was saved
+% * sessions           cell array of condition names, in order of corresponding sessions, as they appear in the first-level SPM.Vbeta descrip field
+% * path_sigs          cell array of signature .nii paths (which(...)) or load_image_set() keywords to apply
+% * name_sigs          cell array of names for every individual signature in path_sigs (expand load_image_set sets into their constituent names)
+% * results_suffix     arbitrary name appended to the results .xlsx filename
+% * add_covars         true/false, whether to interpolate and add covariates to the results table
+% * name_covars        cell array of covariate column names, as they appear in covars_filename (only used if add_covars is true)
+% * covars_filename    name of the .csv file with covariate values, located in BIDSdir (only used if add_covars is true)
+%
+% *DEPENDENCIES*
+%
+% CANlabCore functions load_image_set, apply_mask, fmri_data
 %
 % -------------------------------------------------------------------------
 %
