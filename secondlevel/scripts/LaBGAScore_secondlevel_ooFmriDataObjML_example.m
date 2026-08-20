@@ -39,9 +39,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_secondlevel_ooFmriDataObjML_example.m          v2.0
+% LaBGAScore_secondlevel_ooFmriDataObjML_example.m          v2.1
 %
-% last modified: 2022/08/04
+% last modified: 2026/08/20
 
 
 %% EXAMPLE 1: OPTIMIZATION USING GRID SEARCH

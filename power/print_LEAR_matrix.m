@@ -32,7 +32,7 @@
 %
 % print_LEAR_matrix.m
 %
-% last modified: 2025/05/08
+% last modified: 2026/08/20
 %
 %
 % Parameters

@@ -109,9 +109,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_secondlevel_mvpa_beta_maps_conn.m              v1.0
+% LaBGAScore_secondlevel_mvpa_beta_maps_conn.m              v1.1
 %
-% last modified: 2023/10/25
+% last modified: 2026/08/20
 %
 %
 %

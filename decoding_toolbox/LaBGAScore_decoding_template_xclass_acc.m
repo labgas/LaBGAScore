@@ -46,9 +46,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_decoding_template_xclass_acc.m         v1.1
+% LaBGAScore_decoding_template_xclass_acc.m         v1.2
 %
-% last modified: 2026/02/26
+% last modified: 2026/08/20
 %
 %
 %

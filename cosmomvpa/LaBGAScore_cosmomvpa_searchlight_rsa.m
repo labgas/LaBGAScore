@@ -66,9 +66,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_cosmomvpa_searchlight_rsa.m         v1.1
+% LaBGAScore_cosmomvpa_searchlight_rsa.m         v1.2
 %
-% last modified: 2023/08/08
+% last modified: 2026/08/20
 %
 %
 %% SET OPTIONS

@@ -48,9 +48,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s1b_fit_phMRI_model.m         v1.0
+% LaBGAScore_firstlevel_s1b_fit_phMRI_model.m         v1.1
 %
-% last modified: 2024/04/26
+% last modified: 2026/08/20
 %
 %
 %% INITIATE DSGN AND LABGAS_OPTIONS STRUCTURES

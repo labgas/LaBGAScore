@@ -110,9 +110,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s2_fit_model.m         v2.0
+% LaBGAScore_firstlevel_s2_fit_model.m         v2.1
 %
-% last modified: 2025/05/06
+% last modified: 2026/08/20
 %
 %
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN

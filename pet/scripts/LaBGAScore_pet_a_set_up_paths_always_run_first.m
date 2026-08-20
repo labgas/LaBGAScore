@@ -53,9 +53,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_pet_a_set_up_paths_always_run_first.m         v1.0
+% LaBGAScore_pet_a_set_up_paths_always_run_first.m         v1.1
 %
-% last modified: 2024/06/05
+% last modified: 2026/08/20
 
 
 %% RUN PREP AND FIRST LEVEL DESIGN SCRIPT

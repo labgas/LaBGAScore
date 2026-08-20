@@ -23,9 +23,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s3_diagnose_model.m         v1.4   
+% LaBGAScore_firstlevel_s3_diagnose_model.m         v1.5   
 %
-% last modified: 2024/08/07
+% last modified: 2026/08/20
 %
 %
 %% VIFS AND DESIGN

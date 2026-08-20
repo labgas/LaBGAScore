@@ -121,9 +121,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s2a_fit_model_multisess_multitask.m         v2.0
+% LaBGAScore_firstlevel_s2a_fit_model_multisess_multitask.m         v2.1
 %
-% last modified: 2026/02/06
+% last modified: 2026/08/20
 %
 %
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN

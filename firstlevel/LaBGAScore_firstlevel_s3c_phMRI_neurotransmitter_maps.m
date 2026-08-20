@@ -52,9 +52,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s3c_phMRI_neurotransmitter_maps.m         v1.0
+% LaBGAScore_firstlevel_s3c_phMRI_neurotransmitter_maps.m         v1.1
 %
-% last modified: 2026/01/15
+% last modified: 2026/08/20
 %
 %
 %% SET STUDY, MODEL AND SESSION INFO

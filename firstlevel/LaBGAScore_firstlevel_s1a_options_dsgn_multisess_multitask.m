@@ -208,9 +208,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m         v1.1
+% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m         v1.2
 %
-% last modified: 2026/02/06
+% last modified: 2026/08/20
 %
 %
 %% CREATE LABGAS_OPTIONS STRUCTURE

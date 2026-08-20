@@ -38,9 +38,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_pet_prep_4_apply_signatures_and_save.m         v1.0
+% LaBGAScore_pet_prep_4_apply_signatures_and_save.m         v1.1
 %
-% last modified: 2024/06/06
+% last modified: 2026/08/20
 %
 %
 %% GET PATHS AND OPTIONS

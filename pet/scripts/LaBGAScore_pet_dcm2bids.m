@@ -31,9 +31,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_pet_dcm2bids.m             v2.1
+% LaBGAScore_pet_dcm2bids.m             v2.2
 %
-% last modified: 2024/06/03
+% last modified: 2026/08/20
 %
 %
 %% OPTIONS

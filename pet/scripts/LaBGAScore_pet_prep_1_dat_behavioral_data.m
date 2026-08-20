@@ -69,9 +69,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_pet_prep_1_dat_behavioral_data.m         v1.0
+% LaBGAScore_pet_prep_1_dat_behavioral_data.m         v1.1
 %
-% last modified: 2024/06/05
+% last modified: 2026/08/20
 %
 %
 %% GET PATHS AND OPTIONS

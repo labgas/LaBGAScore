@@ -53,9 +53,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_atlas_binary_mask_from_atlas.m         v3.1
+% LaBGAScore_atlas_binary_mask_from_atlas.m         v3.2
 %
-% last modified: 2024/06/03
+% last modified: 2026/08/20
 
 
 % Set options

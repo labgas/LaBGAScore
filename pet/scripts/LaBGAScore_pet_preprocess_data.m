@@ -93,9 +93,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_pet_preprocess_data.m         v0.15
+% LaBGAScore_pet_preprocess_data.m         v0.16
 %
-% last modified: 2024/12/19
+% last modified: 2026/08/20
 
 clear
 close all

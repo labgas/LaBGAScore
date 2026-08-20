@@ -42,9 +42,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_pet_a2_set_default_options.m         v1.0
+% LaBGAScore_pet_a2_set_default_options.m         v1.1
 %
-% last modified: 2024/06/05
+% last modified: 2026/08/20
 %
 %
 %% LaBGASCORE_PET_PREP_2_LOAD_IMAGE_DATA_AND_SAVE

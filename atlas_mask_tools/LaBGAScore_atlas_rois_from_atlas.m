@@ -55,9 +55,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_atlas_rois_from_atlas.m         v1.4
+% LaBGAScore_atlas_rois_from_atlas.m         v1.5
 %
-% last modified: 2025/05/07
+% last modified: 2026/08/20
 
 
 %% SET OPTIONS, DEFINE DIRS, AND SPECIFY MODEL AND ROI SET NAMES

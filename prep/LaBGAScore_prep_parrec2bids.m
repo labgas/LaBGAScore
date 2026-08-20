@@ -46,9 +46,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_parrec2bids.m         v1.2
+% LaBGAScore_prep_parrec2bids.m         v1.3
 %
-% last modified: 2022/12/07
+% last modified: 2026/08/20
 %
 %
 %% STUDY-SPECIFIC OPTIONS AND SETTINGS

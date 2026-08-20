@@ -35,9 +35,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_secondlevel_extractparcels_sessions.m          v1.0
+% LaBGAScore_secondlevel_extractparcels_sessions.m          v1.1
 %
-% last modified: 2026/04/07
+% last modified: 2026/08/20
 
 
 %% ========================================================================

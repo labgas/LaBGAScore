@@ -71,9 +71,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_mrs_run_osprey_Philips.m                        v1.9
+% LaBGAScore_mrs_run_osprey_Philips.m                        v1.10
 %
-% last modified: 2026/08/19
+% last modified: 2026/08/20
 %
 %
 %% SET OPTIONS & VARIABLES

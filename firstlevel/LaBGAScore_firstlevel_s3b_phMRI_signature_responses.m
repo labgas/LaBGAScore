@@ -52,9 +52,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s3b_phMRI_signature_responses.m         v2.0
+% LaBGAScore_firstlevel_s3b_phMRI_signature_responses.m         v2.1
 %
-% last modified: 2025/07/02
+% last modified: 2026/08/20
 %
 %
 %% SET STUDY, MODEL AND SESSION INFO

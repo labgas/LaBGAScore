@@ -98,9 +98,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_pet_model_TSPO_DPA714.m         v2.0
+% LaBGAScore_pet_model_TSPO_DPA714.m         v2.1
 %
-% last modified: 2025/09/22
+% last modified: 2026/08/20
 
 clear
 close all

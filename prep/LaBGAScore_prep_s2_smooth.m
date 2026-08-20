@@ -47,9 +47,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_s2_smooth.m         v1.3
+% LaBGAScore_prep_s2_smooth.m         v1.4
 %
-% last modified: 2025/07/02
+% last modified: 2026/08/20
 %
 %
 %% SET SMOOTHING OPTIONS, AND SUBJECTS

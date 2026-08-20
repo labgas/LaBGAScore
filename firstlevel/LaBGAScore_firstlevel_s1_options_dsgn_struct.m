@@ -188,9 +188,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.5
+% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.6
 %
-% last modified: 2024/08/08
+% last modified: 2026/08/20
 %
 %
 %% CREATE LABGAS_OPTIONS STRUCTURE

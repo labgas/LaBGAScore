@@ -50,9 +50,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_s2_smooth_multisess.m         v1.1
+% LaBGAScore_prep_s2_smooth_multisess.m         v1.2
 %
-% last modified: 2025/07/02
+% last modified: 2026/08/20
 %
 %
 %% SET SMOOTHING OPTIONS, AND SUBJECTS

@@ -40,9 +40,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_s0_define_directories.m         v1.2
+% LaBGAScore_prep_s0_define_directories.m         v1.3
 %
-% last modified: 2025/07/12
+% last modified: 2026/08/20
 %
 %
 %% SET STUDY PREFIX FOR USE IN ALL SUBSEQUENT SCRIPTS

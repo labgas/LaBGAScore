@@ -63,9 +63,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_pet_run_plot_PLS_ENet_pipeline.m          v1.1
+% LaBGAScore_pet_run_plot_PLS_ENet_pipeline.m          v1.2
 %
-% last modified: 2026/04/08
+% last modified: 2026/08/20
 
 
 %% ========================================================================

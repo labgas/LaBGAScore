@@ -53,9 +53,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_s1_write_events_tsv.m         v1.4
+% LaBGAScore_prep_s1_write_events_tsv.m         v1.5
 %
-% last modified: 2025/07/02
+% last modified: 2026/08/20
 %
 %
 %% DEFINE DIRECTORIES, SUBJECTS, RUNS, CONDITIONS, AND IMPORT OPTIONS

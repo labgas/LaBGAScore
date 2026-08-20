@@ -73,9 +73,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_mrs2bids.m                        v1.5
+% LaBGAScore_prep_mrs2bids.m                        v1.6
 %
-% last modified: 2026/08/19
+% last modified: 2026/08/20
 %
 %
 %% GET PATHS AND DEFINE VOXEL NAMES

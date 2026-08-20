@@ -58,9 +58,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_s1_write_events_tsv_multisess_multitask.m    v1.1
+% LaBGAScore_prep_s1_write_events_tsv_multisess_multitask.m    v1.2
 %
-% last modified: 2025/07/02
+% last modified: 2026/08/20
 %
 %
 %% DEFINE DIRECTORIES, SUBJECTS, RUNS, CONDITIONS, AND IMPORT OPTIONS

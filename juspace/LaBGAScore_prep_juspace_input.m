@@ -41,9 +41,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_juspace_input.m         v2.0
+% LaBGAScore_prep_juspace_input.m         v2.1
 %
-% last modified: 2023/11/21
+% last modified: 2026/08/20
 %
 %
 %% PREP WORK

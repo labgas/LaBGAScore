@@ -32,9 +32,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_pet_prep_2_load_image_data_and_save.m         v1.0
+% LaBGAScore_pet_prep_2_load_image_data_and_save.m         v1.1
 %
-% last modified: 2024/06/05
+% last modified: 2026/08/20
 %
 %
 %% RUN SCRIPT A_SET_UP_PATHS_ALWAYS_RUN_FIRST AND LOAD/CREATE DAT IF NEEDED

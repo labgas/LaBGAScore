@@ -172,7 +172,7 @@
 %
 % LaBGAScore_decoding_SVM_between_subjects.m
 %
-% last modified: 2026/04/24
+% last modified: 2026/08/20
 %
 %
 %% ========================================================================

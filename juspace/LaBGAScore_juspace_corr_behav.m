@@ -38,9 +38,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_juspace_corr_behav.m         v1.0
+% LaBGAScore_juspace_corr_behav.m         v1.1
 %
-% last modified: 2023/09/14
+% last modified: 2026/08/20
 %
 %
 %% SET OPTIONS

@@ -105,9 +105,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_graphvar_input_from_conn.m         v1.2
+% LaBGAScore_prep_graphvar_input_from_conn.m         v1.3
 %
-% last modified: 2023/08/09
+% last modified: 2026/08/20
 %
 %
 %% SET OPTIONS & PATHS

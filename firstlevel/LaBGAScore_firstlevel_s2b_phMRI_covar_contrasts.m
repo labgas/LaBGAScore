@@ -56,9 +56,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s2b_phMRI_covar_contrasts.m         v1.0
+% LaBGAScore_firstlevel_s2b_phMRI_covar_contrasts.m         v1.1
 %
-% last modified: 2024/08/13
+% last modified: 2026/08/20
 %
 %
 %% INITIATE DSGN STRUCTURE
