@@ -60,7 +60,7 @@ Several domain folders assume their own external toolbox, also not vendored, exp
 | `cosmomvpa/` | [CoSMoMVPA](https://www.cosmomvpa.org/) |
 | `decoding_toolbox/` | [The Decoding Toolbox (TDT)](https://sites.google.com/site/tdtdecodingtoolbox/) |
 | `graphvar/` | [GraphVar](http://rfmri.org/GraphVar) |
-| `juspace/` | JuSpace |
+| `juspace/` | [JuSpace](https://github.com/juryxy/JuSpace) |
 | `mrs/` | [Osprey](https://github.com/schorschinho/osprey) |
 
 Exception: `pet/functions/LCN_*.m` are legacy KU Leuven PET-processing functions vendored directly into this repo rather than pulled from an external toolbox.
