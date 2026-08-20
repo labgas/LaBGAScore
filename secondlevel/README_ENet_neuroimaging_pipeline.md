@@ -3,19 +3,19 @@
 Robust **Elastic Net classification pipeline** for neuroimaging feature
 matrices.
 
-This repository provides two closely related MATLAB pipelines:
+This repository provides **ENet_neuroimaging_pipeline**, a generic
+implementation for neuroimaging feature matrices. Study-specific
+adaptations (e.g. a tracer-specific TSPO PET version) may exist in a
+given study's own `code` subdataset, built on top of this generic
+template.
 
--   **ENet_neuroimaging_pipeline** -- generic implementation for
-    neuroimaging feature matrices
--   **TSPO_ENet_pipeline** -- original TSPO PET--specific version
+The pipeline implements **Elastic Net regularized classification** using
+repeated nested cross‑validation, permutation testing, and out‑of‑bag
+bootstrap uncertainty estimation.
 
-Both implement **Elastic Net regularized classification** using repeated
-nested cross‑validation, permutation testing, and out‑of‑bag bootstrap
-uncertainty estimation.
-
-The pipelines are designed for **small to moderate sample size
-neuroimaging datasets** where feature dimensionality can approach or
-exceed sample size.
+It is designed for **small to moderate sample size neuroimaging
+datasets** where feature dimensionality can approach or exceed sample
+size.
 
 ------------------------------------------------------------------------
 
@@ -170,10 +170,19 @@ Default settings are designed for **small neuroimaging datasets**.
 
 Elastic Net parameters:
 
-  Parameter    Default
-  ------------ ----------------------------------
-  alphaGrid    \[0.05 0.1 0.25 0.5 0.75 0.9 1\]
-  lambdaGrid   logspace(-3,1,25)
+  Parameter       Default
+  --------------- ----------------------------------
+  alphaGrid       \[0.05 0.1 0.25 0.5 0.75 0.9 1\]
+  lambdaGrid      logspace(-3,1,25)
+  selectionTopK   `min(20, max(3, ceil(0.25*p)))` (p = number of features); controls
+                  the top-K window used to compute `results.selectionFrequency`
+
+Generic additions:
+
+  Parameter    Default      Notes
+  ------------ ------------ --------------------------------------------
+  scale        'zscore'     scaling mode inside every fold: 'zscore' \| 'center' \| 'none'
+  globalFun    'mean'       global baseline feature: 'mean' \| 'median' \| function handle
 
 ------------------------------------------------------------------------
 
@@ -186,16 +195,20 @@ results
 ## Cross‑validated performance
 
 -   results.AUC
+-   results.AUC_PR (precision-recall AUC; useful when positives are rare)
 -   results.ACC
 -   results.SENS
 -   results.SPEC
+-   results.ACC_balanced (mean of sensitivity and specificity; useful under imbalance)
 
 Fold‑level metrics:
 
 -   results.allAUC
+-   results.allAUC_PR
 -   results.allACC
 -   results.allSENS
 -   results.allSPEC
+-   results.allACC_balanced
 
 The **primary performance estimate** is:
 
@@ -213,6 +226,7 @@ results.selectedLambda
 ## Model Coefficients
 
 results.betaStore\
+results.interceptStore\
 results.featureWeights\
 results.meanFeatureWeight
 
@@ -225,7 +239,12 @@ exactly zero.
 
 results.featureStability\
 results.signStability\
-results.selectionFrequency
+results.selectionFrequency\
+results.selectionTopK
+
+`selectionTopK` records the actual top-K window used (either
+`opts.selectionTopK` or the auto-computed default) when calculating
+`selectionFrequency`.
 
 Interpretation guideline:
 
@@ -248,6 +267,13 @@ or
 
 median(X,2)
 
+(selectable via `opts.globalFun`)
+
+Outputs:
+
+results.AUC_global\
+results.AUC_PR_global
+
 This helps determine whether **regional information improves
 prediction** beyond global signal.
 
@@ -261,11 +287,16 @@ Procedure:
 
 1.  Shuffle outcome labels
 2.  Re‑run cross‑validation
-3.  Compute AUC
+3.  Compute AUC (and precision-recall AUC)
 
-Output:
+Outputs:
 
-results.permutation_p
+results.allpermAUC\
+results.permAUC\
+results.permutation_p\
+results.allpermAUC_PR\
+results.permAUC_PR\
+results.permutation_p_PR
 
 ------------------------------------------------------------------------
 

@@ -136,13 +136,21 @@ Each voxel with label i receives the value of feature i.
   option            default   description
   ----------------- --------- ----------------------------------------------
   TopN              20        rows printed from ROI table
-  TopK              20        number of features in plots
   FreqThresh        0.5       robustness threshold for selection frequency
-  WeightThresh      0         threshold for
+  WeightThresh      0         robustness threshold for \|meanWeight\|
   MapPrctile        70        percentile threshold for weight map
   DoPostSelection   true      perform logistic refit
   OutPrefix         ENet      prefix for exported files
   RelaxIfEmpty      true      relax thresholds if none pass
+  UnderlayFile      ''        optional structural underlay NIfTI for the
+                              multi-slice figure (must match atlasFile's
+                              voxel space/dimensions)
+
+**Note:** the number of top features shown in plots/tables ("TopK" in the
+figures/output sections below) is **not** a name-value option you can pass
+to this function. It is taken from `results.selectionTopK` (set by the
+ENet pipeline) if present, otherwise auto-computed as
+`min(20, max(3, ceil(0.25*p)))`.
 
 ------------------------------------------------------------------------
 
@@ -339,6 +347,5 @@ Required:
 ROI_table = plot_ENet_diagnostics_neuroimaging(...
     results, X, Y, roiNames, atlasFile, ...
     'OutPrefix','Study1_ENet', ...
-    'TopK',20, ...
     'FreqThresh',0.5);
 ```

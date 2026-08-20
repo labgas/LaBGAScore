@@ -240,6 +240,7 @@ These values are intended **primarily for visualization**, not as independent pe
 - `results.finalYLoadings`
 - `results.finalXScores`
 - `results.finalYScores`
+- `results.finalMSE`
 
 The final model is fitted using **all data** and should be used **only for interpretation**, not for performance evaluation.
 
@@ -252,7 +253,6 @@ The final model is fitted using **all data** and should be used **only for inter
 - `results.sdBeta`
 - `results.stabilityZ`
 - `results.signStability`
-- `results.selectionFrequency`
 
 These metrics help identify **robust contributors across resampling**.
 

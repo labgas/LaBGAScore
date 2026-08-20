@@ -45,11 +45,9 @@ Optional (used if present):
 
 - `results.finalXLoadings` **[p×LV]** — final model X-loadings (`XL`)  
 - `results.finalLV` — final number of LVs (used to clamp requested `LV`)  
-- `results.meanFeatureWeight` **[p×1]** — mean CV beta weights (for top-K plots/tables)  
-- `results.meanBeta` **[p×1]** — mean CV beta weights (preferred if present)  
-- `results.selectionFrequency` **[p×1]** — top-K selection frequency (for top-K tables)  
-- `results.signStability` **[p×1]** — sign consistency across CV runs  
-- `results.featureStability` **[p×1]** — proportion non-zero across runs (stem plot)
+- `results.meanFeatureWeight` **[p×1]** — mean CV beta weights (for the top-K weight table/bar plot only)  
+- `results.meanBeta` **[p×1]** — mean CV beta weights for the ROI table's `meanBeta` column; preferred over `meanFeatureWeight` there if present  
+- `results.signStability` **[p×1]** — proportion of runs matching mean sign (ROI table column and stem plot)
 
 Optional predictive diagnostics (from the pipeline):
 
@@ -116,14 +114,14 @@ feature i → voxels where atlasData == i
 
 | Option | Default | Meaning |
 |---|---:|---|
-| `TopN` | 20 | Number of rows to display at top of ROI table (table file exports all rows). |
-| `TopK` | 20 | Number of top features (by absolute meanFeatureWeight / meanBeta) for bar/table export. |
+| `TopN` | 20 | Number of rows to display at top of ROI table, and number of top features (by absolute meanFeatureWeight) shown in the bar/table export — this single option controls both (table file exports all ROI rows regardless). |
 | `LV` | 1 | LV index to visualize as a brain map. |
 | `OutPrefix` | `'PLSR'` | Prefix for exported files (CSV + NIfTI). |
 | `VIP_thresh` | 1 | VIP threshold for “robust contributor” marking/labeling. |
 | `stab_thresh` | 2 | stabilityZ threshold for “robust contributor” marking/labeling. |
 | `MapPrctile` | 70 | Threshold percentile for LV map (keeps top `100−MapPrctile`% by \|loading\|). |
 | `RelaxIfEmpty` | true | If no ROI passes robust thresholds, relax thresholds (75th percentile) for visualization only. |
+| `UnderlayFile` | `''` | Optional structural underlay NIfTI for the multi-slice figure. Must match `atlasFile`'s voxel space/dimensions. |
 
 ---
 
@@ -136,14 +134,9 @@ Returned table with columns:
 - `ROI` — ROI/feature label  
 - `VIP` — VIP score  
 - `stabilityZ` — stabilityZ statistic  
+- `meanBeta` — mean CV beta (from `results.meanBeta`, falling back to `results.meanFeatureWeight`, or `NaN` if neither is present)  
+- `signStability` — proportion of runs matching mean sign (`NaN` if `results.signStability` is absent)  
 - `RobustContributor` — boolean based on thresholds  
-
-Optional columns if available:
-
-- `meanBeta`  
-- `selectionFrequency`  
-- `signStability`  
-- `featureStability`
 
 The table is also saved to disk as:
 
@@ -226,21 +219,21 @@ Robust ROI labels are overlaid on each slice.
 
 ## 3. Top-K bar plot (optional)
 
-Requires `results.meanFeatureWeight` or `results.meanBeta`.
+Requires `results.meanFeatureWeight`.
 
 Bars show the **mean CV weight** for the top-K absolute weights.
 
 ---
 
-## 4. Feature stability stem plot (optional)
+## 4. Sign stability stem plot (optional)
 
 Requires:
 
 ```
-results.featureStability
+results.signStability
 ```
 
-Shows proportion of runs where the feature weight is non-zero.
+Shows proportion of runs matching the mean sign of the weight.
 
 ---
 
@@ -423,7 +416,7 @@ but skip atlas/NIfTI mapping.
 When **p is large and n small**:
 
 - stabilityZ may be noisy  
-- rely more on selectionFrequency and signStability diagnostics  
+- rely more on the pipeline's signStability diagnostic  
 
 When **p is moderate and n larger**:
 
@@ -436,5 +429,5 @@ When **p is moderate and n larger**:
 
 ```matlab
 ROI_table = plot_PLSR_diagnostics_neuroimaging(results, results.finalXLoadings, roiNames, atlasFile, ...
-    'LV', 1, 'OutPrefix', 'Study1_PLSR', 'TopN', 20, 'TopK', 20);
+    'LV', 1, 'OutPrefix', 'Study1_PLSR', 'TopN', 20);
 ```

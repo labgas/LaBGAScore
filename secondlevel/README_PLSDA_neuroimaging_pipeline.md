@@ -175,16 +175,20 @@ results
 ## Cross-validated performance
 
 - `results.AUC`
+- `results.AUC_PR` (precision-recall AUC; useful when positives are rare)
 - `results.ACC`
 - `results.SENS`
 - `results.SPEC`
+- `results.ACC_balanced` (mean of sensitivity and specificity; useful under imbalance)
 
 Fold-level metrics:
 
 - `results.allAUC`
+- `results.allAUC_PR`
 - `results.allACC`
 - `results.allSENS`
 - `results.allSPEC`
+- `results.allACC_balanced`
 
 Primary estimate:
 
@@ -221,7 +225,6 @@ results.AUC
 - `results.sdBeta`
 - `results.stabilityZ`
 - `results.signStability`
-- `results.selectionFrequency`
 
 These metrics help identify **robust contributors across resampling**.
 
@@ -239,6 +242,7 @@ Output:
 
 ```
 results.AUC_global
+results.AUC_PR_global
 ```
 
 This tests whether regional patterns outperform a global signal shift.
@@ -253,7 +257,7 @@ Procedure:
 
 1. Shuffle labels  
 2. Re-run the quick cross-validated PLS-DA routine  
-3. Compute AUC  
+3. Compute AUC (and precision-recall AUC)  
 
 Outputs:
 
@@ -261,6 +265,9 @@ Outputs:
 results.allpermAUC
 results.permAUC
 results.permutation_p
+results.allpermAUC_PR
+results.permAUC_PR
+results.permutation_p_PR
 ```
 
 A healthy null distribution should be **centered near 0.5**.

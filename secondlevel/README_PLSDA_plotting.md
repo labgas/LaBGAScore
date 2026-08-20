@@ -1,6 +1,6 @@
 # plot_PLSDA_diagnostics_neuroimaging — User Guide
 
-`plot_PLSDA_diagnostics_neuroimaging` is a generic visualization/diagnostics helper for **PLS-DA** results produced by the companion pipeline (`PLSDA_neuroimaging_pipeline` / `TSPO_PLSDA_pipeline`).
+`plot_PLSDA_diagnostics_neuroimaging` is a generic visualization/diagnostics helper for **PLS-DA** results produced by the companion pipeline `PLSDA_neuroimaging_pipeline` (or a study-specific adaptation of it).
 
 It creates:
 - **tables** summarizing ROI importance and robustness
@@ -21,7 +21,7 @@ This function is designed to be copy-paste friendly for neuroimaging ROI/parcel 
 
 % Use final model loadings if you have them:
 ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, results.finalXLoadings, roiNames, atlasFile, ...
-    'LV', 2, 'OutPrefix', 'PLSDA_run1');
+    'LV', 1, 'OutPrefix', 'PLSDA_run1');
 
 % Or provide XL explicitly (e.g., from your own plsregress call):
 ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, XL, roiNames, atlasFile);
@@ -40,8 +40,7 @@ Optional (used if present):
 - `results.finalXLoadings` **[p×LV]** — final model X-loadings (`XL`)
 - `results.finalLV` — final number of LVs (used to clamp requested `LV`)
 - `results.meanFeatureWeight` **[p×1]** — mean CV beta weights (for top-K plots/tables)
-- `results.selectionFrequency` **[p×1]** — top-K selection frequency (for top-K tables)
-- `results.featureStability` **[p×1]** — proportion non-zero across runs (stem plot)
+- `results.signStability` **[p×1]** — proportion of runs matching mean sign (top-K table column, stem plot)
 
 ### `XL` (numeric, [p×LV])
 X-loadings matrix from `plsregress`, used to map LV loadings to ROIs.
@@ -63,14 +62,14 @@ Path to a labeled atlas NIfTI used for ROI mapping.
 
 | Option | Default | Meaning |
 |---|---:|---|
-| `TopN` | 20 | Number of rows to display at top of ROI table (table file exports all rows). |
-| `TopK` | 20 | Number of top features (by absolute meanFeatureWeight) for bar/table export. |
-| `LV` | 2 | LV index to visualize as a brain map. |
+| `TopN` | 20 | Number of rows to display at top of ROI table, and number of top features (by absolute meanFeatureWeight) shown in the bar/table export — this single option controls both (table file exports all ROI rows regardless). |
+| `LV` | 1 | LV index to visualize as a brain map. |
 | `OutPrefix` | `'PLSDA'` | Prefix for exported files (CSV + NIfTI). |
 | `VIP_thresh` | 1 | VIP threshold for “robust contributor” marking/labeling. |
 | `stab_thresh` | 2 | stabilityZ threshold for “robust contributor” marking/labeling. |
 | `MapPrctile` | 70 | Threshold percentile for LV map (keeps top `100-MapPrctile`% by |loading|). |
 | `RelaxIfEmpty` | true | If no ROI passes robust thresholds, relax thresholds (75th percentile) for visualization only. |
+| `UnderlayFile` | `''` | Optional structural underlay NIfTI for the multi-slice figure. Must match `atlasFile`'s voxel space/dimensions. |
 
 ---
 
@@ -123,8 +122,8 @@ Robust ROI labels are overlaid on each slice.
 Requires `results.meanFeatureWeight`:
 - Bars show mean weight for the top-K absolute weights.
 
-4. **Feature stability stem plot** (optional)
-Requires `results.featureStability`.
+4. **Sign stability stem plot** (optional)
+Requires `results.signStability`.
 
 ---
 
@@ -194,7 +193,7 @@ Requires:
   but skip atlas/NIfTI steps by not calling this function or by adapting it to your visualization needs.
 
 ### p/n ratio considerations
-- When p is large and n small, stabilityZ may be noisy; prefer robust thresholds plus selectionFrequency/signStability outputs from the pipeline.
+- When p is large and n small, stabilityZ may be noisy; prefer robust thresholds plus the pipeline's signStability output.
 - When p is moderate and n larger, stabilityZ becomes more interpretable; you may tighten thresholds.
 
 ---
@@ -203,6 +202,6 @@ Requires:
 
 ```matlab
 ROI_table = plot_PLSDA_diagnostics_neuroimaging(results, results.finalXLoadings, roiNames, atlasFile, ...
-    'LV', 2, 'OutPrefix', 'Study1_PLSDA', 'TopN', 20, 'TopK', 20);
+    'LV', 1, 'OutPrefix', 'Study1_PLSDA', 'TopN', 20);
 ```
 
