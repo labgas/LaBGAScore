@@ -1,4 +1,15 @@
 function results = PLSDA_paired_neuroimaging_pipeline(X, Y, subjectID, opts)
+% PLSDA_paired_neuroimaging_pipeline  Within-subject PLS-DA for paired designs.
+%
+%   results = PLSDA_paired_neuroimaging_pipeline(X, Y, subjectID, opts)
+%
+%   Discriminates two conditions measured in the same subjects (pre/post, on/off)
+%   from raw observation rows, with cross-validation folds formed over SUBJECTS so
+%   the pairing cannot leak across the train/test boundary. Returns the same field
+%   names as PLSDA_neuroimaging_pipeline, so plot_PLSDA_diagnostics_neuroimaging
+%   consumes its output unchanged.
+%
+%   See also README_PLSDA_paired_neuroimaging_pipeline.md for the full guide.
 %
 % INPUTS
 %   X          [n x p] feature matrix
@@ -15,7 +26,16 @@ function results = PLSDA_paired_neuroimaging_pipeline(X, Y, subjectID, opts)
 %   opts.maxLV    default 4
 %   opts.nPerm    default 1000
 %   opts.scale    default 'zscore'   % 'zscore'|'center'|'none'
-%   opts.seed     default 1
+%   opts.seed     default 1          % results are reproducible from this seed
+%
+%   opts.covariates      default []  [n x nCov] numeric nuisance matrix, one ROW
+%                        per observation (not per subject). Do NOT include a
+%                        column of ones. Nuisance coefficients are estimated on
+%                        the TRAINING fold only and applied to both folds.
+%                        Because trainIdx is a row mask expanded from a subject
+%                        mask, the nuisance fit is automatically subject-blocked.
+%                        Leave empty to reproduce the previous behaviour exactly.
+%   opts.covariateNames  default {'cov1',...} cellstr, provenance only.
 %
 % OUTPUTS
 %   results struct with fields:
@@ -30,15 +50,41 @@ function results = PLSDA_paired_neuroimaging_pipeline(X, Y, subjectID, opts)
 %     .finalLV, .betaFinal, .finalXLoadings, .finalYLoadings
 %     .varExplainedX, .varExplainedY
 %     .allpermAUC, .permAUC, .permutation_p
+%     .quickCV_observed   observed AUC from quickGroupedCV, i.e. the SAME
+%                         estimator that generates the null. permutation_p is
+%                         computed against this rather than against .AUC, so
+%                         both sides of the test use one estimator, and uses
+%                         the (sum(...) + 1) / (nValid + 1) convention.
 %     .cvObserved, .cvPredicted, .cvSubjectID, .cvRepeatID
+%     .covariateInfo      .used .names .nCov .rank .residualizeY .order
+%                         .permScheme ('within-subject-swap')
+%     .seed               the RNG seed actually used
 %
 % NOTES
 %   - This pipeline assumes exactly 2 observations per subject and one
 %     observation in each class. It will error otherwise.
 %   - This is the correct way to do "raw pre/post row" discrimination
 %     without subject leakage across folds.
+%   - Permutation uses swapWithinSubjectLabels, which swaps the two labels
+%     within each subject. That is already the exchangeability-correct null
+%     here and needs no Freedman-Lane or strata machinery when covariates are
+%     supplied, because a within-subject swap preserves every subject-level
+%     characteristic exactly.
 %
-% See also: plsregress, perfcurve
+% COVARIATES IN A PAIRED DESIGN
+%   - Subject-CONSTANT covariates (age, sex, genotype) are meaningful and are
+%     NOT wiped out. Scaling uses the pooled training-fold mean rather than
+%     within-subject centering, so between-subject nuisance variance really is
+%     present in X. Being constant within subject, such covariates are also
+%     orthogonal to the within-subject condition contrast and cannot remove the
+%     effect of interest.
+%   - Covariates that VARY within subject are the dangerous case. If such a
+%     covariate tracks the condition, residualizing X on it removes exactly the
+%     signal under test and drives AUC toward chance. The pipeline warns when a
+%     covariate both varies within subject and correlates |r| > 0.3 with the
+%     class label.
+%
+% See also: plsregress, perfcurve, foldPreprocess, swapWithinSubjectLabels
 
 %% -------------------------------------------------
 % 0. Defaults
@@ -55,6 +101,11 @@ if ~isfield(opts,'maxLV');    opts.maxLV = 4; end
 if ~isfield(opts,'nPerm');    opts.nPerm = 1000; end
 if ~isfield(opts,'scale');    opts.scale = 'zscore'; end
 if ~isfield(opts,'seed');     opts.seed = 1; end
+
+warnUnknownOptions(opts, { ...
+    'outerK','innerK','nRepeats','maxLV','nPerm','scale','seed', ...
+    'covariates','covariateNames'}, ...
+    'PLSDA_paired_neuroimaging_pipeline');
 
 rng(opts.seed,'twister');
 
@@ -76,6 +127,25 @@ yNum = double(Y == max(Y));
 
 [n,p] = size(X);
 
+if ~all(isfinite(X(:)))
+    error('PLSDA_paired_neuroimaging_pipeline:nonFiniteX', ...
+        'X contains NaN or Inf. Handle missing values upstream (impute or drop).');
+end
+
+% Covariates are resolved ONCE and then passed explicitly alongside X.
+[Cov, covInfo] = validateCovariates(opts, n, 'PLSDA_paired_neuroimaging_pipeline');
+
+% Covariate caveat specific to the paired design.
+% Subject-CONSTANT covariates (age, sex, genotype) are meaningful here and are
+% NOT wiped out: scaling uses the pooled training-fold mean rather than
+% within-subject centering, so between-subject nuisance variance really is
+% present in X. Being constant within subject, they are also orthogonal to the
+% within-subject condition contrast, so they cannot remove the effect of
+% interest.
+% Covariates that VARY within subject are the dangerous case: if such a
+% covariate tracks the condition, residualizing X on it removes exactly the
+% signal being tested and drives AUC toward chance.
+
 if numel(subjectID) ~= n
     error('subjectID must have one entry per row of X.');
 end
@@ -83,6 +153,22 @@ subjectID = subjectID(:);
 
 [uniqueSubj,~,subjIdx] = unique(subjectID,'stable');
 nSubj = numel(uniqueSubj);
+
+% Warn about covariates that vary within subject and track the class label:
+% residualizing X on those removes the effect of interest.
+if ~isempty(Cov)
+    for jc = 1:size(Cov,2)
+        withinRange = accumarray(subjIdx, Cov(:,jc), [], @(v) max(v)-min(v));
+        if any(withinRange > 0)
+            rho = corr(Cov(:,jc), yNum);
+            if abs(rho) > 0.3
+                warning('PLSDA_paired_neuroimaging_pipeline:covariateTracksLabel', ...
+                    ['Covariate "%s" varies within subject and correlates r = %.2f with the class label. ' ...
+                     'Residualizing X on it will remove signal of interest.'], covInfo.names{jc}, rho);
+            end
+        end
+    end
+end
 
 if nSubj < 2
     error('Need at least 2 subjects.');
@@ -145,10 +231,18 @@ for r = 1:opts.nRepeats
             continue
         end
 
-        Xtrain = X(trainIdx,:);
-        Xtest  = X(testIdx,:);
+        Xtrain_raw = X(trainIdx,:);
+        Xtest_raw  = X(testIdx,:);
 
-        [Xtrain, Xtest] = applyScaling(Xtrain, Xtest, opts.scale);
+        Ctrain = []; Ctest = [];
+        if ~isempty(Cov)
+            Ctrain = Cov(trainIdx,:);
+            Ctest  = Cov(testIdx,:);
+        end
+
+        % trainIdx is a row logical expanded from a subject mask, so slicing Cov
+        % with it keeps the nuisance fit subject-blocked for free.
+        [Xtrain, Xtest] = foldPreprocess(Xtrain_raw, Xtest_raw, Ctrain, Ctest, opts.scale);
 
         maxLV = capLV(opts.maxLV, Xtrain);
         if maxLV < 1
@@ -186,7 +280,9 @@ for r = 1:opts.nRepeats
 
                 Xtr = X(tr,:);
                 Xva = X(va,:);
-                [Xtr, Xva] = applyScaling(Xtr, Xva, opts.scale);
+                C2 = []; Cv = [];
+                if ~isempty(Cov), C2 = Cov(tr,:); Cv = Cov(va,:); end
+                [Xtr, Xva] = foldPreprocess(Xtr, Xva, C2, Cv, opts.scale);
 
                 [~,~,~,~,beta] = plsregress(Xtr, ytr, lv);
 
@@ -194,7 +290,7 @@ for r = 1:opts.nRepeats
                 [~,~,~,foldAUC(f)] = perfcurve(yva, yhat, 1);
             end
 
-            innerAUC(lv) = nanmean(foldAUC);
+            innerAUC(lv) = mean(foldAUC,'omitnan');
         end
 
         [~,bestLV] = max(innerAUC);
@@ -233,16 +329,16 @@ for r = 1:opts.nRepeats
 end
 
 results.allAUC  = AUC;
-results.AUC     = nanmean(AUC(:));
+results.AUC     = mean(AUC(:),'omitnan');
 
 results.allACC  = ACC;
-results.ACC     = nanmean(ACC(:));
+results.ACC     = mean(ACC(:),'omitnan');
 
 results.allSENS = SENS;
-results.SENS    = nanmean(SENS(:));
+results.SENS    = mean(SENS(:),'omitnan');
 
 results.allSPEC = SPEC;
-results.SPEC    = nanmean(SPEC(:));
+results.SPEC    = mean(SPEC(:),'omitnan');
 
 results.selectedLV = selectedLV;
 results.betaStore = betaStore;
@@ -260,9 +356,11 @@ fprintf('Grouped paired nested CV AUC = %.3f\n', results.AUC);
 % 3. Final model (interpretation only)
 %% -------------------------------------------------
 
-[Xz,~] = applyScaling(X, X, opts.scale);
+% Interpretation-only fit on all rows; no held-out set, so a full-sample
+% nuisance fit is correct by construction.
+[Xz,~] = foldPreprocess(X, [], Cov, [], opts.scale);
 
-finalLV = round(nanmedian(selectedLV(:)));
+finalLV = round(median(selectedLV(:),'omitnan'));
 finalLV = max(1, min(finalLV, capLV(opts.maxLV, Xz)));
 
 [XL_final,YL_final,XS,~,betaFinal,PCTVAR,~,stats] = plsregress(Xz, yNum, finalLV);
@@ -317,16 +415,21 @@ results.signStability = mean(meanSign == betaSign, 2, 'omitnan');
 % 6. Paired permutation test (within-subject label swap)
 %% -------------------------------------------------
 
+% Matched observed statistic: the null is generated by quickGroupedCV, so the
+% value it is compared against must come from quickGroupedCV too.
+obsMatched = quickGroupedCV(X, yNum, subjIdx, Cov, outerK, opts);
+results.quickCV_observed = obsMatched;
+
 permAUC = nan(opts.nPerm,1);
 
 for i = 1:opts.nPerm
     yp = swapWithinSubjectLabels(yNum, subjIdx);
-    permAUC(i) = quickGroupedCV(X, yp, subjIdx, outerK, opts);
+    permAUC(i) = quickGroupedCV(X, yp, subjIdx, Cov, outerK, opts);
 end
 
 results.allpermAUC = permAUC;
-results.permAUC = nanmean(permAUC);
-results.permutation_p = mean(permAUC >= results.AUC, 'omitnan');
+results.permAUC = mean(permAUC,'omitnan');
+results.permutation_p = (sum(permAUC >= obsMatched) + 1) / (sum(~isnan(permAUC)) + 1);
 
 %% -------------------------------------------------
 % 7. Optional simple permutation histogram
@@ -335,110 +438,22 @@ results.permutation_p = mean(permAUC >= results.AUC, 'omitnan');
 figure('Color','w');
 histogram(permAUC(~isnan(permAUC)));
 hold on;
-xline(results.AUC,'LineWidth',1.5);
+xline(obsMatched,'LineWidth',1.5);
 xlabel('AUC');
 ylabel('Frequency');
 title('Paired permutation AUC distribution');
 grid on;
 
-end
-
 %% =================================================
-% Helpers
+% Provenance
 %% =================================================
 
-function foldID = makeGroupedFolds(nGroups, K)
-% Randomly assign groups to K folds as evenly as possible
-perm = randperm(nGroups);
-foldID = nan(nGroups,1);
-for i = 1:nGroups
-    foldID(perm(i)) = mod(i-1, K) + 1;
-end
-end
+covInfo.residualizeY = false;   % never applicable: Y is binary here
+covInfo.order        = 'residualize-then-scale';
+covInfo.permScheme   = 'within-subject-swap';
+results.covariateInfo = covInfo;
+results.seed          = opts.seed;
 
-function maxLV = capLV(maxLVopt, Xtrain)
-nTr = size(Xtrain,1);
-rX = rank(Xtrain);
-maxLV = min([maxLVopt, rX-1, nTr-2]);
-if isnan(maxLV) || isinf(maxLV)
-    maxLV = 0;
-end
-maxLV = floor(maxLV);
-end
-
-function [XtrS, XteS] = applyScaling(Xtr, Xte, mode)
-switch lower(mode)
-    case 'none'
-        XtrS = Xtr;
-        XteS = Xte;
-    case 'center'
-        mu = mean(Xtr,1);
-        XtrS = Xtr - mu;
-        XteS = Xte - mu;
-    otherwise
-        mu = mean(Xtr,1);
-        sd = std(Xtr,0,1);
-        sd(sd == 0) = 1;
-        XtrS = (Xtr - mu) ./ sd;
-        XteS = (Xte - mu) ./ sd;
-end
-end
-
-function yp = swapWithinSubjectLabels(y, subjIdx)
-% Under the paired null, randomly swap the two labels within each subject
-yp = y;
-nSubj = max(subjIdx);
-
-for s = 1:nSubj
-    idx = find(subjIdx == s);
-    if numel(idx) ~= 2
-        error('swapWithinSubjectLabels assumes exactly 2 rows per subject.');
-    end
-
-    if rand < 0.5
-        yp(idx) = yp(flipud(idx));
-    end
-end
-end
-
-function AUC = quickGroupedCV(X, Y, subjIdx, K, opts)
-% Lightweight grouped CV used for paired permutation testing
-
-nSubj = max(subjIdx);
-K = min(K, nSubj);
-foldID = makeGroupedFolds(nSubj, K);
-
-auc = nan(K,1);
-
-for k = 1:K
-    teSubj = foldID == k;
-    trSubj = ~teSubj;
-
-    tr = trSubj(subjIdx);
-    te = teSubj(subjIdx);
-
-    ytr = Y(tr);
-    yte = Y(te);
-
-    if numel(unique(ytr)) < 2 || numel(unique(yte)) < 2
-        continue
-    end
-
-    Xtr = X(tr,:);
-    Xte = X(te,:);
-    [Xtr, Xte] = applyScaling(Xtr, Xte, opts.scale);
-
-    lv = capLV(opts.maxLV, Xtr);
-    if lv < 1
-        continue
-    end
-
-    [~,~,~,~,beta] = plsregress(Xtr, ytr, lv);
-    score = [ones(sum(te),1) Xte] * beta;
-    [~,~,~,auc(k)] = perfcurve(yte, score, 1);
-end
-
-AUC = nanmean(auc);
 end
 
 function s = toString(x)
@@ -449,5 +464,5 @@ elseif isnumeric(x) || islogical(x)
 else
     s = '<subject>';
 end
-end
 
+end

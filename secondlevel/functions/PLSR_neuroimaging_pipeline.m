@@ -1,6 +1,6 @@
 function results = PLSR_neuroimaging_pipeline(X,Y,opts)
 
-% Robust PLS regression pipeline for neuroimaging feature matrices.
+% PLSR_neuroimaging_pipeline  Robust PLS regression pipeline for neuroimaging feature matrices.
 %
 % This function implements Partial Least Squares Regression (PLSR)
 % for continuous outcomes with repeated nested k-fold cross-validation.
@@ -53,7 +53,35 @@ function results = PLSR_neuroimaging_pipeline(X,Y,opts)
 %                               (different ROIs/edges/metrics have different scales).
 %          opts.globalFun     (default 'mean') global baseline feature:
 %                             'mean' | 'median' | function handle @(X)->[n x 1]
-%                             Used to compute results.Q2_global.
+%                             Used for results.Q2_global and results.Q2_global_cv.
+%
+%        Covariate control (fold-wise nuisance regression):
+%          opts.covariates    (default []) [n x nCov] numeric nuisance matrix,
+%                             one ROW per subject. Do NOT include a column of
+%                             ones; the intercept is handled internally.
+%                             Nuisance coefficients are estimated on the
+%                             TRAINING fold only and applied to both folds, in
+%                             every outer fold, every inner fold, every
+%                             bootstrap resample and every learning-curve
+%                             subsample. Encode categorical covariates as dummy
+%                             columns beforehand. Leave empty to reproduce the
+%                             previous behaviour exactly.
+%          opts.covariateNames (default {'cov1',...}) cellstr, provenance only.
+%
+%        Reproducibility:
+%          opts.seed          (default 1) RNG seed. Results are now reproducible
+%                             across runs AND independent of parallel pool size.
+%          opts.residualizeY  (default false) also residualize Y on the
+%                             covariates, train-only, in every fold. With false
+%                             the model predicts total Y from confound-free X,
+%                             so the nuisance-explained part of Y is
+%                             structurally unexplainable and Q2 is DEFLATED.
+%                             With true, Q2 becomes a partial Q2: variance in Y
+%                             explained by X after removing the covariates from
+%                             both -- the regression analogue of a partial
+%                             correlation. The two are not comparable; the
+%                             setting used is recorded in results.covariateInfo.
+%                             No effect when opts.covariates is empty.
 %
 % OUTPUT (results struct)
 %   Cross-validated performance (generalization estimate):
@@ -84,10 +112,15 @@ function results = PLSR_neuroimaging_pipeline(X,Y,opts)
 %                        stacked across all outer folds/repeats
 %     results.meanFeatureWeight [p x 1] mean featureWeights across runs
 %
-%   Global baseline (interpretation only):
-%     results.Q2_global   scalar  predictive-style Q2 of linear model on a
-%                        global summary feature, computed as:
-%                        1 - SSE / SST relative to the sample mean of Y
+%   Global baseline:
+%     results.Q2_global   scalar  IN-SAMPLE Q2 of a linear model on a global
+%                        summary feature (fit and predicted on all subjects),
+%                        computed as 1 - SSE / SST relative to the sample mean.
+%                        Retained unchanged for continuity, but NOT comparable
+%                        to the cross-validated results.Q2.
+%     results.Q2_global_cv scalar cross-validated counterpart, run through the
+%                        same repeated outer CV as the model. THIS is the value
+%                        to compare against results.Q2.
 %     results.MSE_global scalar   MSE of global summary feature model
 %     results.Corr_global scalar  Pearson correlation for global summary feature model
 %
@@ -109,10 +142,23 @@ function results = PLSR_neuroimaging_pipeline(X,Y,opts)
 %     results.stabilityZ  [p x 1] meanBeta ./ sdBeta (stability statistic)
 %     results.signStability [p x 1] proportion of runs matching mean sign
 %
-%   Permutation test:
+%   Permutation test (Freedman-Lane):
 %     results.allpermQ2     [nPerm x 1] permuted Q2 distribution
 %     results.permQ2        scalar mean permuted Q2
-%     results.permutation_p scalar p = mean(permQ2 >= observed Q2)
+%     results.quickCV_observed scalar observed Q2 computed with quickCV_PLSR,
+%                        i.e. the SAME estimator that generates the null
+%     results.permutation_p scalar (sum(permQ2 >= quickCV_observed) + 1) / (nValid + 1)
+%
+%     The null permutes the residuals of Y after nuisance regression and adds
+%     the fitted nuisance part back, preserving the Y-covariate association
+%     while breaking the X-Y one. With no covariates this reduces to ordinary
+%     unrestricted permutation of Y.
+%
+%     The p-value is computed against quickCV_observed rather than results.Q2
+%     because the null is generated by quickCV_PLSR. Comparing a repeated-
+%     nested-CV Q2 against a quickCV null mixes two estimators; measured on
+%     true-null data that mismatch produced a false positive rate near 40 percent
+%     at alpha = 0.05. results.Q2 remains the performance estimate to report.
 %
 %   Bootstrap:
 %     results.allbootQ2 [nBoot x 1] out-of-bag bootstrap Q2 distribution
@@ -122,6 +168,11 @@ function results = PLSR_neuroimaging_pipeline(X,Y,opts)
 %   Learning curve:
 %     results.learningSizes vector of sample sizes evaluated
 %     results.learningQ2    vector of Q2 estimates per size
+%
+%   Provenance:
+%     results.covariateInfo struct: .used .names .nCov .rank .residualizeY
+%                        .order ('residualize-then-scale') .permScheme
+%     results.seed          the RNG seed actually used
 %
 % NOTES / INTERPRETATION (high level)
 %   - Use results.Q2 from nested CV as the primary generalization estimate.
@@ -176,8 +227,15 @@ if ~isfield(opts,'learningSteps'); opts.learningSteps = 6; end
 % Generic additions (kept minimal)
 if ~isfield(opts,'scale'); opts.scale = 'zscore'; end  % 'zscore'|'center'|'none'
 if ~isfield(opts,'globalFun'); opts.globalFun = 'mean'; end % 'mean'|'median' (or function handle)
+if ~isfield(opts,'residualizeY'); opts.residualizeY = false; end % see residualizeY
+if ~isfield(opts,'seed'); opts.seed = 1; end                     % see setParforStream
 
-rng(1)
+warnUnknownOptions(opts, { ...
+    'outerK','innerK','nRepeats','maxLV','nPerm','nBoot','learningSteps', ...
+    'scale','globalFun','residualizeY','seed','covariates','covariateNames'}, ...
+    'PLSR_neuroimaging_pipeline');
+
+rng(opts.seed,'twister')
 
 %% -------------------------------------------------
 % 1. Outcome preparation
@@ -198,6 +256,17 @@ end
 if size(Y,1) ~= n
     error('X and Y must have the same number of rows/subjects.');
 end
+
+if ~all(isfinite(X(:)))
+    error('PLSR_neuroimaging_pipeline:nonFiniteX', ...
+        'X contains NaN or Inf. Handle missing values upstream (impute or drop).');
+end
+
+% Covariates are resolved ONCE here and then passed explicitly to every helper
+% alongside X. They are deliberately never re-read from opts inside a helper:
+% the bootstrap and learning-curve stages subset subjects, and a full-length
+% covariate matrix reaching a subsetted X would misalign silently.
+[Cov, covInfo] = validateCovariates(opts, n, 'PLSR_neuroimaging_pipeline');
 
 %% -------------------------------------------------
 % 2. Repeated Nested Cross-Validation
@@ -228,14 +297,22 @@ for r = 1:opts.nRepeats
         trainIdx = training(cvOuter,k);
         testIdx  = test(cvOuter,k);
 
-        ytrain = Y(trainIdx);
-        ytest  = Y(testIdx);
+        ytrain_raw = Y(trainIdx);
+        ytest      = Y(testIdx);
 
-        Xtrain = X(trainIdx,:);
-        Xtest  = X(testIdx,:);
+        Xtrain_raw = X(trainIdx,:);
+        Xtest_raw  = X(testIdx,:);
 
-        %% leakage-free scaling (generic)
-        [Xtrain, Xtest] = applyScaling(Xtrain, Xtest, opts.scale);
+        Ctrain = []; Ctest = [];
+        if ~isempty(Cov)
+            Ctrain = Cov(trainIdx,:);
+            Ctest  = Cov(testIdx,:);
+        end
+
+        %% leakage-free preprocessing: nuisance regression then scaling,
+        %% every constant estimated on the training fold alone
+        [Xtrain, Xtest] = foldPreprocess(Xtrain_raw, Xtest_raw, Ctrain, Ctest, opts.scale);
+        [ytrain, ytest] = residualizeY(ytrain_raw, ytest, Ctrain, Ctest, opts.residualizeY);
 
         %% inner CV LV tuning
 
@@ -262,16 +339,28 @@ for r = 1:opts.nRepeats
                 tr = training(cvInner,f);
                 va = test(cvInner,f);
 
-                ytr = ytrain(tr);
-                yva = ytrain(va);
-
-                if numel(ytr) < 3 || numel(yva) < 2
+                if sum(tr) < 3 || sum(va) < 2
                     continue
                 end
 
-                [~,~,~,~,beta] = plsregress(Xtrain(tr,:),ytr,lv);
+                % Each inner fold preprocesses itself from the RAW training
+                % rows. Reusing the outer fold's constants would leak
+                % outer-training statistics -- and, with covariates, the
+                % outer-training nuisance fit -- into every inner validation
+                % fold, which is the same leak one level down.
+                C2 = []; Cv = [];
+                if ~isempty(Ctrain), C2 = Ctrain(tr,:); Cv = Ctrain(va,:); end
 
-                yhat = [ones(sum(va),1) Xtrain(va,:)] * beta;
+                [X2, Xv] = foldPreprocess(Xtrain_raw(tr,:), Xtrain_raw(va,:), C2, Cv, opts.scale);
+                [ytr, yva] = residualizeY(ytrain_raw(tr), ytrain_raw(va), C2, Cv, opts.residualizeY);
+
+                if capLV(lv, X2) < lv
+                    continue
+                end
+
+                [~,~,~,~,beta] = plsregress(X2,ytr,lv);
+
+                yhat = [ones(sum(va),1) Xv] * beta;
 
                 denom = sum((yva - mean(ytr)).^2);
                 if denom <= 0
@@ -282,8 +371,12 @@ for r = 1:opts.nRepeats
 
             end
 
-            innerQ2(lv) = nanmean(foldQ2);
+            innerQ2(lv) = mean(foldQ2,'omitnan');
 
+        end
+
+        if all(isnan(innerQ2))
+            continue
         end
 
         [~,bestLV] = max(innerQ2);
@@ -326,15 +419,15 @@ for r = 1:opts.nRepeats
 end
 
 results.allQ2   = Q2;
-results.Q2      = nanmean(Q2(:));
+results.Q2      = mean(Q2(:),'omitnan');
 results.allMSE  = MSE;
-results.MSE     = nanmean(MSE(:));
+results.MSE     = mean(MSE(:),'omitnan');
 results.allRMSE = RMSE;
-results.RMSE    = nanmean(RMSE(:));
+results.RMSE    = mean(RMSE(:),'omitnan');
 results.allMAE  = MAE;
-results.MAE     = nanmean(MAE(:));
+results.MAE     = mean(MAE(:),'omitnan');
 results.allCorr = Corr;
-results.Corr    = nanmean(Corr(:));
+results.Corr    = mean(Corr(:),'omitnan');
 
 results.selectedLV      = selectedLV;
 results.betaStore       = betaStore;
@@ -377,6 +470,13 @@ end
 
 results.MSE_global = mean((Y - yhatGlobal).^2);
 
+% Cross-validated companion. Q2_global above is IN-SAMPLE (fitlm predicts the
+% same subjects it was fit on) and so is not comparable to the cross-validated
+% results.Q2; Q2_global_cv is. Both are kept: the in-sample field retains its
+% previous meaning and value.
+gcv = globalBaselineCV(X, Y, Cov, opts, 'regress');
+results.Q2_global_cv = gcv.Q2;
+
 if std(Y) > 0 && std(yhatGlobal) > 0
     Cg = corrcoef(Y,yhatGlobal);
     results.Corr_global = Cg(1,2);
@@ -388,12 +488,15 @@ end
 % 4. Final model (interpretation only)
 %% -------------------------------------------------
 
-[Xz,~] = applyScaling(X, X, opts.scale);
+% Interpretation-only fit on all subjects. There is no held-out set here, so
+% fitting the nuisance model on the full sample is correct by construction.
+[Xz,~]  = foldPreprocess(X, [], Cov, [], opts.scale);
+[Yz,~]  = residualizeY(Y, [], Cov, [], opts.residualizeY);
 
-finalLV = round(nanmedian(selectedLV(:)));
+finalLV = round(median(selectedLV(:),'omitnan'));
 finalLV = max(1, min(finalLV, capLV(opts.maxLV, Xz)));
 
-[XL,YL,XS,YS,beta,PCTVAR,MSEfinal,stats] = plsregress(Xz,Y,finalLV);
+[XL,YL,XS,YS,beta,PCTVAR,MSEfinal,stats] = plsregress(Xz,Yz,finalLV);
 
 results.finalLV = finalLV;
 results.betaFinal = beta;
@@ -429,8 +532,8 @@ results.VIP = VIP;
 %% -------------------------------------------------
 
 betaMat = reshape(betaStore(2:end,:,:),p,[]);
-meanBeta = nanmean(betaMat,2);
-sdBeta = nanstd(betaMat,[],2);
+meanBeta = mean(betaMat,2,'omitnan');
+sdBeta = std(betaMat,[],2,'omitnan');
 
 results.meanBeta = meanBeta;
 results.sdBeta = sdBeta;
@@ -440,21 +543,42 @@ results.stabilityZ = meanBeta ./ sdBeta;
 % 7. Permutation testing
 %% -------------------------------------------------
 
+% The p-value compares like with like: the null comes from quickCV_PLSR, so
+% the observed statistic it is compared against must come from quickCV_PLSR
+% too. Comparing the repeated-nested-CV Q2 against a quickCV null mixes two
+% different estimators and, measured on true-null data, produced a false
+% positive rate near 40% at alpha = 0.05.
+obsMatched = quickCV_PLSR(X, Y, Cov, opts);
+results.quickCV_observed = obsMatched;
+
+% Freedman-Lane: permute the residuals of Y after nuisance regression and add
+% the fitted nuisance part back, so the Y-covariate association is preserved
+% while the X-Y association is broken. With no covariates Yhat is the mean and
+% this reduces exactly to the usual unrestricted permutation of Y.
+if isempty(Cov)
+    Yhat = zeros(n,1);
+    Ry   = Y;
+else
+    [Ry, ~] = residualizeFold(Y, [], Cov, []);
+    Yhat    = Y - Ry;
+end
+
 permQ2 = nan(opts.nPerm,1);
 
 parfor i = 1:opts.nPerm
-    yp = Y(randperm(n));
-    permQ2(i) = quickCV(X,yp,opts);
+    setParforStream(opts.seed, 2e6, i);
+    yp = Yhat + Ry(randperm(n));
+    permQ2(i) = quickCV_PLSR(X, yp, Cov, opts);
 end
 
 results.allpermQ2 = permQ2;
-results.permQ2 = nanmean(permQ2);
-results.permutation_p = mean(permQ2 >= results.Q2,'omitnan');
+results.permQ2 = mean(permQ2,'omitnan');
+results.permutation_p = (sum(permQ2 >= obsMatched) + 1) / (sum(~isnan(permQ2)) + 1);
 
 figure
 histogram(permQ2(~isnan(permQ2)))
 hold on
-xline(results.Q2)
+xline(obsMatched)
 title('Permutation Q2 distribution')
 
 %% -------------------------------------------------
@@ -464,17 +588,18 @@ title('Permutation Q2 distribution')
 bootQ2 = nan(opts.nBoot,1);
 
 parfor b = 1:opts.nBoot
-    bootQ2(b) = bootstrapOOB_PLSR(X, Y, opts);
+    setParforStream(opts.seed, 3e6, b);
+    bootQ2(b) = bootstrapOOB_PLSR(X, Y, Cov, opts);
 end
 
 results.allbootQ2 = bootQ2;
-results.bootQ2 = nanmean(bootQ2);
+results.bootQ2 = mean(bootQ2,'omitnan');
 results.Q2_CI = prctile(bootQ2(~isnan(bootQ2)), [2.5 97.5]);
 
 figure
 histogram(bootQ2(~isnan(bootQ2)))
 hold on
-xline(results.Q2)
+xline(results.Q2)   % bootstrapOOB_PLSR tunes internally, so the nested-CV Q2 is the right reference
 title('Bootstrap OOB Q2')
 xlabel('Q2')
 ylabel('Frequency')
@@ -490,15 +615,19 @@ lcQ2 = nan(length(sizes),1);
 
 parfor i = 1:length(sizes)
 
+    setParforStream(opts.seed, 4e6, i);
+
     m = sizes(i);
     idx = randsample(n,m);
 
-    lcQ2(i) = quickCV(X(idx,:),Y(idx),opts);
+    Cidx = []; if ~isempty(Cov), Cidx = Cov(idx,:); end
+    lcQ2(i) = quickCV_PLSR(X(idx,:),Y(idx),Cidx,opts);
 
 end
 
 results.learningSizes = sizes;
 results.learningQ2 = lcQ2;
+
 
 figure
 plot(sizes,lcQ2,'o-')
@@ -516,196 +645,14 @@ betaFlat = reshape(betaNoIntercept,p,[]);
 signStability = mean(sign(results.meanFeatureWeight) == sign(betaFlat),2,'omitnan');
 results.signStability = signStability;
 
-end
-
 %% -------------------------------------------------
-% inline / local helper functions
+% 11. Provenance
 %% -------------------------------------------------
 
-function maxLV = capLV(maxLVopt, Xtrain)
-% capLV: ensures LV count is valid for any p/n ratio
-nTr = size(Xtrain,1);
-
-% rank-based cap is important even when p<n
-rX = rank(Xtrain);
-
-% plsregress needs lv <= min(rank(X), n-1) typically; keep your -1/-2 safeguards
-maxLV = min([maxLVopt, rX-1, nTr-2]);
-
-if isnan(maxLV) || isinf(maxLV)
-    maxLV = 0;
-end
-
-maxLV = floor(maxLV);
-end
-
-function [XtrS, XteS] = applyScaling(Xtr, Xte, mode)
-% leakage-free scaling options
-switch lower(mode)
-    case 'none'
-        XtrS = Xtr;
-        XteS = Xte;
-    case 'center'
-        mu = mean(Xtr,1);
-        XtrS = Xtr - mu;
-        XteS = Xte - mu;
-    otherwise % 'zscore'
-        mu = mean(Xtr,1);
-        sd = std(Xtr,0,1);
-        sd(sd==0) = 1;
-        XtrS = (Xtr - mu) ./ sd;
-        XteS = (Xte - mu) ./ sd;
-end
-end
-
-function Q2 = quickCV(X,Y,opts)
-
-n = length(Y);
-K = min(opts.outerK,floor(n/2));
-
-if K < 2
-    Q2 = NaN;
-    return
-end
-
-cv = cvpartition(n,'KFold',K);
-
-q2 = nan(K,1);
-
-for k = 1:K
-
-    tr = training(cv,k);
-    te = test(cv,k);
-
-    ytr = Y(tr);
-    yte = Y(te);
-
-    if numel(ytr) < 3 || numel(yte) < 2
-        continue
-    end
-
-    Xtr = X(tr,:);
-    Xte = X(te,:);
-
-    [Xtr, Xte] = applyScaling(Xtr, Xte, opts.scale);
-
-    lv = capLV(opts.maxLV, Xtr);
-    if lv < 1
-        continue
-    end
-
-    [~,~,~,~,beta] = plsregress(Xtr,ytr,lv);
-
-    yhat = [ones(sum(te),1) Xte] * beta;
-
-    denom = sum((yte - mean(ytr)).^2);
-    if denom <= 0
-        continue
-    end
-
-    q2(k) = 1 - sum((yte - yhat).^2) / denom;
-
-end
-
-Q2 = nanmean(q2);
-
-end
-
-function Q2 = bootstrapOOB_PLSR(X, Y, opts)
-% bootstrapOOB_PLSR
-% Out-of-bag bootstrap Q2 for PLSR:
-% - bootstrap sample used for training
-% - OOB subjects used for testing
-% - LV selected by inner CV within the bootstrap sample
-
-n = length(Y);
-
-% Bootstrap sample
-idxBoot = randsample(n, n, true);
-
-% OOB = subjects not selected at least once
-inBag = false(n,1);
-inBag(idxBoot) = true;
-oob = ~inBag;
-
-% Need enough OOB cases
-if sum(oob) < 2
-    Q2 = NaN;
-    return
-end
-
-ytrain = Y(idxBoot);
-ytest  = Y(oob);
-
-if numel(ytrain) < 4 || numel(ytest) < 2
-    Q2 = NaN;
-    return
-end
-
-Xtrain = X(idxBoot,:);
-Xtest  = X(oob,:);
-
-% leakage-free scaling
-[Xtrain, Xtest] = applyScaling(Xtrain, Xtest, opts.scale);
-
-% cap LV
-maxLV = capLV(opts.maxLV, Xtrain);
-if maxLV < 1
-    Q2 = NaN;
-    return
-end
-
-% inner CV for LV tuning
-innerK = min([opts.innerK, length(ytrain)-1]);
-if innerK < 2
-    Q2 = NaN;
-    return
-end
-
-cvInner = cvpartition(length(ytrain),'KFold',innerK);
-
-innerQ2 = nan(maxLV,1);
-
-for lv = 1:maxLV
-    foldQ2 = nan(innerK,1);
-
-    for f = 1:innerK
-        tr = training(cvInner,f);
-        va = test(cvInner,f);
-
-        ytr = ytrain(tr);
-        yva = ytrain(va);
-
-        if numel(ytr) < 3 || numel(yva) < 2
-            continue
-        end
-
-        [~,~,~,~,beta] = plsregress(Xtrain(tr,:), ytr, lv);
-        yhat = [ones(sum(va),1) Xtrain(va,:)] * beta;
-
-        denom = sum((yva - mean(ytr)).^2);
-        if denom <= 0
-            continue
-        end
-
-        foldQ2(f) = 1 - sum((yva - yhat).^2) / denom;
-    end
-
-    innerQ2(lv) = nanmean(foldQ2);
-end
-
-[~,bestLV] = max(innerQ2);
-
-% final fit on bootstrap sample
-[~,~,~,~,beta] = plsregress(Xtrain, ytrain, bestLV);
-
-yhat = [ones(sum(oob),1) Xtest] * beta;
-denom = sum((ytest - mean(ytrain)).^2);
-
-if denom <= 0
-    Q2 = NaN;
-else
-    Q2 = 1 - sum((ytest - yhat).^2) / denom;
-end
+covInfo.residualizeY = opts.residualizeY;
+covInfo.order        = 'residualize-then-scale';
+covInfo.permScheme   = 'freedman-lane';
+results.covariateInfo = covInfo;
+results.seed          = opts.seed;
 
 end

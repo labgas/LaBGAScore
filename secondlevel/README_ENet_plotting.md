@@ -349,3 +349,35 @@ ROI_table = plot_ENet_diagnostics_neuroimaging(...
     'OutPrefix','Study1_ENet', ...
     'FreqThresh',0.5);
 ```
+
+---
+
+## New `results` fields (pipeline overhaul)
+
+The pipelines now add the fields below. This plotter does not require any of
+them and is unaffected if they are absent, but they are worth knowing when
+reading a saved `results` struct:
+
+| field | meaning |
+|---|---|
+| `covariateInfo` | struct: `.used`, `.names`, `.nCov`, `.rank`, `.residualizeY`, `.order`, `.permScheme`. Records whether fold-wise covariate regression was applied and how. |
+| `quickCV_observed` | observed statistic computed with the same quick-CV estimator that generates the permutation null. `permutation_p` is now tested against this, not against the headline metric. |
+| `seed` | the RNG seed actually used; results are reproducible from it and independent of parallel pool size. |
+| `*_global_cv` | cross-validated companion to the in-sample global-signal baseline. Compare the model against the `_cv` value, not the in-sample one. |
+
+No existing field was renamed or changed in meaning, so previously saved
+`results` structs still plot correctly.
+
+**Two caveats when comparing old and new outputs.** Permutation p-values from
+before this change are inflated (the null used a different estimator than the
+observed statistic, giving a measured false-positive rate near 40 % at
+alpha = 0.05). And Elastic Net hyperparameters were previously selected by the
+single best-performing inner fold rather than a fold-averaged score, which
+produced markedly under-regularized, unstable weight maps.
+
+`plot_ENet_diagnostics_neuroimaging` additionally sees `results.betaFinal`,
+`results.interceptFinal`, `results.finalAlpha` and `results.finalLambda` when
+the pipeline is called with `opts.doFinalModel = true`. That option is **off by
+default**, so the plotter's normal input is unchanged: it continues to work from
+the CV-averaged weights, which for a sparse model is a defensible bagged weight
+map rather than one arbitrary support set.

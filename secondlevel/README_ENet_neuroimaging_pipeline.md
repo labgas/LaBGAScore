@@ -155,6 +155,82 @@ For most neuroimaging datasets **z‑score scaling is recommended**.
 
 ------------------------------------------------------------------------
 
+## Covariate control (fold-wise nuisance regression)
+
+Covariates are regressed out **inside every cross-validation fold**, with the
+nuisance coefficients estimated on the training fold only and then applied to
+both folds:
+
+```
+opts.covariates     = [n x nCov] numeric, one ROW per subject   (default [])
+opts.covariateNames = {'age','sex'}                              (default auto)
+```
+
+Do **not** add a column of ones; the intercept is handled internally. Encode
+categorical covariates as dummy columns beforehand. Leaving `opts.covariates`
+empty reproduces the previous behaviour exactly.
+
+The order of operations is **residualize, then scale**, applied at every
+preprocessing site: outer folds, inner tuning folds, bootstrap resamples and
+learning-curve subsamples. Two consequences worth knowing:
+
+- The scale constants are computed on the *residualized* data, so the model's
+  inputs really do have unit variance in the space it operates in. This matters
+  for Elastic Net, which penalises the supplied columns directly.
+- Residualization lowers `rank(Xtrain)` by up to `rank(C)`, so any rank-based
+  cap is applied after it.
+
+### Do not pre-residualize
+
+Both calling scripts previously instructed users to residualize the feature
+matrix before running the pipeline. That fits the nuisance model on all
+subjects, so each test fold influences the coefficients later used to transform
+it.
+
+**The direction of the resulting bias is not the intuitive one.** Measured on
+synthetic data where a covariate drives *all* the apparent association, so that
+the correct answer is chance:
+
+| route | PLS-DA AUC (chance 0.5) | PLSR Q2 (chance about 0) |
+|---|---|---|
+| raw X, no control | 0.914 | +0.730 |
+| pre-residualized full matrix | **0.332** | **-0.766** |
+| fold-wise (`opts.covariates`) | **0.525** | **-0.081** |
+
+Full-sample residualization lands far *below* chance, not above: over-removal
+subtracts a component estimated partly from the test fold, which inverts the
+test-fold relationship. This matches the known result that confound regression
+on a full dataset can produce systematically below-chance decoding. Where X
+carries genuine signal beyond the confound, the two routes agree closely
+(0.720 vs 0.731).
+
+So the case for the fold-wise version is that it is **unbiased and
+leakage-free**, returning the right answer in both regimes - not that it removes
+optimism.
+
+### Reproducibility
+
+```
+opts.seed = 1    (default)
+```
+
+Results are now reproducible from run to run **and independent of parallel pool
+size**. Previously the permutation, bootstrap and learning-curve stages drew
+their randomness on workers, whose streams the client seed never reached; for
+Elastic Net the entire nested-CV stage was affected, so even the headline AUC
+varied between runs.
+
+---
+
+### Note for classification
+
+Y stays binary, so only X is residualized. If a covariate is itself associated
+with the class, removing it from X also removes part of the class signal, so the
+controlled estimate is **conservative by design**.
+
+---
+
+
 # Hyperparameters
 
 Default settings are designed for **small neuroimaging datasets**.
@@ -277,6 +353,17 @@ results.AUC_PR_global
 This helps determine whether **regional information improves
 prediction** beyond global signal.
 
+The two fields above are computed **in-sample**: the logistic model is fit on
+all subjects and predicts those same subjects, so they are not comparable to the
+cross-validated `results.AUC`. Cross-validated counterparts are now reported
+alongside them, run through the same repeated outer CV:
+
+results.AUC_global_cvresults.AUC_PR_global_cv
+
+The in-sample fields are unchanged and retained for continuity. **Compare the
+`_cv` fields against the model**, not the in-sample ones.
+
+
 ------------------------------------------------------------------------
 
 # Permutation Testing
@@ -299,6 +386,30 @@ results.permAUC_PR\
 results.permutation_p_PR
 
 ------------------------------------------------------------------------
+
+## The p-value uses a matched estimator
+
+`results.permutation_p` is computed against `results.quickCV_observed`, **not**
+against the headline `results.AUC`.
+
+The null distribution is produced by the quick CV routine, while the headline
+number comes from repeated nested CV. Those are two different estimators, and
+the quick routine previously also ran untuned, which overfits permuted data much
+harder than the tuned estimator overfits real data. The null therefore sat far
+below the observed value.
+
+Measured on true-null data, that mismatch produced a **false-positive rate near
+40 % at alpha = 0.05** (mean p 0.10 where it should be about 0.5). Matching the
+estimator on both sides restores calibration; the quick routine now tunes
+internally too, which additionally recovers power.
+
+`results.AUC` remains the number to report as performance. The p-value uses
+the `(sum(perm >= obs) + 1) / (nValid + 1)` convention, so it can never be
+exactly zero.
+
+**p-values from runs predating this change are inflated.**
+
+---
 
 # Bootstrap Confidence Intervals
 

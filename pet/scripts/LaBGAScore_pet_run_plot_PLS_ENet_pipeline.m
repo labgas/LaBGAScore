@@ -8,8 +8,12 @@
 % (whole-brain or ROI) PET data.
 %
 % The script takes excel outputs from the LaBGAScore_pet_model_TSPO_DPA714.m script
-% as input, but residualizing for genotype (and if needed other covariates)
-% needs to be done PRIOR to using this script!
+% as input. To control for genotype (or any other covariate), list the relevant
+% column names in covariate_names below: they are regressed out INSIDE every
+% cross-validation fold, with the nuisance coefficients estimated on the
+% training fold only. Do NOT residualize the input spreadsheet beforehand --
+% fitting the nuisance model on the full sample uses test-fold information and
+% biases the result.
 %
 % For more info, type the following in your Matlab command window
 %
@@ -32,8 +36,9 @@
 % * do_enet             default false, run the Elastic Net pipeline
 % * data2analyze         cell array of variable-set names to analyze, e.g. {'K1_ROI','K1_parcel','DV_ROI','DV_parcel'}
 % * group_ID            name of the outcome/group column in the input excel file
-% * opts_PLS            struct of PLS-DA pipeline options (outerK, innerK, nrepeats, maxLV, nPerm, nBoot, learningSteps) - see help PLSDA_neuroimaging_pipeline
-% * opts_ENet           struct of Elastic Net pipeline options (outerK, innerK, nrepeats, alphaGrid, lambdaGrid, nPerm, nBoot, learningSteps) - see help ENet_neuroimaging_pipeline
+% * covariate_names     cellstr of column names in the input spreadsheet to regress out fold-wise; {} for none
+% * opts_PLS            struct of PLS-DA pipeline options (outerK, innerK, nRepeats, maxLV, nPerm, nBoot, learningSteps, seed) - see help PLSDA_neuroimaging_pipeline
+% * opts_ENet           struct of Elastic Net pipeline options (outerK, innerK, nRepeats, alphaGrid, lambdaGrid, nPerm, nBoot, learningSteps, tuneRule, seed) - see help ENet_neuroimaging_pipeline
 %
 %
 % *DEPENDENCIES*
@@ -88,6 +93,11 @@ data2analyze = {'K1_ROI','K1_parcel','DV_ROI','DV_parcel'};
 
 group_ID = 'patient';
 
+covariate_names = {};  % e.g. {'genotype'}; column names in the input spreadsheet to
+                       % regress out fold-wise. The PET varnames below are built by
+                       % 'K1'/'DV' filters, so covariate columns are excluded from the
+                       % feature matrix automatically unless they are named K1*/DV*.
+
 
 % INPUT DATA
 
@@ -119,6 +129,25 @@ end
 
 Y_var = input_data.(group_ID);
 
+% covariate matrix, one row per subject, same row order as X_vars
+if isempty(covariate_names)
+    covariates = [];
+else
+    missing = setdiff(covariate_names, input_data.Properties.VariableNames);
+    if ~isempty(missing)
+        error('covariate_names not found in the input spreadsheet: %s', strjoin(missing, ', '));
+    end
+    covariates = table2array(input_data(:,covariate_names));
+    % guard against a covariate also being modelled as a feature
+    for xv = 1:numel(varnames)
+        clash = intersect(varnames{xv}, covariate_names);
+        if ~isempty(clash)
+            error('Covariate(s) %s also appear in feature set %d; remove them from varnames.', ...
+                strjoin(clash, ', '), xv);
+        end
+    end
+end
+
 
 % SET OPTIONS FOR PLS AND ENET PIPELINES
 
@@ -127,23 +156,31 @@ Y_var = input_data.(group_ID);
 
 opts_PLS.outerK = 4;
 opts_PLS.innerK = 4;
-opts_PLS.nrepeats = 50;
+opts_PLS.nRepeats = 50;   % NOTE: capital R. This was 'nrepeats' before, which the
+                          % pipeline never reads, so the option silently did nothing.
 opts_PLS.maxLV = 3;
 opts_PLS.nPerm = 5000;
 opts_PLS.nBoot = 5000;
 opts_PLS.learningSteps = 6;
+opts_PLS.seed = 1;
+opts_PLS.covariates = covariates;
+opts_PLS.covariateNames = covariate_names;
 
 % Elastic Net
 % help ENet_neuroimaging_pipeline for details
 
 opts_ENet.outerK = 4;
 opts_ENet.innerK = 4;
-opts_ENet.nrepeats = 50;
+opts_ENet.nRepeats = 50;  % NOTE: capital R, see above
 opts_ENet.alphaGrid = [0.05 0.1 0.25 0.5 0.75 0.9 1];
 opts_ENet.lambdaGrid = logspace(-3,1,25);
 opts_ENet.nPerm = 5000;
 opts_ENet.nBoot = 5000;
 opts_ENet.learningSteps = 6;
+opts_ENet.tuneRule = '1se';   % '1se' | 'max', see help selectENetHyperparams
+opts_ENet.seed = 1;
+opts_ENet.covariates = covariates;
+opts_ENet.covariateNames = covariate_names;
 
 
 % LOAD ATLAS

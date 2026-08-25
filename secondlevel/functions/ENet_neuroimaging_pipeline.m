@@ -1,6 +1,5 @@
 function results = ENet_neuroimaging_pipeline(X,Y,opts)
-% 
-% Robust Elastic Net pipeline for neuroimaging feature matrices.
+% ENet_neuroimaging_pipeline  Robust Elastic Net pipeline for neuroimaging feature matrices.
 %
 % This function implements Elastic Net regularized logistic-style classification
 % (via lassoglm / elastic net on a binary outcome) with repeated nested k-fold
@@ -58,6 +57,30 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %        Learning curve:
 %          opts.learningSteps (default 6) number of sample sizes
 %
+%        Elastic Net specifics:
+%          opts.tuneRule      (default '1se') inner-CV selection rule:
+%                             '1se' picks the most regularized (alpha, lambda)
+%                                   whose fold-averaged AUC is within one
+%                                   standard error of the best -- sparser and
+%                                   more stable weight maps;
+%                             'max' picks the plain fold-averaged argmax.
+%                             Measured on data with real signal, '1se' cost
+%                             about 0.01 AUC against 'max' while selecting far
+%                             stronger regularization.
+%          opts.selectionTopK (default min(20, max(3, ceil(0.25*p))), capped at
+%                             p-1) size of the top-K set for selectionFrequency.
+%          opts.doFinalModel  (default false) additionally fit an
+%                             interpretation-only Elastic Net on all subjects at
+%                             the median selected (alpha, lambda), adding
+%                             results.betaFinal / .interceptFinal / .finalAlpha
+%                             / .finalLambda. Off by default because for a
+%                             sparse model the mean of the CV betas is a
+%                             defensible bagged weight map, whereas a single
+%                             full-data fit commits to one arbitrary support set.
+%          opts.verbose       (default false) print per-fold diagnostics from
+%                             quickCV_ENet. Leave false: with parfor these
+%                             stream from every worker on every permutation.
+%
 %        Generic additions:
 %          opts.scale         (default 'zscore') scaling mode inside every fold:
 %                             'zscore' | 'center' | 'none'
@@ -65,7 +88,30 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %                               (different ROIs/edges/metrics have different scales).
 %          opts.globalFun     (default 'mean') global baseline feature:
 %                             'mean' | 'median' | function handle @(X)->[n x 1]
-%                             Used to compute results.AUC_global.
+%                             Used for results.AUC_global and the *_global_cv fields.
+%
+%        Covariate control (fold-wise nuisance regression):
+%          opts.covariates    (default []) [n x nCov] numeric nuisance matrix,
+%                             one ROW per subject. Do NOT include a column of
+%                             ones; the intercept is handled internally.
+%                             Nuisance coefficients are estimated on the
+%                             TRAINING fold only and applied to both folds, in
+%                             every outer fold, every inner fold, every
+%                             bootstrap resample and every learning-curve
+%                             subsample. Encode categorical covariates as dummy
+%                             columns beforehand. Leave empty to reproduce the
+%                             previous behaviour exactly.
+%          opts.covariateNames (default {'cov1',...}) cellstr, provenance only.
+%
+%        Reproducibility:
+%          opts.seed          (default 1) RNG seed. Results are now reproducible
+%                             across runs AND independent of parallel pool size.
+%
+%                             NOTE for classification: Y stays binary, so only X
+%                             is residualized. If a covariate is itself
+%                             associated with the class, removing it from X also
+%                             removes part of the class signal. That is
+%                             conservative by design, not a defect.
 %
 % OUTPUT (results struct)
 %   Cross-validated performance (generalization estimate):
@@ -94,25 +140,54 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %     results.meanFeatureWeight [p x 1] mean featureWeights across runs
 %     results.featureStability  [p x 1] proportion of runs where |beta|>0
 %
-%   Global baseline (interpretation only):
-%     results.AUC_global        scalar   AUC of logistic model on a global summary feature
-%                                   (mean/median across features, or custom opts.globalFun)
+%   Global baseline:
+%     results.AUC_global        scalar   IN-SAMPLE ROC AUC of a logistic model on
+%                                   a global summary feature, fit and predicted on
+%                                   all subjects. Retained unchanged for
+%                                   continuity, but NOT comparable to the
+%                                   cross-validated results.AUC.
+%     results.AUC_global_cv     scalar   cross-validated counterpart, through the
+%                                   same repeated outer CV as the model. THIS is
+%                                   what to compare against results.AUC.
+%     results.AUC_PR_global_cv  scalar   cross-validated PR-AUC counterpart.
 %     results.AUC_PR_global     scalar   precision-recall AUC of logistic model on a global summary feature
 %                                   (mean/median across features, or custom
 %                                   opts.globalFun)
 %
 %   Feature stability (from CV weights):
 %     results.signStability [p x 1] proportion of runs matching mean sign
-%     results.selectionFrequency [p x 1] frequency of appearing in topK
-%                        absolute weights across runs (topK fixed at 20)
+%     results.selectionFrequency [p x 1] frequency of appearing in the topK
+%                        absolute weights across valid runs. topK defaults to
+%                        min(20, max(3, ceil(0.25*p))) capped at p-1, NOT a
+%                        fixed 20; override with opts.selectionTopK. Reported
+%                        back in results.selectionTopK.
+%     results.nValidFolds scalar number of outer folds that produced a model
+%                        (skipped folds are excluded from the stability metrics
+%                        rather than counted as "feature not selected")
 %
-%   Permutation test:
+%   Permutation test (label permutation):
 %     results.allpermAUC        [nPerm x 1] permuted ROC AUC distribution
 %     results.permAUC           scalar mean permuted ROC AUC
-%     results.permutation_p     scalar p = mean(permAUC >= observed AUC)
+%     results.quickCV_observed  scalar observed AUC from quickCV_ENet, i.e. the SAME
+%                            estimator that generates the null
+%     results.permutation_p     scalar (sum(permAUC >= quickCV_observed) + 1) / (nValid + 1)
 %     results.allpermAUC_PR     [nPerm x 1] permuted PR AUC distribution
 %     results.permAUC_PR        scalar mean permuted PR AUC
-%     results.permutation_p_PR  scalar p = mean(permAUC >= observed AUC)
+%     results.quickCV_observed_PR  scalar matched observed PR AUC
+%     results.permutation_p_PR  scalar as above, for PR AUC
+%
+%     Labels are permuted directly. When covariates are supplied, X is
+%     residualized on them inside every training fold, so the features the model
+%     sees are already orthogonal to the covariates and free label permutation
+%     is a valid test of the partial X-Y association (the Kennedy scheme).
+%
+%     Both metrics come from the SAME permutation draw, so the two p-values are
+%     mutually coherent and the stage costs one pass rather than two.
+%
+%     The p-value uses the matched observed statistic rather than results.AUC
+%     because the null comes from quickCV_ENet. Mixing a repeated-nested-CV AUC with a
+%     quickCV null gave a measured false positive rate near 40 percent at
+%     alpha = 0.05. results.AUC remains the performance estimate to report.
 %
 %   Bootstrap:
 %     results.allbootAUC [nBoot x 1] out-of-bag bootstrap AUC distribution
@@ -122,6 +197,11 @@ function results = ENet_neuroimaging_pipeline(X,Y,opts)
 %   Learning curve:
 %     results.learningSizes vector of sample sizes evaluated
 %     results.learningAUC   vector of AUC estimates per size
+%
+%   Provenance:
+%     results.covariateInfo struct: .used .names .nCov .rank .residualizeY
+%                        .order ('residualize-then-scale') .permScheme
+%     results.seed          the RNG seed actually used
 %
 % NOTES / INTERPRETATION (high level)
 %   - Use results.AUC from nested CV as the primary generalization estimate.
@@ -197,8 +277,18 @@ end
 % Generic additions (kept minimal)
 if ~isfield(opts,'scale'); opts.scale = 'zscore'; end       % 'zscore'|'center'|'none'
 if ~isfield(opts,'globalFun'); opts.globalFun = 'mean'; end % 'mean'|'median'|function handle
+if ~isfield(opts,'tuneRule'); opts.tuneRule = '1se'; end    % '1se'|'max', see selectENetHyperparams
+if ~isfield(opts,'doFinalModel'); opts.doFinalModel = false; end % optional full-data interpretive fit
+if ~isfield(opts,'verbose'); opts.verbose = false; end      % per-fold diagnostics from quickCV_ENet
+if ~isfield(opts,'seed'); opts.seed = 1; end                % RNG seed, see setParforStream
 
-rng(1,'twister')
+warnUnknownOptions(opts, { ...
+    'outerK','innerK','nRepeats','nPerm','nBoot','learningSteps', ...
+    'alphaGrid','lambdaGrid','selectionTopK','scale','globalFun', ...
+    'tuneRule','verbose','doFinalModel','seed','covariates','covariateNames'}, ...
+    'ENet_neuroimaging_pipeline');
+
+rng(opts.seed,'twister')
 
 %% -------------------------------------------------
 % 1. Outcome preparation
@@ -210,6 +300,22 @@ end
 
 yNum = double(Y(:)==max(Y));
 [n,p] = size(X);
+
+if numel(yNum) ~= n
+    error('ENet_neuroimaging_pipeline:sizeMismatch', ...
+        'X has %d rows but Y has %d elements.', n, numel(yNum));
+end
+
+if ~all(isfinite(X(:)))
+    error('ENet_neuroimaging_pipeline:nonFiniteX', ...
+        'X contains NaN or Inf. Handle missing values upstream (impute or drop).');
+end
+
+% Covariates are resolved ONCE here and then passed explicitly to every helper
+% alongside X. They are deliberately never re-read from opts inside a helper:
+% the bootstrap and learning-curve stages subset subjects, and a full-length
+% covariate matrix reaching a subsetted X would misalign silently.
+[Cov, covInfo] = validateCovariates(opts, n, 'ENet_neuroimaging_pipeline');
 
 %% -------------------------------------------------
 % 2. Repeated nested CV
@@ -229,6 +335,8 @@ interceptStore = nan(opts.nRepeats,opts.outerK);
 betaStore = nan(p,opts.outerK,opts.nRepeats);
 
 parfor r = 1:opts.nRepeats
+
+    setParforStream(opts.seed, 1e6, r);
 
     % local containers for parfor
     AUC_r  = nan(1,opts.outerK);
@@ -263,11 +371,18 @@ parfor r = 1:opts.nRepeats
             continue
         end
 
-        Xtrain = X(trainIdx,:);
-        Xtest  = X(testIdx,:);
+        Xtrain_raw = X(trainIdx,:);
+        Xtest_raw  = X(testIdx,:);
 
-        %% leakage-free scaling (generic)
-        [Xtrain, Xtest] = applyScaling(Xtrain, Xtest, opts.scale);
+        Ctrain = []; Ctest = [];
+        if ~isempty(Cov)
+            Ctrain = Cov(trainIdx,:);
+            Ctest  = Cov(testIdx,:);
+        end
+
+        %% leakage-free preprocessing: nuisance regression then scaling,
+        %% every constant estimated on the training fold alone
+        [Xtrain, Xtest] = foldPreprocess(Xtrain_raw, Xtest_raw, Ctrain, Ctest, opts.scale);
 
         %% inner CV hyperparameter search
         try
@@ -276,62 +391,20 @@ parfor r = 1:opts.nRepeats
             cvInner = cvpartition(length(ytrain),'KFold',opts.innerK);
         end
 
-        bestAUC = -inf;
-        bestAlpha = NaN;
-        bestLambda = NaN;
-        bestIntercept = NaN;
-        bestBeta = NaN(p,1);
+        % Hyperparameters are selected on the FOLD-AVERAGED inner AUC, and the
+        % model is refit exactly once at the winning (alpha, lambda). The former
+        % inline search compared a running maximum against a single inner fold's
+        % AUC over a flattened alpha x fold x lambda grid, so the winner was the
+        % luckiest fold rather than the best-performing pair.
+        % Raw training features go in: each inner fold preprocesses itself.
+        [bestBeta, bestIntercept, bestAlpha, bestLambda] = selectENetHyperparams( ...
+            Xtrain_raw, ytrain, Ctrain, cvInner, opts.alphaGrid, ...
+            enetLambdaGrid(opts), opts.tuneRule, opts.scale);
 
-        for a = 1:length(opts.alphaGrid)
-
-            alpha = opts.alphaGrid(a);
-
-            for f = 1:opts.innerK
-
-                tr = training(cvInner,f);
-                va = test(cvInner,f);
-
-                ytr = ytrain(tr);
-                yva = ytrain(va);
-
-                if numel(unique(ytr))<2 || numel(unique(yva))<2
-                    continue
-                end
-
-                % compute full lambda path in one call
-                [B,FitInfo] = lassoglm( ...
-                    Xtrain(tr,:),ytr,'binomial', ...
-                    'Alpha',alpha, ...
-                    'Lambda',opts.lambdaGrid, ...
-                    'Standardize',false);
-
-                for l = 1:length(opts.lambdaGrid)
-
-                    yhat = Xtrain(va,:)*B(:,l) + FitInfo.Intercept(l);
-
-                    [~,~,~,aucTemp] = perfcurve(yva,yhat,1);
-
-                    if aucTemp > bestAUC
-
-                        bestAUC = aucTemp;
-                        bestAlpha = alpha;
-                        bestLambda = opts.lambdaGrid(l);
-
-                        [Bfull,FitInfoFull] = lassoglm( ...
-                            Xtrain,ytrain,'binomial',...
-                            'Alpha',alpha, ...
-                            'Lambda',opts.lambdaGrid(l), ...
-                            'Standardize',false);
-
-                        bestBeta = Bfull;
-                        bestIntercept = FitInfoFull.Intercept;
-
-                    end
-
-                end
-
-            end
-
+        % No inner fold produced a usable model: leave this outer fold as NaN
+        % rather than scoring with a NaN beta (which errors inside perfcurve).
+        if ~isfinite(bestIntercept) || all(isnan(bestBeta))
+            continue
         end
 
         alpha_r(k)  = bestAlpha;
@@ -387,22 +460,22 @@ featureWeights = reshape(betaStore,p,opts.nRepeats*opts.outerK);
 %% -------------------------------------------------
 
 results.allAUC = AUC;
-results.AUC = nanmean(AUC(:));
+results.AUC = mean(AUC(:),'omitnan');
 
 results.allAUC_PR = AUC_PR;
-results.AUC_PR = nanmean(AUC_PR(:));
+results.AUC_PR = mean(AUC_PR(:),'omitnan');
 
 results.allACC = ACC;
-results.ACC = nanmean(ACC(:));
+results.ACC = mean(ACC(:),'omitnan');
 
 results.allSENS = SENS;
-results.SENS = nanmean(SENS(:));
+results.SENS = mean(SENS(:),'omitnan');
 
 results.allSPEC = SPEC;
-results.SPEC = nanmean(SPEC(:));
+results.SPEC = mean(SPEC(:),'omitnan');
 
 results.allACC_balanced = ACC_balanced;
-results.ACC_balanced = nanmean(ACC_balanced(:));
+results.ACC_balanced = mean(ACC_balanced(:),'omitnan');
 
 results.selectedAlpha  = selectedAlpha;
 results.selectedLambda = selectedLambda;
@@ -411,8 +484,20 @@ results.interceptStore = interceptStore;
 results.betaStore = betaStore;
 results.featureWeights = featureWeights;
 
-results.featureStability = mean(abs(featureWeights)>0,2);
-results.meanFeatureWeight = mean(featureWeights,2);
+% Folds that were skipped (missing class, degenerate fit) leave an all-NaN
+% column in featureWeights. Mask those out rather than letting them count as
+% "feature not selected" (NaN>0 is false) or poison the mean.
+validFolds = ~all(isnan(featureWeights),1);
+
+if any(validFolds)
+    results.featureStability  = mean(abs(featureWeights(:,validFolds))>0,2,'omitnan');
+    results.meanFeatureWeight = mean(featureWeights(:,validFolds),2,'omitnan');
+else
+    results.featureStability  = nan(p,1);
+    results.meanFeatureWeight = nan(p,1);
+end
+
+results.nValidFolds = sum(validFolds);
 
 fprintf('Nested CV AUC = %.3f\n',results.AUC)
 
@@ -439,12 +524,18 @@ scores = predict(mdl,globalFeature);
 results.AUC_global = AUCg;
 results.AUC_PR_global = AUC_PRg;
 
+% Cross-validated companions; see PLSDA_neuroimaging_pipeline for the rationale.
+gcv = globalBaselineCV(X, yNum, Cov, opts, 'classify');
+results.AUC_global_cv    = gcv.AUC;
+results.AUC_PR_global_cv = gcv.AUC_PR;
+
 %% -------------------------------------------------
 % 5. Sign stability
 %% -------------------------------------------------
 
 betaFlat = reshape(betaStore,p,[]);
-results.signStability = mean(sign(betaFlat)==sign(results.meanFeatureWeight),2);
+betaFlat = betaFlat(:,~all(isnan(betaFlat),1));
+results.signStability = mean(sign(betaFlat)==sign(results.meanFeatureWeight),2,'omitnan');
 
 %% -------------------------------------------------
 % 6. Top-K selection frequency
@@ -452,51 +543,108 @@ results.signStability = mean(sign(betaFlat)==sign(results.meanFeatureWeight),2);
 
 freq = zeros(size(results.featureWeights,1),1);
 
-for i = 1:size(results.featureWeights,2)
-    [~,idx] = sort(abs(results.featureWeights(:,i)),'descend');
+% Only count folds that actually produced weights; sorting an all-NaN column
+% would otherwise increment an arbitrary set of indices.
+freqCols = find(validFolds);
+
+for i = freqCols(:)'
+    [~,idx] = sort(abs(results.featureWeights(:,i)),'descend','MissingPlacement','last');
     freq(idx(1:topK)) = freq(idx(1:topK)) + 1;
 end
 
-freq = freq / size(results.featureWeights,2);
+freq = freq / max(numel(freqCols),1);
 results.selectionFrequency = freq;
 results.selectionTopK = topK;
+
+%% -------------------------------------------------
+% 6b. Final full-data model (interpretation only, optional)
+%% -------------------------------------------------
+
+% The PLS pipelines all fit an interpretation-only model on the full sample;
+% ENet historically did not, so plot_ENet_diagnostics_neuroimaging works from
+% the CV-averaged weights instead. That is arguably the better choice for a
+% sparse model -- the mean of CV betas is a legitimate bagged weight map, while
+% a single full-data fit commits to one arbitrary support set. The option is
+% therefore OFF by default, which keeps the results struct unchanged.
+if opts.doFinalModel
+
+    [Xz,~] = foldPreprocess(X, [], Cov, [], opts.scale);
+
+    finalAlpha  = median(selectedAlpha(:),  'omitnan');
+    finalLambda = median(selectedLambda(:), 'omitnan');
+
+    if isfinite(finalAlpha) && isfinite(finalLambda)
+        % snap alpha back onto the supplied grid; the median of a discrete grid
+        % need not itself be a grid value
+        [~,ia] = min(abs(opts.alphaGrid - finalAlpha));
+        finalAlpha = opts.alphaGrid(ia);
+
+        try
+            [Bf, FIf] = lassoglm(Xz, yNum, 'binomial', ...
+                'Alpha', finalAlpha, 'Lambda', finalLambda, 'Standardize', false);
+            results.betaFinal      = Bf(:,1);
+            results.interceptFinal = FIf.Intercept(1);
+            results.finalAlpha     = finalAlpha;
+            results.finalLambda    = finalLambda;
+        catch ME
+            warning('ENet_neuroimaging_pipeline:finalModelFailed', ...
+                'Final full-data fit failed (%s); results.betaFinal not set.', ME.message);
+        end
+    end
+
+end
 
 %% -------------------------------------------------
 % 7. Permutation testing
 %% -------------------------------------------------
 
-permAUC = nan(opts.nPerm,1);
+% The p-value compares like with like. The null is generated by quickCV_ENet,
+% so the observed statistic it is compared against must come from quickCV_ENet
+% too. Comparing the repeated-nested-CV AUC against a quickCV null mixes two
+% different estimators and, measured on true-null data, produced a false
+% positive rate near 40% at alpha = 0.05.
+%
+% Labels are permuted directly. With covariates supplied, X is residualized on
+% them inside every training fold, so the features the model sees are already
+% orthogonal to the covariates and free label permutation is a valid test of
+% the partial X-Y association (the Kennedy scheme). Without covariates this is
+% simply the usual unrestricted permutation.
+obsMatched    = quickCV_ENet(X, yNum, Cov, opts);
+obsMatched_PR = quickCV_ENet_PR(X, yNum, Cov, opts);
 
+results.quickCV_observed    = obsMatched;
+results.quickCV_observed_PR = obsMatched_PR;
+
+permAUC    = nan(opts.nPerm,1);
+permAUC_PR = nan(opts.nPerm,1);
+
+% One permutation draw feeds both metrics: the ROC and PR nulls are then
+% mutually coherent, and this halves the permutation runtime.
 parfor i = 1:opts.nPerm
+    setParforStream(opts.seed, 2e6, i);
     yp = yNum(randperm(n));
-    permAUC(i) = quickCV_ENet(X,yp,opts);
+    permAUC(i)    = quickCV_ENet(X, yp, Cov, opts);
+    permAUC_PR(i) = quickCV_ENet_PR(X, yp, Cov, opts);
 end
 
 results.allpermAUC = permAUC;
-results.permAUC = nanmean(permAUC);
-results.permutation_p = mean(permAUC >= results.AUC,'omitnan');
+results.permAUC = mean(permAUC,'omitnan');
+results.permutation_p = (sum(permAUC >= obsMatched) + 1) / (sum(~isnan(permAUC)) + 1);
 
 figure
 histogram(permAUC(~isnan(permAUC)))
 hold on
-xline(results.AUC)
+xline(obsMatched)
 title('Permutation AUC')
 
-permAUC_PR = nan(opts.nPerm,1);
-
-parfor i=1:opts.nPerm
-    yp = yNum(randperm(n));
-    permAUC_PR(i) = quickCV_ENet_PR(X,yp,opts);
-end
-
 results.allpermAUC_PR = permAUC_PR;
-results.permAUC_PR = nanmean(permAUC_PR);
-results.permutation_p_PR = mean(permAUC_PR >= results.AUC_PR,'omitnan');
+results.permAUC_PR = mean(permAUC_PR,'omitnan');
+results.permutation_p_PR = (sum(permAUC_PR >= obsMatched_PR) + 1) / (sum(~isnan(permAUC_PR)) + 1);
 
 figure
-histogram(permAUC(~isnan(permAUC_PR)))
+histogram(permAUC_PR(~isnan(permAUC_PR)))
 hold on
-xline(results.AUC_PR)
+xline(obsMatched_PR)
 title('Permutation PR AUC distribution')
 
 %% -------------------------------------------------
@@ -506,11 +654,12 @@ title('Permutation PR AUC distribution')
 bootAUC = nan(opts.nBoot,1);
 
 parfor b = 1:opts.nBoot
-    bootAUC(b) = bootstrapOOB_ENet(X, yNum, opts);
+    setParforStream(opts.seed, 3e6, b);
+    bootAUC(b) = bootstrapOOB_ENet(X, yNum, Cov, opts);
 end
 
 results.allbootAUC = bootAUC;
-results.bootAUC = nanmean(bootAUC);
+results.bootAUC = mean(bootAUC,'omitnan');
 results.AUC_CI = prctile(bootAUC(~isnan(bootAUC)), [2.5 97.5]);
 
 figure
@@ -534,6 +683,7 @@ idxClass1 = find(yNum==1);
 idxClass0 = find(yNum==0);
 
 parfor i = 1:length(sizes)
+    setParforStream(opts.seed, 4e6, i);
 
     m = sizes(i);
 
@@ -551,7 +701,8 @@ parfor i = 1:length(sizes)
 
     idx = [samp1; samp0];
 
-    lcAUC(i) = quickCV_ENet(X(idx,:),yNum(idx),opts);
+    Cidx = []; if ~isempty(Cov), Cidx = Cov(idx,:); end
+    lcAUC(i) = quickCV_ENet(X(idx,:),yNum(idx),Cidx,opts);
 
 end
 
@@ -564,241 +715,15 @@ xlabel('Sample size')
 ylabel('AUC')
 title('Learning curve')
 
-end
-
 %% -------------------------------------------------
-% local helper: scaling (same as generic PLSDA)
+% 10. Provenance
 %% -------------------------------------------------
-function [XtrS, XteS] = applyScaling(Xtr, Xte, mode)
 
-switch lower(mode)
-    case 'none'
-        XtrS = Xtr;
-        XteS = Xte;
-    case 'center'
-        mu = mean(Xtr,1);
-        XtrS = Xtr - mu;
-        XteS = Xte - mu;
-    otherwise % 'zscore'
-        mu = mean(Xtr,1);
-        sd = std(Xtr,0,1);
-        sd(sd==0) = 1;
-        XtrS = (Xtr - mu) ./ sd;
-        XteS = (Xte - mu) ./ sd;
-end
-
-end
-
-function AUC = bootstrapOOB_ENet(X, Y, opts)
-% bootstrapOOB_ENet
-% Out-of-bag bootstrap AUC for Elastic Net:
-% - bootstrap sample used for training
-% - OOB subjects used for testing
-% - alpha/lambda selected by inner CV within the bootstrap sample
-% - robustified to mirror quickCV_ENet logic
-
-n = length(Y);
-
-if numel(unique(Y)) < 2
-    AUC = NaN;
-    return
-end
-
-% -----------------------
-% Bootstrap sample
-% -----------------------
-idxBoot = randsample(n, n, true);
-
-% OOB subjects = never selected
-inBag = false(n,1);
-inBag(idxBoot) = true;
-oob = ~inBag;
-
-if sum(oob) < 2
-    AUC = NaN;
-    return
-end
-
-Xtrain = X(idxBoot,:);
-Xtest  = X(oob,:);
-
-ytrain = Y(idxBoot);
-ytest  = Y(oob);
-
-if numel(unique(ytrain)) < 2 || numel(unique(ytest)) < 2
-    AUC = NaN;
-    return
-end
-
-% -----------------------
-% Leakage-free scaling
-% -----------------------
-[Xtrain, Xtest] = applyScaling(Xtrain, Xtest, opts.scale);
-
-% -----------------------
-% Inner CV setup
-% -----------------------
-innerK = min([opts.innerK, floor(numel(ytrain)/2), sum(ytrain==0), sum(ytrain==1)]);
-if innerK < 2
-    AUC = NaN;
-    return
-end
-
-try
-    cvInner = cvpartition(ytrain,'KFold',innerK,'Stratify',true);
-catch
-    cvInner = cvpartition(length(ytrain),'KFold',innerK);
-end
-
-% -----------------------
-% Alpha grid (coarsen for speed if needed)
-% -----------------------
-alphaGrid = opts.alphaGrid;
-if numel(alphaGrid) > 4
-    alphaGrid = alphaGrid([1 round(end/2) end]);
-end
-
-bestAUC = -inf;
-bestBeta = NaN(size(Xtrain,2),1);
-bestIntercept = NaN;
-
-% -----------------------
-% Hyperparameter search
-% -----------------------
-for a = 1:numel(alphaGrid)
-
-    alpha = alphaGrid(a);
-
-    % Fit lambda path once for this alpha on full bootstrap training set
-    try
-        [BfullPath,FitInfoFullPath] = lassoglm( ...
-            Xtrain, ytrain, 'binomial', ...
-            'Alpha', alpha, ...
-            'Standardize', false, ...
-            'NumLambda', 25, ...
-            'LambdaRatio', 1e-3, ...
-            'MaxIter', 1e4, ...
-            'RelTol', 1e-3);
-    catch
-        continue
-    end
-
-    lambdaPath = FitInfoFullPath.Lambda;
-    nLambda = numel(lambdaPath);
-
-    foldAUC = nan(innerK, nLambda);
-
-    for f = 1:innerK
-
-        tr = training(cvInner,f);
-        va = test(cvInner,f);
-
-        ytr = ytrain(tr);
-        yva = ytrain(va);
-
-        if numel(unique(ytr))<2 || numel(unique(yva))<2
-            continue
-        end
-
-        % Recompute path on inner-training fold using same lambda path
-        try
-            [B,FitInfo] = lassoglm( ...
-                Xtrain(tr,:), ytr, 'binomial', ...
-                'Alpha', alpha, ...
-                'Lambda', lambdaPath, ...
-                'Standardize', false, ...
-                'MaxIter', 1e4, ...
-                'RelTol', 1e-3);
-        catch
-            continue
-        end
-
-        for l = 1:nLambda
-            score = Xtrain(va,:)*B(:,l) + FitInfo.Intercept(l);
-
-            try
-                [~,~,~,foldAUC(f,l)] = perfcurve(yva, score, 1);
-                if ~isfinite(foldAUC(f,l))
-                    foldAUC(f,l) = NaN;
-                end
-            catch
-                foldAUC(f,l) = NaN;
-            end
-        end
-    end
-
-    meanAUC = nanmean(foldAUC,1);
-
-    if all(isnan(meanAUC))
-        continue
-    end
-
-    % -----------------------
-    % Robust lambda selection
-    % -----------------------
-    % First choose min-deviance over inner folds
-    [~,idxm] = max(meanAUC);
-
-    % Approximate 1SE-style choice:
-    % pick the most regularized lambda whose AUC is within 1 SE of the best
-    seAUC = nanstd(foldAUC,[],1) ./ sqrt(sum(~isnan(foldAUC),1));
-    bestMean = meanAUC(idxm);
-    thresh = bestMean - seAUC(idxm);
-
-    idxCandidates = find(meanAUC >= thresh);
-
-    if ~isempty(idxCandidates)
-        idx1 = idxCandidates(1);   % most regularized among acceptable
-    else
-        idx1 = idxm;
-    end
-
-    idx = idx1;
-
-    % If 1SE choice is all-zero, try min-deviance
-    if all(BfullPath(:,idx)==0) && ~isempty(idxm) && idxm>=1
-        idx = idxm;
-    end
-
-    % If still all-zero, choose best non-zero solution on path
-    if all(BfullPath(:,idx)==0)
-        nonzeroCols = find(any(BfullPath~=0,1));
-        validCols = nonzeroCols(isfinite(meanAUC(nonzeroCols)));
-        if ~isempty(validCols)
-            [~,ii] = max(meanAUC(validCols));
-            idx = validCols(ii);
-        end
-    end
-
-    if ~isfinite(meanAUC(idx))
-        continue
-    end
-
-    if meanAUC(idx) > bestAUC
-        bestAUC = meanAUC(idx);
-        bestBeta = BfullPath(:,idx);
-        bestIntercept = FitInfoFullPath.Intercept(idx);
-    end
-
-end
-
-% -----------------------
-% Final OOB evaluation
-% -----------------------
-if all(isnan(bestBeta)) || isnan(bestIntercept)
-    AUC = NaN;
-    return
-end
-
-score = Xtest*bestBeta + bestIntercept;
-
-try
-    [~,~,~,AUC] = perfcurve(ytest, score, 1);
-    if ~isfinite(AUC)
-        AUC = NaN;
-    end
-catch
-    AUC = NaN;
-end
+covInfo.residualizeY = false;   % never applicable: Y is binary here
+covInfo.order        = 'residualize-then-scale';
+covInfo.permScheme   = 'label-permutation';
+results.covariateInfo = covInfo;
+results.tuneRule      = opts.tuneRule;
+results.seed          = opts.seed;
 
 end

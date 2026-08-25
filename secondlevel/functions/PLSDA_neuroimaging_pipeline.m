@@ -57,7 +57,30 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %                               (different ROIs/edges/metrics have different scales).
 %          opts.globalFun     (default 'mean') global baseline feature:
 %                             'mean' | 'median' | function handle @(X)->[n x 1]
-%                             Used to compute results.AUC_global.
+%                             Used for results.AUC_global and the *_global_cv fields.
+%
+%        Covariate control (fold-wise nuisance regression):
+%          opts.covariates    (default []) [n x nCov] numeric nuisance matrix,
+%                             one ROW per subject. Do NOT include a column of
+%                             ones; the intercept is handled internally.
+%                             Nuisance coefficients are estimated on the
+%                             TRAINING fold only and applied to both folds, in
+%                             every outer fold, every inner fold, every
+%                             bootstrap resample and every learning-curve
+%                             subsample. Encode categorical covariates as dummy
+%                             columns beforehand. Leave empty to reproduce the
+%                             previous behaviour exactly.
+%          opts.covariateNames (default {'cov1',...}) cellstr, provenance only.
+%
+%        Reproducibility:
+%          opts.seed          (default 1) RNG seed. Results are now reproducible
+%                             across runs AND independent of parallel pool size.
+%
+%                             NOTE for classification: Y stays binary, so only X
+%                             is residualized. If a covariate is itself
+%                             associated with the class, removing it from X also
+%                             removes part of the class signal. That is
+%                             conservative by design, not a defect.
 %
 % OUTPUT (results struct)
 %   Cross-validated performance (generalization estimate):
@@ -82,9 +105,16 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %                        stacked across all outer folds/repeats
 %     results.meanFeatureWeight [p x 1] mean featureWeights across runs
 %
-%   Global baseline (interpretation only):
-%     results.AUC_global        scalar   ROC AUC of logistic model on a global summary feature
-%                                   (mean/median across features, or custom opts.globalFun)
+%   Global baseline:
+%     results.AUC_global        scalar   IN-SAMPLE ROC AUC of a logistic model on
+%                                   a global summary feature, fit and predicted on
+%                                   all subjects. Retained unchanged for
+%                                   continuity, but NOT comparable to the
+%                                   cross-validated results.AUC.
+%     results.AUC_global_cv     scalar   cross-validated counterpart, through the
+%                                   same repeated outer CV as the model. THIS is
+%                                   what to compare against results.AUC.
+%     results.AUC_PR_global_cv  scalar   cross-validated PR-AUC counterpart.
 %     results.AUC_PR_global     scalar   precision-recall AUC of logistic model on a global summary feature
 %                                   (mean/median across features, or custom
 %                                   opts.globalFun)
@@ -104,13 +134,29 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %     results.stabilityZ  [p x 1] meanBeta ./ sdBeta (stability statistic)
 %     results.signStability [p x 1] proportion of runs matching mean sign
 %
-%   Permutation test:
+%   Permutation test (label permutation):
 %     results.allpermAUC        [nPerm x 1] permuted ROC AUC distribution
 %     results.permAUC           scalar mean permuted ROC AUC
-%     results.permutation_p     scalar p = mean(permAUC >= observed AUC)
+%     results.quickCV_observed  scalar observed AUC from quickCV_PLSDA, i.e. the SAME
+%                            estimator that generates the null
+%     results.permutation_p     scalar (sum(permAUC >= quickCV_observed) + 1) / (nValid + 1)
 %     results.allpermAUC_PR     [nPerm x 1] permuted PR AUC distribution
 %     results.permAUC_PR        scalar mean permuted PR AUC
-%     results.permutation_p_PR  scalar p = mean(permAUC >= observed AUC)
+%     results.quickCV_observed_PR  scalar matched observed PR AUC
+%     results.permutation_p_PR  scalar as above, for PR AUC
+%
+%     Labels are permuted directly. When covariates are supplied, X is
+%     residualized on them inside every training fold, so the features the model
+%     sees are already orthogonal to the covariates and free label permutation
+%     is a valid test of the partial X-Y association (the Kennedy scheme).
+%
+%     Both metrics come from the SAME permutation draw, so the two p-values are
+%     mutually coherent and the stage costs one pass rather than two.
+%
+%     The p-value uses the matched observed statistic rather than results.AUC
+%     because the null comes from quickCV_PLSDA. Mixing a repeated-nested-CV AUC with a
+%     quickCV null gave a measured false positive rate near 40 percent at
+%     alpha = 0.05. results.AUC remains the performance estimate to report.
 %
 %   Bootstrap:
 %     results.allbootAUC [nBoot x 1] out-of-bag bootstrap ROC AUC distribution
@@ -120,6 +166,11 @@ function results = PLSDA_neuroimaging_pipeline(X,Y,opts)
 %   Learning curve:
 %     results.learningSizes vector of sample sizes evaluated
 %     results.learningAUC   vector of AUC estimates per size
+%
+%   Provenance:
+%     results.covariateInfo struct: .used .names .nCov .rank .residualizeY
+%                        .order ('residualize-then-scale') .permScheme
+%     results.seed          the RNG seed actually used
 %
 % NOTES / INTERPRETATION (high level)
 %   - Use results.AUC from nested CV as the primary generalization estimate.
@@ -171,8 +222,14 @@ if ~isfield(opts,'learningSteps'); opts.learningSteps = 6; end
 % Generic additions (kept minimal)
 if ~isfield(opts,'scale'); opts.scale = 'zscore'; end  % 'zscore'|'center'|'none'
 if ~isfield(opts,'globalFun'); opts.globalFun = 'mean'; end % 'mean'|'median' (or function handle)
+if ~isfield(opts,'seed'); opts.seed = 1; end                % see setParforStream
 
-rng(1,'twister')
+warnUnknownOptions(opts, { ...
+    'outerK','innerK','nRepeats','maxLV','nPerm','nBoot','learningSteps', ...
+    'scale','globalFun','seed','covariates','covariateNames'}, ...
+    'PLSDA_neuroimaging_pipeline');
+
+rng(opts.seed,'twister')
 
 %% -------------------------------------------------
 % 1. Outcome preparation
@@ -184,6 +241,20 @@ end
 
 yNum = double(Y(:)==max(Y));
 [n,p] = size(X);
+
+if numel(yNum) ~= n
+    error('PLSDA_neuroimaging_pipeline:sizeMismatch', ...
+        'X has %d rows but Y has %d elements.', n, numel(yNum));
+end
+
+if ~all(isfinite(X(:)))
+    error('PLSDA_neuroimaging_pipeline:nonFiniteX', ...
+        'X contains NaN or Inf. Handle missing values upstream (impute or drop).');
+end
+
+% Covariates are resolved ONCE here and then passed explicitly to every helper
+% alongside X; see foldPreprocess for why they never travel inside opts.
+[Cov, covInfo] = validateCovariates(opts, n, 'PLSDA_neuroimaging_pipeline');
 
 %% -------------------------------------------------
 % 2. Repeated Nested Cross-Validation
@@ -222,11 +293,18 @@ for r = 1:opts.nRepeats
             continue
         end
 
-        Xtrain = X(trainIdx,:);
-        Xtest  = X(testIdx,:);
+        Xtrain_raw = X(trainIdx,:);
+        Xtest_raw  = X(testIdx,:);
 
-        %% leakage-free scaling (generic)
-        [Xtrain, Xtest] = applyScaling(Xtrain, Xtest, opts.scale);
+        Ctrain = []; Ctest = [];
+        if ~isempty(Cov)
+            Ctrain = Cov(trainIdx,:);
+            Ctest  = Cov(testIdx,:);
+        end
+
+        %% leakage-free preprocessing: nuisance regression then scaling,
+        %% every constant estimated on the training fold alone
+        [Xtrain, Xtest] = foldPreprocess(Xtrain_raw, Xtest_raw, Ctrain, Ctest, opts.scale);
 
         %% inner CV LV tuning
 
@@ -260,18 +338,34 @@ for r = 1:opts.nRepeats
                     continue
                 end
 
-                [~,~,~,~,beta] = plsregress(Xtrain(tr,:),ytr,lv);
+                % Each inner fold preprocesses itself from the RAW training
+                % rows; reusing the outer fold's constants would leak
+                % outer-training statistics (and the outer nuisance fit) into
+                % every inner validation fold.
+                C2 = []; Cv = [];
+                if ~isempty(Ctrain), C2 = Ctrain(tr,:); Cv = Ctrain(va,:); end
 
-                yhat = [ones(sum(va),1) Xtrain(va,:)]*beta;
+                [X2, Xv] = foldPreprocess(Xtrain_raw(tr,:), Xtrain_raw(va,:), C2, Cv, opts.scale);
+
+                if capLV(lv, X2) < lv
+                    continue
+                end
+
+                [~,~,~,~,beta] = plsregress(X2,ytr,lv);
+
+                yhat = [ones(sum(va),1) Xv]*beta;
 
                 [~,~,~,foldAUC(f)] = perfcurve(yva,yhat,1);
 
             end
 
-            innerAUC(lv) = nanmean(foldAUC);
+            innerAUC(lv) = mean(foldAUC,'omitnan');
 
         end
 
+        if all(isnan(innerAUC))
+            continue
+        end
         [~,bestLV] = max(innerAUC);
         selectedLV(r,k) = bestLV;
 
@@ -306,23 +400,25 @@ for r = 1:opts.nRepeats
 end
 
 results.allAUC  = AUC;
-results.AUC     = nanmean(AUC(:));
+results.AUC     = mean(AUC(:),'omitnan');
 results.allAUC_PR  = AUC_PR;
-results.AUC_PR     = nanmean(AUC_PR(:));
+results.AUC_PR     = mean(AUC_PR(:),'omitnan');
 results.allACC  = ACC;
-results.ACC     = nanmean(ACC(:));
+results.ACC     = mean(ACC(:),'omitnan');
 results.allSENS = SENS;
-results.SENS    = nanmean(SENS(:));
+results.SENS    = mean(SENS(:),'omitnan');
 results.allSPEC = SPEC;
-results.SPEC    = nanmean(SPEC(:));
+results.SPEC    = mean(SPEC(:),'omitnan');
 results.allACC_balanced = ACC_balanced;
-results.ACC_balanced = nanmean(ACC_balanced(:));
+results.ACC_balanced = mean(ACC_balanced(:),'omitnan');
 
 results.selectedLV    = selectedLV;
 results.betaStore     = betaStore;
 results.featureWeights = featureWeights;
 
-results.meanFeatureWeight  = mean(featureWeights,2);
+% Skipped folds (missing class) leave all-NaN columns; omit them rather than
+% letting a single skipped fold turn the whole weight vector into NaN.
+results.meanFeatureWeight  = mean(featureWeights,2,'omitnan');
 
 fprintf('Nested CV AUC = %.3f\n',results.AUC)
 
@@ -349,14 +445,23 @@ scores = predict(mdl,globalFeature);
 results.AUC_global = AUCg;
 results.AUC_PR_global = AUC_PRg;
 
+% Cross-validated companions. AUC_global / AUC_PR_global above are IN-SAMPLE
+% (fitglm predicts the same subjects it was fit on) and so are not comparable
+% to the cross-validated results.AUC; the *_cv fields are.
+gcv = globalBaselineCV(X, yNum, Cov, opts, 'classify');
+results.AUC_global_cv    = gcv.AUC;
+results.AUC_PR_global_cv = gcv.AUC_PR;
+
 %% -------------------------------------------------
 % 4. Final model (interpretation only)
 %% -------------------------------------------------
 
 % apply same scaling on all data (generic)
-[Xz,~] = applyScaling(X, X, opts.scale);
+% Interpretation-only fit on all subjects; no held-out set, so a full-sample
+% nuisance fit is correct by construction.
+[Xz,~] = foldPreprocess(X, [], Cov, [], opts.scale);
 
-finalLV = round(nanmedian(selectedLV(:)));
+finalLV = round(median(selectedLV(:),'omitnan'));
 finalLV = max(1, min(finalLV, capLV(opts.maxLV, Xz)));
 
 [XL,YL,XS,~,beta,PCTVAR,~,stats] = plsregress(Xz,yNum,finalLV);
@@ -392,8 +497,8 @@ results.VIP = VIP;
 %% -------------------------------------------------
 
 betaMat = reshape(betaStore(2:end,:,:),p,[]);
-meanBeta = nanmean(betaMat,2);
-sdBeta = nanstd(betaMat,[],2);
+meanBeta = mean(betaMat,2,'omitnan');
+sdBeta = std(betaMat,[],2,'omitnan');
 
 results.meanBeta = meanBeta;
 results.sdBeta = sdBeta;
@@ -403,38 +508,52 @@ results.stabilityZ = meanBeta ./ sdBeta;
 % 7. Permutation testing
 %% -------------------------------------------------
 
-permAUC = nan(opts.nPerm,1);
+% The null comes from quickCV_PLSDA, so the observed statistic it is compared
+% against must come from quickCV_PLSDA too. Comparing the repeated-nested-CV
+% AUC against a quickCV null mixes two different estimators and, measured on
+% true-null data, produced a false positive rate near 40% at alpha = 0.05.
+%
+% Labels are permuted directly. With covariates supplied, X is residualized on
+% them inside every training fold, so the features the model sees are already
+% orthogonal to the covariates and free label permutation is a valid test of
+% the partial X-Y association (the Kennedy scheme). Without covariates this is
+% the usual unrestricted permutation.
+obsMatched    = quickCV_PLSDA(X, yNum, Cov, opts);
+obsMatched_PR = quickCV_PLSDA_PR(X, yNum, Cov, opts);
 
+results.quickCV_observed    = obsMatched;
+results.quickCV_observed_PR = obsMatched_PR;
+
+permAUC    = nan(opts.nPerm,1);
+permAUC_PR = nan(opts.nPerm,1);
+
+% One permutation draw feeds both metrics: the ROC and PR nulls are then
+% mutually coherent, and this halves the permutation runtime.
 parfor i=1:opts.nPerm
+    setParforStream(opts.seed, 2e6, i);
     yp = yNum(randperm(n));
-    permAUC(i) = quickCV(X,yp,opts);
+    permAUC(i)    = quickCV_PLSDA(X, yp, Cov, opts);
+    permAUC_PR(i) = quickCV_PLSDA_PR(X, yp, Cov, opts);
 end
 
 results.allpermAUC = permAUC;
-results.permAUC = nanmean(permAUC);
-results.permutation_p = mean(permAUC >= results.AUC,'omitnan');
+results.permAUC = mean(permAUC,'omitnan');
+results.permutation_p = (sum(permAUC >= obsMatched) + 1) / (sum(~isnan(permAUC)) + 1);
 
 figure
 histogram(permAUC(~isnan(permAUC)))
 hold on
-xline(results.AUC)
+xline(obsMatched)
 title('Permutation ROC AUC distribution')
 
-permAUC_PR = nan(opts.nPerm,1);
-
-parfor i=1:opts.nPerm
-    yp = yNum(randperm(n));
-    permAUC_PR(i) = quickCV_PR(X,yp,opts);
-end
-
 results.allpermAUC_PR = permAUC_PR;
-results.permAUC_PR = nanmean(permAUC_PR);
-results.permutation_p_PR = mean(permAUC_PR >= results.AUC_PR,'omitnan');
+results.permAUC_PR = mean(permAUC_PR,'omitnan');
+results.permutation_p_PR = (sum(permAUC_PR >= obsMatched_PR) + 1) / (sum(~isnan(permAUC_PR)) + 1);
 
 figure
-histogram(permAUC(~isnan(permAUC_PR)))
+histogram(permAUC_PR(~isnan(permAUC_PR)))
 hold on
-xline(results.AUC_PR)
+xline(obsMatched_PR)
 title('Permutation PR AUC distribution')
 
 %% -------------------------------------------------
@@ -444,11 +563,12 @@ title('Permutation PR AUC distribution')
 bootAUC = nan(opts.nBoot,1);
 
 parfor b = 1:opts.nBoot
-    bootAUC(b) = bootstrapOOB_PLSDA(X, yNum, opts);
+    setParforStream(opts.seed, 3e6, b);
+    bootAUC(b) = bootstrapOOB_PLSDA(X, yNum, Cov, opts);
 end
 
 results.allbootAUC = bootAUC;
-results.bootAUC = nanmean(bootAUC);
+results.bootAUC = mean(bootAUC,'omitnan');
 results.AUC_CI = prctile(bootAUC(~isnan(bootAUC)), [2.5 97.5]);
 
 figure
@@ -473,6 +593,8 @@ idxClass0 = find(yNum==0);
 
 parfor i = 1:length(sizes)
 
+    setParforStream(opts.seed, 4e6, i);
+
     m = sizes(i);
 
     frac1 = numel(idxClass1)/n;
@@ -487,7 +609,8 @@ parfor i = 1:length(sizes)
 
     idx = [samp1; samp0];
 
-    lcAUC(i) = quickCV(X(idx,:),yNum(idx),opts);
+    Cidx = []; if ~isempty(Cov), Cidx = Cov(idx,:); end
+    lcAUC(i) = quickCV_PLSDA(X(idx,:),yNum(idx),Cidx,opts);
 
 end
 
@@ -511,246 +634,14 @@ betaFlat = reshape(betaNoIntercept,p,[]);
 signStability = mean(sign(results.meanFeatureWeight) == sign(betaFlat),2,'omitnan');
 results.signStability = signStability;
 
-
-end
-
 %% -------------------------------------------------
-% inline / local helper functions
+% Provenance
 %% -------------------------------------------------
 
-function maxLV = capLV(maxLVopt, Xtrain)
-% capLV: ensures LV count is valid for any p/n ratio
-nTr = size(Xtrain,1);
+covInfo.residualizeY = false;   % never applicable: Y is binary here
+covInfo.order        = 'residualize-then-scale';
+covInfo.permScheme   = 'label-permutation';
+results.covariateInfo = covInfo;
+results.seed          = opts.seed;
 
-% rank-based cap is important even when p<n
-rX = rank(Xtrain);
-
-% plsregress needs lv <= min(rank(X), n-1) typically; keep your -1/-2 safeguards
-maxLV = min([maxLVopt, rX-1, nTr-2]);
-
-if isnan(maxLV) || isinf(maxLV)
-    maxLV = 0;
-end
-
-maxLV = floor(maxLV);
-end
-
-function [XtrS, XteS] = applyScaling(Xtr, Xte, mode)
-% leakage-free scaling options
-switch lower(mode)
-    case 'none'
-        XtrS = Xtr;
-        XteS = Xte;
-    case 'center'
-        mu = mean(Xtr,1);
-        XtrS = Xtr - mu;
-        XteS = Xte - mu;
-    otherwise % 'zscore'
-        mu = mean(Xtr,1);
-        sd = std(Xtr,0,1);
-        sd(sd==0) = 1;
-        XtrS = (Xtr - mu) ./ sd;
-        XteS = (Xte - mu) ./ sd;
-end
-end
-
-function AUC = quickCV(X,Y,opts)
-
-if numel(unique(Y)) < 2
-    AUC = NaN;
-    return
-end
-
-n = length(Y);
-K = min(opts.outerK,floor(n/2));
-
-try
-    cv = cvpartition(Y,'KFold',K,'Stratify',true);
-catch
-    cv = cvpartition(n,'KFold',K);
-end
-
-auc = nan(K,1);
-
-for k=1:K
-
-    tr = training(cv,k);
-    te = test(cv,k);
-
-    ytr = Y(tr);
-    yte = Y(te);
-
-    if numel(unique(ytr))<2 || numel(unique(yte))<2
-        continue
-    end
-
-    Xtr = X(tr,:);
-    Xte = X(te,:);
-
-    [Xtr, Xte] = applyScaling(Xtr, Xte, opts.scale);
-
-    lv = capLV(opts.maxLV, Xtr);
-    if lv < 1
-        continue
-    end
-
-    [~,~,~,~,beta] = plsregress(Xtr,ytr,lv);
-
-    score = [ones(sum(te),1) Xte]*beta;
-
-    [~,~,~,auc(k)] = perfcurve(yte,score,1);
-
-end
-
-AUC = nanmean(auc);
-
-end
-
-function AUC_PR = quickCV_PR(X,Y,opts)
-
-if numel(unique(Y)) < 2
-    AUC_PR = NaN;
-    return
-end
-
-n = length(Y);
-K = min(opts.outerK,floor(n/2));
-
-try
-    cv = cvpartition(Y,'KFold',K,'Stratify',true);
-catch
-    cv = cvpartition(n,'KFold',K);
-end
-
-auc_pr = nan(K,1);
-
-for k=1:K
-
-    tr = training(cv,k);
-    te = test(cv,k);
-
-    ytr = Y(tr);
-    yte = Y(te);
-
-    if numel(unique(ytr))<2 || numel(unique(yte))<2
-        continue
-    end
-
-    Xtr = X(tr,:);
-    Xte = X(te,:);
-
-    [Xtr, Xte] = applyScaling(Xtr, Xte, opts.scale);
-
-    lv = capLV(opts.maxLV, Xtr);
-    if lv < 1
-        continue
-    end
-
-    [~,~,~,~,beta] = plsregress(Xtr,ytr,lv);
-
-    score = [ones(sum(te),1) Xte]*beta;
-
-    [~,~,~,auc_pr(k)] = perfcurve(yte,score,1,...
-        'xCrit','reca','yCrit','prec');
-
-end
-
-AUC_PR = nanmean(auc_pr);
-
-end
-
-function AUC = bootstrapOOB_PLSDA(X, Y, opts)
-% bootstrapOOB_PLSDA
-% Out-of-bag bootstrap AUC for PLS-DA:
-% - bootstrap sample used for training
-% - OOB subjects used for testing
-% - LV selected by inner CV within the bootstrap sample
-
-n = length(Y);
-
-if numel(unique(Y)) < 2
-    AUC = NaN;
-    return
-end
-
-% Bootstrap sample
-idxBoot = randsample(n, n, true);
-
-% OOB = subjects not selected at least once
-inBag = false(n,1);
-inBag(idxBoot) = true;
-oob = ~inBag;
-
-% Need enough OOB cases and both classes present
-if sum(oob) < 2
-    AUC = NaN;
-    return
-end
-
-ytrain = Y(idxBoot);
-ytest  = Y(oob);
-
-if numel(unique(ytrain)) < 2 || numel(unique(ytest)) < 2
-    AUC = NaN;
-    return
-end
-
-Xtrain = X(idxBoot,:);
-Xtest  = X(oob,:);
-
-% leakage-free scaling
-[Xtrain, Xtest] = applyScaling(Xtrain, Xtest, opts.scale);
-
-% cap LV
-maxLV = capLV(opts.maxLV, Xtrain);
-if maxLV < 1
-    AUC = NaN;
-    return
-end
-
-% inner CV for LV tuning
-innerK = min([opts.innerK, floor(length(ytrain)/2), sum(ytrain==0), sum(ytrain==1)]);
-if innerK < 2
-    AUC = NaN;
-    return
-end
-
-try
-    cvInner = cvpartition(ytrain,'KFold',innerK,'Stratify',true);
-catch
-    cvInner = cvpartition(length(ytrain),'KFold',innerK);
-end
-
-innerAUC = nan(maxLV,1);
-
-for lv = 1:maxLV
-    foldAUC = nan(innerK,1);
-
-    for f = 1:innerK
-        tr = training(cvInner,f);
-        va = test(cvInner,f);
-
-        ytr = ytrain(tr);
-        yva = ytrain(va);
-
-        if numel(unique(ytr))<2 || numel(unique(yva))<2
-            continue
-        end
-
-        [~,~,~,~,beta] = plsregress(Xtrain(tr,:), ytr, lv);
-        yhat = [ones(sum(va),1) Xtrain(va,:)] * beta;
-
-        [~,~,~,foldAUC(f)] = perfcurve(yva, yhat, 1);
-    end
-
-    innerAUC(lv) = nanmean(foldAUC);
-end
-
-[~,bestLV] = max(innerAUC);
-
-% final fit on bootstrap sample
-[~,~,~,~,beta] = plsregress(Xtrain, ytrain, bestLV);
-
-score = [ones(sum(oob),1) Xtest] * beta;
-[~,~,~,AUC] = perfcurve(ytest, score, 1);
 end

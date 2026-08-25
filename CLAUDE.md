@@ -12,7 +12,7 @@ Most workflows require **CANlabCore** and **SPM12** on the MATLAB path. Some dom
 
 ## Repository structure
 
-Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlevel/`, `secondlevel/`, `stats_tools/`, `atlas_mask_tools/`, `pet/`, `mrs/`, `decoding_toolbox/`, `cosmomvpa/`, `graphvar/`, `juspace/`, `power/`, `figures/`, `clean/`, `qr_code/` (Python, not MATLAB). Most domains split into `<domain>/scripts/` + `<domain>/functions/`. One class in the whole repo: `secondlevel/classes/ProgressTracker.m`. `secondlevel/` also has six standalone usage guides (`README_ENet_*.md`, `README_PLSDA_*.md`, `README_PLSR_*.md`) — don't duplicate their content.
+Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlevel/`, `secondlevel/`, `stats_tools/`, `atlas_mask_tools/`, `pet/`, `mrs/`, `decoding_toolbox/`, `cosmomvpa/`, `graphvar/`, `juspace/`, `power/`, `figures/`, `clean/`, `qr_code/` (Python, not MATLAB). Most domains split into `<domain>/scripts/` + `<domain>/functions/`. One class in the whole repo: `secondlevel/classes/ProgressTracker.m`. `secondlevel/` also has seven standalone usage guides (`README_ENet_*.md`, `README_PLSDA_*.md`, `README_PLSR_*.md`) — don't duplicate their content.
 
 ## Script conventions
 

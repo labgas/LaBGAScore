@@ -7,8 +7,13 @@
 % neuroimaging pipeline functions and their plotting functions on fMRI ROI
 % data saved by the prep_3a_run_second_level_regression_and_save script.
 %
-% If you want to control for covariates, residualize PRIOR to running this
-% script!
+% To control for covariates, list them in covariate_names below. They are
+% regressed out INSIDE every cross-validation fold, with the nuisance
+% coefficients estimated on the training fold only. Do NOT residualize the ROI
+% data beforehand: fitting the nuisance model on the full sample uses test-fold
+% information and produces a biased estimate (measurably so -- on data where a
+% covariate drives all the apparent signal it pushes performance far BELOW
+% chance rather than above it).
 %
 % For more info, type the following in your Matlab command window
 %
@@ -30,14 +35,16 @@
 % * do_pls                 run the PLS-DA pipeline, default true
 % * do_enet                run the Elastic Net pipeline, default false
 % * group_ID                name of the group-membership variable in the saved roi_stats_*.mat table
+% * covariate_names         cellstr of column names in the saved roi_stats_*.mat table to regress out
+%                           fold-wise; {} for none. These columns are excluded from the feature matrix.
 % * mygroupnamefield        'conditions' or 'contrasts', must match corresponding prep_3a script
 % * results_suffix          suffix used when saving prep_3a results, must match corresponding prep_3a script
 % * myscaling_glm           'raw' | 'scaled' | 'scaled_contrasts', must match corresponding prep_3a script (or a2_set_default_options)
 % * roi_modelname           prefix of the saved roi files from the corresponding LaBGAScore_atlas_rois_from_atlas script
 % * roi_set_name            descriptive name for the set of rois, from the corresponding LaBGAScore_atlas_rois_from_atlas script
 % * cons2analyze            indices from DAT.conditions or DAT.contrasts (depending on mygroupnamefield) to run the pipeline(s) on
-% * opts_PLS                struct of PLS-DA pipeline options (outerK, innerK, nrepeats, maxLV, nPerm, nBoot, learningSteps) — see help PLSDA_neuroimaging_pipeline
-% * opts_ENet               struct of Elastic Net pipeline options (outerK, innerK, nrepeats, alphaGrid, lambdaGrid, nPerm, nBoot, learningSteps) — see help ENet_neuroimaging_pipeline
+% * opts_PLS                struct of PLS-DA pipeline options (outerK, innerK, nRepeats, maxLV, nPerm, nBoot, learningSteps, seed) — see help PLSDA_neuroimaging_pipeline
+% * opts_ENet               struct of Elastic Net pipeline options (outerK, innerK, nRepeats, alphaGrid, lambdaGrid, nPerm, nBoot, learningSteps, tuneRule, seed) — see help ENet_neuroimaging_pipeline
 %
 %
 % *DEPENDENCIES*
@@ -54,9 +61,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_secondlevel_roi_run_plot_PLS_ENet_pipeline.m          v1.2
+% LaBGAScore_secondlevel_roi_run_plot_PLS_ENet_pipeline.m          v1.3
 %
-% last modified: 2026/08/20
+% last modified: 2026/08/25
 
 
 %% ========================================================================
@@ -76,6 +83,9 @@ a_set_up_paths_always_run_first;
 load(fullfile(resultsdir,'image_names_and_setup.mat'));
 
 group_ID = 'group'; % name of variable indicating group membership in ['roi_stats_', mygroupnamefield, '_', scaling_string, '_', results_suffix, '.mat']
+
+covariate_names = {}; % e.g. {'age','sex'}; column names in the same table to regress out fold-wise
+                      % these columns are excluded from the feature matrix (see below)
 
 
 % SET MANDATORY OPTIONS FROM CORRESPONDING PREP_3a_SCRIPT
@@ -128,14 +138,33 @@ load(fullfile(resultsdir, ['roi_stats_', mygroupnamefield, '_', scaling_string, 
 input_data = roi_means_table;
 varnames = input_data{1}.Properties.VariableNames(1:end-1); % group var always last
 
+% Drop the covariate columns from the FEATURE list by name. The 1:end-1 above
+% only strips the group variable, which is positionally last; covariate columns
+% sit among the ROI columns, so without this they would silently be modelled as
+% features as well as being regressed out.
+if ~isempty(covariate_names)
+    missing = setdiff(covariate_names, input_data{1}.Properties.VariableNames);
+    if ~isempty(missing)
+        error('covariate_names not found in roi_stats table: %s', strjoin(missing, ', '));
+    end
+    varnames = setdiff(varnames, covariate_names, 'stable');
+end
+
 % create cell arrays with X vars, and define single Y var
 
 for x = 1:size(X_vars,2)
-    X_vars{x} = table2array(input_data{x}(:,varnames)); % group var always last
+    X_vars{x} = table2array(input_data{x}(:,varnames));
     p{x} = size(X_vars{x},2); % number of features
 end
 
 Y_var = input_data{1}.(group_ID);
+
+% covariate matrix, one row per subject, same row order as X_vars
+if isempty(covariate_names)
+    covariates = [];
+else
+    covariates = table2array(input_data{1}(:,covariate_names));
+end
 
 
 % SET OPTIONS FOR PLS AND ENET PIPELINES
@@ -145,23 +174,31 @@ Y_var = input_data{1}.(group_ID);
 
 opts_PLS.outerK = 4;
 opts_PLS.innerK = 4;
-opts_PLS.nrepeats = 50;
+opts_PLS.nRepeats = 50;   % NOTE: capital R. This was 'nrepeats' before, which the
+                          % pipeline never reads, so the option silently did nothing.
 opts_PLS.maxLV = 3;
 opts_PLS.nPerm = 5000;
 opts_PLS.nBoot = 5000;
 opts_PLS.learningSteps = 6;
+opts_PLS.seed = 1;
+opts_PLS.covariates = covariates;
+opts_PLS.covariateNames = covariate_names;
 
 % Elastic Net
 % help ENet_neuroimaging_pipeline for details
 
 opts_ENet.outerK = 4;
 opts_ENet.innerK = 4;
-opts_ENet.nrepeats = 50;
+opts_ENet.nRepeats = 50;  % NOTE: capital R, see above
 opts_ENet.alphaGrid = [0.05 0.1 0.25 0.5 0.75 0.9 1];
 opts_ENet.lambdaGrid = logspace(-3,1,25);
 opts_ENet.nPerm = 5000;
 opts_ENet.nBoot = 5000;
 opts_ENet.learningSteps = 6;
+opts_ENet.tuneRule = '1se';   % '1se' | 'max', see help selectENetHyperparams
+opts_ENet.seed = 1;
+opts_ENet.covariates = covariates;
+opts_ENet.covariateNames = covariate_names;
 
 
 % LOAD ATLAS

@@ -1,6 +1,6 @@
-function AUC = quickCV_ENet(X,Y,opts)
+function AUC = quickCV_ENet(X,Y,C,opts)
 
-% Leakage-free quick CV AUC estimate for Elastic Net (ENet).
+% quickCV_ENet  Leakage-free quick CV AUC estimate for Elastic Net.
 %
 % This helper function provides a *quick* (non-nested) cross-validated AUC
 % estimate for Elastic Net models, intended specifically for high-repeat
@@ -60,7 +60,7 @@ function AUC = quickCV_ENet(X,Y,opts)
 %
 % OUTPUT
 %   AUC  scalar
-%        Mean AUC across folds (nanmean over fold AUCs).
+%        Mean AUC across folds (mean over fold AUCs, NaN folds omitted).
 %        Returns NaN if:
 %        - Y has <2 unique values overall, or
 %        - K < 2 after capping.
@@ -90,9 +90,11 @@ function AUC = quickCV_ENet(X,Y,opts)
 %      best non-zero solution along the lambda path (among finite deviance
 %      entries) is selected if available.
 %
-%   5) Hardcoded lassoglm parameters (for stability in small-n settings):
-%         'NumLambda'   = 25
-%         'LambdaRatio' = 1e-3
+%   5) lassoglm parameters:
+%         'Lambda'      = enetLambdaGrid(opts), i.e. opts.lambdaGrid when set,
+%                         otherwise logspace(-3,1,25). Shared with the main
+%                         nested CV and with bootstrapOOB_ENet so that the point
+%                         estimate, the CI and the null all use one lambda path.
 %         'MaxIter'     = 1e4
 %         'RelTol'      = 1e-3
 %
@@ -101,7 +103,8 @@ function AUC = quickCV_ENet(X,Y,opts)
 %      solution path sufficiently rich for permutation diagnostics.
 %
 %   6) Diagnostic counters:
-%      A diagnostic struct (diag) is printed summarizing fold outcomes:
+%      A diagnostic struct (foldDiag) summarizing fold outcomes is printed
+%      when opts.verbose is true (default false):
 %         nFolds
 %         nFoldMissingClass
 %         nKinTooSmall
@@ -149,15 +152,15 @@ end
 
 auc = nan(K,1);
 
-diag = struct;
-diag.nFolds = K;
-diag.nFoldMissingClass = 0;
-diag.nKinTooSmall = 0;
-diag.nNoFitAllAlpha = 0;
-diag.nAllZeroChosen = 0;
-diag.nPerfcurveFail = 0;
-diag.nPerfcurveNonFinite = 0;
-diag.nValidFolds = 0;
+foldDiag = struct;
+foldDiag.nFolds = K;
+foldDiag.nFoldMissingClass = 0;
+foldDiag.nKinTooSmall = 0;
+foldDiag.nNoFitAllAlpha = 0;
+foldDiag.nAllZeroChosen = 0;
+foldDiag.nPerfcurveFail = 0;
+foldDiag.nPerfcurveNonFinite = 0;
+foldDiag.nValidFolds = 0;
 
 % scaling mode (optional)
 scaleMode = 'zscore';
@@ -184,16 +187,17 @@ for k = 1:K
     yte = Y(te);
 
     if numel(unique(ytr))<2 || numel(unique(yte))<2
-        diag.nFoldMissingClass = diag.nFoldMissingClass + 1;
+        foldDiag.nFoldMissingClass = foldDiag.nFoldMissingClass + 1;
         auc(k) = NaN; % skip invalid fold (prevents 0.5 pile-up)
         continue
     end
 
-    Xtr = X(tr,:);
-    Xte = X(te,:);
+    Ctr = []; Cte = [];
+    if ~isempty(C), Ctr = C(tr,:); Cte = C(te,:); end
+
 
     % leakage-free scaling
-    [Xtr, Xte] = applyScaling(Xtr, Xte, scaleMode);
+    [Xtr, Xte] = foldPreprocess(X(tr,:), X(te,:), Ctr, Cte, scaleMode);
 
     % ---- NEW: cap inner Kin by minority-class count in TRAIN fold
     n1tr = sum(ytr==1);
@@ -202,7 +206,7 @@ for k = 1:K
 
     Kin = min([3, floor(numel(ytr)/2), minClassTr]);
     if Kin < 2
-        diag.nKinTooSmall = diag.nKinTooSmall + 1;
+        foldDiag.nKinTooSmall = foldDiag.nKinTooSmall + 1;
         % fall back to intercept-only evaluation on this fold
         bestInt = logitSafe(mean(ytr));
         score = bestInt * ones(sum(te),1);
@@ -234,8 +238,7 @@ for k = 1:K
             'Alpha', alpha, ...
             'Standardize', false, ...
             'CV', cvIn,...
-            'NumLambda', 25, ...
-            'LambdaRatio', 1e-3, ...   % try 1e-2 or 1e-3; avoid 1e-4+ in tiny n
+            'Lambda', enetLambdaGrid(opts), ...
             'MaxIter', 1e4,...
             'RelTol', 1e-3);
         anyFit = true;
@@ -289,13 +292,13 @@ for k = 1:K
     % IMPORTANT CHANGE:
     % Do NOT skip all-zero solutions; evaluate intercept-only model instead.
     if ~anyFit
-        diag.nNoFitAllAlpha = diag.nNoFitAllAlpha + 1;
+        foldDiag.nNoFitAllAlpha = foldDiag.nNoFitAllAlpha + 1;
         % no alpha worked -> intercept-only
         bestInt = logitSafe(mean(ytr));
         score = bestInt * ones(sum(te),1);
     else
         if all(bestB==0)
-            diag.nAllZeroChosen = diag.nAllZeroChosen + 1;
+            foldDiag.nAllZeroChosen = foldDiag.nAllZeroChosen + 1;
             bestInt = logitSafe(mean(ytr));
             score = bestInt * ones(sum(te),1);
         else
@@ -306,49 +309,25 @@ for k = 1:K
     try
     [~,~,~,auc(k)] = perfcurve(yte, score, 1);
         if ~isfinite(auc(k))
-            diag.nPerfcurveNonFinite = diag.nPerfcurveNonFinite + 1;
+            foldDiag.nPerfcurveNonFinite = foldDiag.nPerfcurveNonFinite + 1;
             auc(k) = NaN; 
         end
     catch
-        diag.nPerfcurveFail = diag.nPerfcurveFail + 1;
+        foldDiag.nPerfcurveFail = foldDiag.nPerfcurveFail + 1;
         auc(k) = NaN;
     end
 
 end
 
-diag.nValidFolds = sum(isfinite(auc));
-disp(diag);
+foldDiag.nValidFolds = sum(isfinite(auc));
+if isfield(opts,'verbose') && opts.verbose
+    disp(foldDiag);
+end
 
 if all(isnan(auc))
-    AUC = 0.5;
+    AUC = NaN;   % all callers mask with 'omitnan' / ~isnan
 else
-    AUC = nanmean(auc);
+    AUC = mean(auc,'omitnan');
 end
 
-end
-
-% -----------------------
-% Local helper: scaling
-% -----------------------
-function [XtrS, XteS] = applyScaling(Xtr, Xte, mode)
-switch lower(mode)
-    case 'none'
-        XtrS = Xtr; XteS = Xte;
-    case 'center'
-        mu = mean(Xtr,1);
-        XtrS = Xtr - mu;
-        XteS = Xte - mu;
-    otherwise % 'zscore'
-        mu = mean(Xtr,1);
-        sd = std(Xtr,0,1);
-        sd(sd==0) = 1;
-        XtrS = (Xtr - mu) ./ sd;
-        XteS = (Xte - mu) ./ sd;
-end
-end
-
-function z = logitSafe(p)
-% stable logit for p in [0,1]
-p = min(max(p, 1e-6), 1-1e-6);
-z = log(p/(1-p));
 end

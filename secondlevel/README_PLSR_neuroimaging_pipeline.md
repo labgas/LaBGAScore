@@ -144,6 +144,87 @@ For most neuroimaging feature matrices **z-score scaling is recommended**.
 
 ---
 
+## Covariate control (fold-wise nuisance regression)
+
+Covariates are regressed out **inside every cross-validation fold**, with the
+nuisance coefficients estimated on the training fold only and then applied to
+both folds:
+
+```
+opts.covariates     = [n x nCov] numeric, one ROW per subject   (default [])
+opts.covariateNames = {'age','sex'}                              (default auto)
+```
+
+Do **not** add a column of ones; the intercept is handled internally. Encode
+categorical covariates as dummy columns beforehand. Leaving `opts.covariates`
+empty reproduces the previous behaviour exactly.
+
+The order of operations is **residualize, then scale**, and it is applied at
+every preprocessing site: outer folds, inner tuning folds, bootstrap resamples
+and learning-curve subsamples. Two consequences worth knowing:
+
+- The scale constants are computed on the *residualized* data, so the model's
+  inputs really do have unit variance in the space it operates in.
+- Residualization lowers `rank(Xtrain)` by up to `rank(C)`, so the latent-
+  variable cap is applied after it.
+
+### Do not pre-residualize
+
+Both calling scripts previously instructed users to residualize the feature
+matrix before running the pipeline. That fits the nuisance model on all
+subjects, so each test fold influences the coefficients later used to transform
+it.
+
+**The direction of the resulting bias is not the intuitive one.** Measured on
+synthetic data where a covariate drives *all* the apparent association (so the
+correct answer is chance):
+
+| route | PLS-DA AUC (chance 0.5) | PLSR Q² (chance ≈ 0) |
+|---|---|---|
+| raw X, no control | 0.914 | +0.730 |
+| pre-residualized full matrix | **0.332** | **−0.766** |
+| fold-wise (`opts.covariates`) | **0.525** | **−0.081** |
+
+Full-sample residualization lands far *below* chance, not above: over-removal
+subtracts a component estimated partly from the test fold, which inverts the
+test-fold relationship. This is the same effect reported for confound
+regression in decoding analyses. Where X carries genuine signal beyond the
+confound the two routes agree closely (0.720 vs 0.731).
+
+So the case for the fold-wise version is that it is **unbiased and
+leakage-free**, returning the right answer in both regimes — not that it
+removes optimism.
+
+### Reproducibility
+
+```
+opts.seed = 1    (default)
+```
+
+Results are now reproducible from run to run **and independent of parallel pool
+size**. Previously the permutation, bootstrap and learning-curve stages drew
+their randomness on workers, whose streams the client seed never reached.
+
+---
+
+## Residualizing the outcome (PLSR only)
+
+```
+opts.residualizeY = false   (default)
+```
+
+With `false`, the model predicts total Y from confound-free X, so the part of Y
+explained by the covariates is structurally unexplainable and **Q² is
+deflated**. With `true`, Y is residualized fold-wise too and Q² becomes a
+*partial* Q²: variance in Y explained by X after removing the covariates from
+both sides — the regression analogue of a partial correlation.
+
+The two are not comparable. Which was used is recorded in
+`results.covariateInfo.residualizeY`. Not offered for the classification
+pipelines, where Y must stay binary.
+
+---
+
 # Hyperparameters
 
 Default settings are designed for **small neuroimaging samples**.
@@ -276,6 +357,19 @@ results.Corr_global
 
 This tests whether regional patterns outperform a **global signal shift**.
 
+The baseline above is computed **in-sample** — the model is fit on all subjects
+and predicts those same subjects — so it is not comparable to the
+cross-validated model performance sitting next to it. A cross-validated
+counterpart is now reported alongside it, run through the same repeated outer
+CV:
+
+```
+results.Q2_global_cv
+```
+
+The in-sample fields are unchanged and retained for continuity. **Compare the
+`_cv` fields against the model**, not the in-sample ones.
+
 ---
 
 # Permutation Testing
@@ -284,7 +378,12 @@ Permutation testing evaluates whether predictive performance exceeds chance.
 
 Procedure:
 
-1. Shuffle outcome values  
+The scheme is **Freedman-Lane**:
+
+1. Regress Y on the covariates and split it into a fitted part and residuals  
+2. Permute the **residuals**, then add the fitted nuisance part back  
+3. Shuffle reduces to an ordinary unrestricted permutation of Y when no  
+   covariates are supplied, because the fitted part is then just the mean  
 2. Re-run the quick cross-validated PLSR routine  
 3. Compute Q²  
 
@@ -293,10 +392,35 @@ Outputs:
 ```
 results.allpermQ2
 results.permQ2
+results.quickCV_observed
 results.permutation_p
 ```
 
 A healthy null distribution is typically **centered near or below zero**.
+
+---
+
+## The p-value uses a matched estimator
+
+`results.permutation_p` is computed against `results.quickCV_observed`, **not**
+against the headline `results.Q2`.
+
+The null distribution is produced by the quick CV routine, while the headline
+number comes from repeated nested CV. Those are two different estimators, and
+the quick routine previously also ran untuned, which overfits permuted data much
+harder than the tuned estimator overfits real data. The null therefore sat far
+below the observed value.
+
+Measured on true-null data, that mismatch produced a **false-positive rate near
+40 % at alpha = 0.05** (mean p 0.10 where it should be about 0.5). Matching the
+estimator on both sides restores calibration; the quick routine now tunes
+internally too, which additionally recovers power.
+
+`results.Q2` remains the number to report as performance. The p-value uses
+the `(sum(perm >= obs) + 1) / (nValid + 1)` convention, so it can never be
+exactly zero.
+
+**p-values from runs predating this change are inflated.**
 
 ---
 
