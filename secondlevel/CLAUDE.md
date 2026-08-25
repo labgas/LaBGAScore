@@ -66,10 +66,35 @@ are in sync as of this work.
    - `opts.nrepeats` in both calling scripts was never read (the pipelines read `nRepeats`), so the
      option silently did nothing. `warnUnknownOptions` now catches this class of bug.
 
-**Still outstanding, deliberately deferred:** `group_tfce_from_subject_maps.m` has two bugs — the
-unconditional `send(q,1)` at `:212` when `'parallel',false`, and `:121` placing the intercept in the
-nuisance design, which for `design='onesample'` puts the effect of interest back into every
-permutation and drives p toward 0.5 whenever covariates are supplied.
+**Also fixed (separate commit): `group_tfce_from_subject_maps.m` permutation schemes.** Both designs
+were producing invalid inference, and neither problem was confined to covariates.
+
+- *One-sample with covariates could never reject.* The nuisance design carried a column of ones, but
+  for a one-sample test the intercept **is** the effect of interest, so the group mean was swept into
+  `Y_hat` and Freedman-Lane added it back into every permuted dataset. Covariates are now
+  mean-centered and regressed out without an intercept column, via `residualizeFold`.
+- *Two-sample had almost no power, with or without covariates.* `perm_idx` was applied to both the
+  residuals and the group labels, which preserves their pairing and so changes nothing — with no
+  covariates, 200/200 permutations produced a statistic bit-identical to the observed one. Labels are
+  now held fixed while the residuals are permuted.
+- `send(q,1)` ran unconditionally although `q` only existed when `'parallel'` was true, so that
+  documented option errored instead of disabling parallelism. Now guarded and honoured via `parfor`'s
+  worker cap.
+
+Measured on synthetic data with a known answer (n=40, 200 datasets; nominal 0.05 has a 95% interval
+of [0.020 0.080]):
+
+| design | before → after, false positives | mean p | power |
+|---|---|---|---|
+| one-sample | 0.000 → **0.055** | 0.972 → 0.502 | 0.00 → **1.00** |
+| two-sample | 0.060 → **0.040** | 0.475 → 0.532 | 0.10 → **1.00** |
+
+**Any TFCE result from this function predates a working permutation test and should be re-run.**
+
+*Constructing the null correctly is subtler than it looks, and cost two rounds of measurement here.*
+The covariate-adjusted mean is only zero if the covariate effect is generated around the covariate's
+own mean — `Y = b*(cv - mean(cv)) + e`. Validating against `Y = b*cv + e` makes every scheme look
+broken, because the adjusted mean is then `b*mean(cv)`, nonzero in any finite sample.
 
 **Results produced before this work are not numerically comparable to results produced after it**,
 and prior ENet results in particular were selected by a flawed tuning rule.
