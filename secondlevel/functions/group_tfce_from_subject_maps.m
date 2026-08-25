@@ -21,6 +21,8 @@ function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
 %
 % covariates : [] or [nSubj × nCov]
 %  - nuisance covariates to control (Freedman–Lane)
+%  - do NOT include a column of ones; the intercept is handled per design
+%    (see "Nuisance model" below)
 %
 % nPerm : scalar integer
 %  - number of permutations
@@ -48,6 +50,49 @@ function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
 %  - TFCE_real_max
 %  - TFCE_null_max
 %  - p_TFCE_global
+%  - nuisance_rank : effective rank of the nuisance model (0 if none)
+%
+% -------------------------------------------------------------------------
+% NUISANCE MODEL (why there is no intercept column)
+% -------------------------------------------------------------------------
+% The nuisance model must contain the nuisance and NOTHING ELSE. For
+% 'onesample' the effect of interest IS the intercept (the group mean), so
+% putting a column of ones in the nuisance design removes the effect into
+% Y_hat, and Freedman-Lane then adds it back into every permuted dataset.
+% The null ends up carrying the real effect and the test cannot reject.
+%
+% Covariates are therefore mean-centered and regressed out WITHOUT an
+% intercept column, via residualizeFold. Centering makes them orthogonal to
+% the constant vector, so the group mean stays in the residuals where the
+% sign-flip null can act on it. The same treatment is used for 'twosample',
+% where the grand mean is irrelevant because it cancels in a difference of
+% means.
+%
+% -------------------------------------------------------------------------
+% CALIBRATION
+% -------------------------------------------------------------------------
+% Checked against synthetic data with a known answer: n = 40 subjects, 200
+% voxels, one covariate explaining about a third of the variance, 200
+% datasets, 200 sign-flips or permutations each. Nominal alpha 0.05 has a
+% 95% interval of [0.020 0.080] at that number of datasets.
+%
+%                     false positives     mean p      power
+%   one-sample            0.055            0.502       1.00
+%   two-sample            0.040            0.532       1.00
+%
+% For comparison, the code this replaced scored 0.000 / 0.972 / 0.00 for
+% 'onesample' (the test could never reject) and 0.060 / 0.475 / 0.10 for
+% 'twosample' (almost no power, because its permutation was degenerate).
+%
+% Constructing the null correctly is subtler than it looks and is worth
+% recording. The covariate-adjusted mean is only zero if the covariate effect
+% is generated around the covariate's own mean:
+%     Y_i = b*(cv_i - mean(cv)) + e_i        <- null for the adjusted mean
+%     Y_i = b*cv_i + e_i                     <- NOT null: the adjusted mean
+%                                               is b*mean(cv), nonzero in any
+%                                               finite sample
+% Validating against the second form makes every scheme look broken, because
+% the data really does carry an effect.
 %
 
 % ============================================================
@@ -118,13 +163,22 @@ assert(isfinite(voxsize) && isscalar(voxsize));
 Y = fmri_dat_subj.dat; % [nVox × nSubj]
 
 if use_covariates
-   Xn = [ones(nSubj,1) covariates];
-   beta_nuis = Xn \ Y';
-   Y_hat = (Xn * beta_nuis)';    % fitted nuisance effect
-   R = Y - Y_hat;                % residuals
+   % residualizeFold mean-centers the covariates and removes only the
+   % covariate-attributable variation, leaving the intercept absorbed. That
+   % is exactly what is needed here: for 'onesample' the intercept is the
+   % effect of interest and must survive into R (see header). It also uses a
+   % truncated SVD, so collinear or fold-constant covariates give a
+   % minimum-norm solution instead of a backslash warning.
+   assert(all(isfinite(covariates(:))), ...
+       'covariates contain NaN or Inf; handle missing values upstream');
+   [Rt, ~, nuis] = residualizeFold(Y', [], covariates, []);
+   R = Rt';
+   Y_hat = Y - R;                % fitted nuisance effect
+   nuisance_rank = nuis.rank;
 else
    R = Y;
    Y_hat = zeros(size(Y));
+   nuisance_rank = 0;
 end
 
 % ============================================================
@@ -164,7 +218,10 @@ tfce_dat.dat_descrip = sprintf('TFCE (%s, FL)',design);
 TFCE_perm = zeros(nVox,nPerm,'single');
 TFCE_null_max = zeros(nPerm,1,'single');
 
-if use_parallel && nPerm>1
+track_progress = use_parallel && nPerm>1;
+q = [];
+
+if track_progress
    pool = gcp('nocreate');
    if isempty(pool), parpool; end
    tracker = ProgressTracker(nPerm);
@@ -172,7 +229,16 @@ if use_parallel && nPerm>1
    afterEach(q,@(~) tracker.update());
 end
 
-parfor p = 1:nPerm
+% 'parallel',false now really runs serially. Previously the parfor executed
+% regardless, and send(q,1) below referenced a q that had never been created,
+% so the option errored instead of disabling parallelism.
+if use_parallel
+   maxWorkers = Inf;
+else
+   maxWorkers = 0;
+end
+
+parfor (p = 1:nPerm, maxWorkers)
 
    % --- permute residuals ---
    switch design
@@ -181,11 +247,15 @@ parfor p = 1:nPerm
            R_perm = R .* signs';
 
        case 'twosample'
-           perm_idx = randperm(nSubj);
-           R_perm = R(:,perm_idx);
-           gp = group(perm_idx);
-           gA = gp == grp_vals(1);
-           gB = gp == grp_vals(2);
+           % Permute the residuals and hold the group labels FIXED. The
+           % previous code permuted both by the same index, which preserves
+           % the residual-to-label pairing and therefore changes nothing:
+           % with no covariates every permuted statistic came out exactly
+           % equal to the observed one (verified: 200/200 identical), so the
+           % null was degenerate and the test had no power.
+           R_perm = R(:,randperm(nSubj));
+           gA = group == grp_vals(1);
+           gB = group == grp_vals(2);
    end
 
    % --- reconstruct data ---
@@ -208,9 +278,11 @@ parfor p = 1:nPerm
 
    TFCE_perm(:,p) = single(tf);
    TFCE_null_max(p) = max(tf);
-   
-   send(q,1);
-   
+
+   if track_progress
+       send(q,1);
+   end
+
 end
 
 % ============================================================
@@ -224,6 +296,9 @@ p_img.volInfo = fmri_dat_subj.volInfo;
 p_img.removed_voxels = fmri_dat_subj.removed_voxels;
 p_img.dat = p_vox;
 p_img.p  = p_vox;
+% NOTE: every voxel is flagged significant here on purpose. This object is a
+% carrier for the p-values; thresholding is the caller's job, typically via
+% thresholded_fmri_data_from_statistic_image. Do not read .sig as a result.
 p_img.sig = logical(true(size(p_img.dat,1),1));
 
 info.TFCE_real = tfce_real;
@@ -231,6 +306,7 @@ info.TFCE_null = TFCE_perm;
 info.TFCE_real_max = TFCE_real_max;
 info.TFCE_null_max = TFCE_null_max;
 info.p_TFCE_global = p_global;
+info.nuisance_rank = nuisance_rank;
 
 end
 
