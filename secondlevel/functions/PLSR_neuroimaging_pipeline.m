@@ -283,10 +283,17 @@ betaStore = nan(p+1,opts.outerK,opts.nRepeats);
 featureWeights = nan(p, opts.nRepeats*opts.outerK);
 
 % New: store held-out outer-fold predictions for plotting
-cvObserved  = [];
-cvPredicted = [];
-cvRepeatID  = [];
-cvSubjectID = [];
+% Held-out predictions are preallocated to the largest they can be and trimmed
+% at the end. Each repeat's cvpartition covers every subject exactly once, so
+% n*nRepeats is the ceiling; it is only reached when no fold is skipped, and
+% folds ARE skipped when a rank or sample-size guard fires. Growing these four
+% by concatenation reallocated on every fold.
+maxCvRows   = n * opts.nRepeats;
+cvObserved  = nan(maxCvRows,1);
+cvPredicted = nan(maxCvRows,1);
+cvRepeatID  = nan(maxCvRows,1);
+cvSubjectID = nan(maxCvRows,1);
+cvCursor    = 0;
 
 for r = 1:opts.nRepeats
 
@@ -390,11 +397,14 @@ for r = 1:opts.nRepeats
 
         yhat = [ones(sum(testIdx),1) Xtest] * beta;
 
-        % New: collect held-out observed and predicted values
-        cvObserved  = [cvObserved;  ytest(:)]; %#ok<AGROW>
-        cvPredicted = [cvPredicted; yhat(:)];  %#ok<AGROW>
-        cvRepeatID  = [cvRepeatID; repmat(r, sum(testIdx), 1)]; %#ok<AGROW>
-        cvSubjectID = [cvSubjectID; find(testIdx)];
+        % Collect held-out observed and predicted values
+        nTe = sum(testIdx);
+        cvRows = cvCursor + (1:nTe);
+        cvObserved(cvRows)  = ytest(:);
+        cvPredicted(cvRows) = yhat(:);
+        cvRepeatID(cvRows)  = r;
+        cvSubjectID(cvRows) = find(testIdx);
+        cvCursor = cvCursor + nTe;
 
         err = ytest - yhat;
         mse = mean(err.^2);
@@ -435,11 +445,12 @@ results.featureWeights  = featureWeights;
 
 results.meanFeatureWeight = mean(featureWeights,2,'omitnan');
 
-% New: export held-out observed/predicted values
-results.cvObserved  = cvObserved;
-results.cvPredicted = cvPredicted;
-results.cvRepeatID = cvRepeatID;
-results.cvSubjectID = cvSubjectID;
+% Export held-out observed/predicted values, trimmed to the rows actually
+% filled (shorter than maxCvRows whenever a fold was skipped)
+results.cvObserved  = cvObserved(1:cvCursor);
+results.cvPredicted = cvPredicted(1:cvCursor);
+results.cvRepeatID  = cvRepeatID(1:cvCursor);
+results.cvSubjectID = cvSubjectID(1:cvCursor);
 
 fprintf('Nested CV Q2 = %.3f\n',results.Q2)
 

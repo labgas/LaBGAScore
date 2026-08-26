@@ -183,6 +183,13 @@ remaining files were read through afterwards. Nothing below is fixed yet.
    its option `switch` gained the `otherwise` error its sibling always had, so a mistyped option no
    longer falls through to the default. Its accumulators are also preallocated rather than grown.
 
+**Static analysis is clean.** `secondlevel/functions/` now reports no parse errors and no
+`AGROW`/`NODEF`/`UNRCH` findings. The last `AGROW` was PLSR's four held-out-prediction vectors, which
+grew by concatenation on every outer fold; they are preallocated to `n*nRepeats` and trimmed to the
+rows actually filled, since folds can be skipped by the rank and sample-size guards. Verified
+bit-identical across all 169 `results` fields, and separately on a rank-deficient input where every
+fold skips (the vectors come back empty rather than NaN-padded).
+
 **Dead code — resolved.** `pvals_from_ranks` has been deleted: it had no callers in any repo on
 this machine, it assigned arbitrary distinct p-values to tied statistics (a real problem for TFCE
 maps, which are full of ties at zero), and despite its comment it computed a *spatial rank across
