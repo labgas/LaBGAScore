@@ -1,9 +1,12 @@
 function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
    fmri_dat_subj, design, group, covariates, nPerm, varargin)
-% GROUP_TFCE_FROM_SUBJECT_MAPS
+% group_tfce_from_subject_maps  Group-level TFCE permutation inference.
 %
 % Group-level TFCE permutation inference starting from subject-level
-% contrast images, with optional Freedman–Lane covariate control.
+% contrast images, with optional Freedman-Lane covariate control.
+%
+% Uses classic TFCE (Smith & Nichols 2009) via tfce_volume. Earlier versions
+% called pTFCE, a different algorithm, and did so with mismatched arguments.
 %
 % -------------------------------------------------------------------------
 % INPUTS
@@ -30,7 +33,12 @@ function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
 % OPTIONAL NAME–VALUE PAIRS
 %  'H'       : TFCE height exponent (default = 2)
 %  'E'       : TFCE extent exponent (default = 0.5)
-%  'conn'    : connectivity (default = 26)
+%  'conn'    : connectivity, 6 | 18 | 26 (default = 26)
+%
+%  These are the real Smith & Nichols TFCE parameters and now actually control
+%  the transform. Under the previous pTFCE-based implementation they did not:
+%  pTFCE has no H or E parameter, and these values were silently landing in its
+%  resel-count and voxel-count slots, while 'conn' never reached it at all.
 %  'sidedness': 'one' (default) or 'two'
 %  'tail'    : 'pos' or 'neg' (only if sidedness = 'one')
 %  'parallel' : true (default) or false
@@ -51,6 +59,7 @@ function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
 %  - TFCE_null_max
 %  - p_TFCE_global
 %  - nuisance_rank : effective rank of the nuisance model (0 if none)
+%  - tfce_dh : integration step shared by the observed map and every permutation
 %
 % -------------------------------------------------------------------------
 % NUISANCE MODEL (why there is no intercept column)
@@ -154,9 +163,6 @@ switch design
        error('Unknown design');
 end
 
-voxsize = mean(abs(diag(fmri_dat_subj.volInfo.mat(1:3,1:3))));
-assert(isfinite(voxsize) && isscalar(voxsize));
-
 % ============================================================
 % Step 1: Residualise subject maps (Freedman–Lane)
 % ============================================================
@@ -200,11 +206,21 @@ switch design
        t_real = t_two(Y(:,idxA),Y(:,idxB));
 end
 
-tfce_real = tfce_one_fmri_dat( ...
+% The observed map fixes the integration grid; every permutation then reuses
+% it. Letting each map derive its own dh from its own maximum makes the null
+% slightly incomparable to the observed statistic.
+[tfce_real, tfce_dh] = tfce_one_fmri_dat( ...
    t_real,...
    fmri_dat_subj.removed_voxels,...
    fmri_dat_subj.volInfo,...
-   voxsize,H,E,conn,sidedness,tail);
+   H,E,conn,sidedness,tail,[]);
+
+if isempty(tfce_dh) || all(tfce_real == 0)
+   error('group_tfce_from_subject_maps:tfceEmpty', ...
+       ['The observed statistic map has no positive values in the requested ' ...
+        'tail, so TFCE is identically zero and there is nothing to test. ' ...
+        'Check the ''sidedness'' and ''tail'' options.']);
+end
 
 TFCE_real_max = max(tfce_real);
 
@@ -274,7 +290,7 @@ parfor (p = 1:nPerm, maxWorkers)
        t_perm,...
        fmri_dat_subj.removed_voxels,...
        fmri_dat_subj.volInfo,...
-       voxsize,H,E,conn,sidedness,tail);
+       H,E,conn,sidedness,tail,tfce_dh);
 
    TFCE_perm(:,p) = single(tf);
    TFCE_null_max(p) = max(tf);
@@ -307,6 +323,7 @@ info.TFCE_real_max = TFCE_real_max;
 info.TFCE_null_max = TFCE_null_max;
 info.p_TFCE_global = p_global;
 info.nuisance_rank = nuisance_rank;
+info.tfce_dh = tfce_dh;
 
 end
 

@@ -74,7 +74,8 @@
 % 7. TFCE-Based Inference (Primary)
 %    - Converts decoding statistics to voxel-wise t-maps using the
 %      permutation-derived mean and standard deviation.
-%    - Applies Threshold-Free Cluster Enhancement (TFCE) using pTFCE.
+%    - Applies Threshold-Free Cluster Enhancement (TFCE, Smith & Nichols
+%      2009) via tfce_volume, shared with the secondlevel TFCE stack.
 %    - Computes a permutation-based TFCE null distribution (in parallel).
 %
 %    TFCE inference includes:
@@ -118,7 +119,8 @@
 %
 % - MATLAB R2018a or newer
 % - The Decoding Toolbox (TDT)
-% - pTFCE toolbox on MATLAB path
+% - LaBGAScore secondlevel/functions on the MATLAB path (tfce_volume,
+%   tfce_transform_3d) and the Image Processing Toolbox for bwconncomp
 % - SPM12 (recommended for NIfTI I/O)
 % - NIfTI utilities (load_nii / save_nii)
 % - Canlab toolbox (fmri_data_st, region, atlas utilities)
@@ -564,13 +566,19 @@ switch analysis_mode
         % 8. TFCE AND TFCE P-VALUES
         % ========================================================================
 
-        fprintf('\n=== RUNNING pTFCE on t-maps ===\n');
+        fprintf('\n=== RUNNING TFCE on t-maps ===\n');
 
         % -------------------- TFCE parameters --------------------
-        voxel_size = double(nii.hdr.dime.pixdim(2:4)); % [vx vy vz]
-        H   = 2;         % Height exponent (Smith & Nichols default)
-        E   = 0.5;       % Extent exponent
-        conn = 26;        % 3D connectivity
+        % Classic TFCE (Smith & Nichols 2009) via tfce_volume. This used to
+        % call pTFCE, which is a different algorithm with no H or E parameter:
+        % the voxel size was landing in pTFCE's `mask` slot and H/E in its
+        % resel-count and voxel-count slots, so the transform was not the one
+        % these parameter names describe. See tfce_volume.
+        H    = 2;        % Height exponent (Smith & Nichols default)
+        E    = 0.5;      % Extent exponent
+        conn = 26;       % 3D connectivity
+        tfce_sidedness = 'one';   % AUC is tested against 0.5, so one-tailed
+        tfce_tail      = 'pos';
 
         % ========================================================================
         % 0. COMPUTE REAL AND PERMUTATION T-MAPS + EPSILON
@@ -595,10 +603,14 @@ switch analysis_mode
         tmpVol = zeros(size(nii.img), 'single');
         tmpVol(mask_idx(valid_idx)) = single(real_t_vec);
 
-        try
-           real_TFCE_img = pTFCE(tmpVol, voxel_size, H, E, conn);
-        catch
-           real_TFCE_img = pTFCE(tmpVol, voxel_size, H, E);
+        % The observed map fixes the integration grid; every permutation
+        % below reuses tfce_dh so the null is comparable to the observed
+        % statistic rather than each map using its own grid.
+        [real_TFCE_img, tfce_dh] = tfce_volume(tmpVol, H, E, conn, ...
+                                               tfce_sidedness, tfce_tail, []);
+
+        if isempty(tfce_dh)
+            error('No positive values in the real t-map: TFCE is identically zero.');
         end
         
         real_TFCE_img(isnan(real_TFCE_img)) = 0;
@@ -633,11 +645,9 @@ switch analysis_mode
            tmpVol(mask_idx(valid_idx)) = single(perm_t_vec(:,p));
 
            % Compute TFCE on permutation t-map
-           try
-               TFCE_img = pTFCE(tmpVol, voxel_size, H, E, conn);
-           catch
-               TFCE_img = pTFCE(tmpVol, voxel_size, H, E);
-           end
+           % same integration grid as the observed map
+           TFCE_img = tfce_volume(tmpVol, H, E, conn, ...
+                                  tfce_sidedness, tfce_tail, tfce_dh);
            
            TFCE_img(isnan(TFCE_img)) = 0;
 

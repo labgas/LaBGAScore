@@ -145,41 +145,19 @@ remaining files were read through afterwards. Nothing below is fixed yet.
    p-value is monotonic in the statistic, which it is not for voxelwise permutation p-values (each
    voxel has its own null). The `0.001` pad is also a hardcoded absolute tolerance on an arbitrary
    statistic scale.
-3. **`call_pTFCE` calls pTFCE with entirely the wrong arguments.** This supersedes the original
-   finding, which was that it silently returns zeros — it almost never does. Running the real pTFCE
-   showed:
-   - Installed signature is `pTFCE(imgZ, mask, Rd, V, Nh, Zest, C, verbose)`; `call_pTFCE` passes
-     `(vol, voxsize, H, E, conn)`.
-   - pTFCE's `switch nargin` handles only cases 1-4, so the 6- and 5-argument attempts **always**
-     fail with "Not enough input arguments". Every call falls through to the 4-argument form. The
-     cascade is not version tolerance, it is masking a signature mismatch.
-   - In that form `mask`<-`voxsize` (never used in pTFCE's body, so harmless), `Rd`<-`H`=2 and
-     `V`<-`E`=0.5. Real values would be a resel count in the hundreds and the voxel count in the
-     tens of thousands.
-   - **pTFCE has no `H` or `E` parameter at all** — it is probabilistic TFCE via GRF theory, not
-     Smith & Nichols. So the documented `'H'` and `'E'` options do not do what the docs say, and
-     `'conn'` never reaches pTFCE.
-   - It is also fed a t-map where a Z-map is documented; the toolbox ships `img_t2z.m` for that.
-
-   Measured impact: within a map the wrong parameterisation is exactly rank-preserving
-   (Spearman 1.0000), so the spatial pattern survives and values are inflated (max 7.00 vs 4.11).
-   Across maps — which is what a permutation test compares — rank correlation is 0.9654 and the
-   ordering does change, so p-values are approximately but not exactly right.
-
-   **The same bug exists independently, inline, in
-   `decoding_toolbox/LaBGAScore_decoding_SVM_between_subjects.m`** (`:599`, `:601`, `:637`, `:639`),
-   with the same misleading `% Height exponent (Smith & Nichols default)` comments.
-
-   Not fixed: calling pTFCE correctly is a redesign, not a patch. It needs a real mask, a t->Z
-   conversion with the right df, and a resel count (`spm_est_smoothness` or `SPM.xVol.R(4)`), plus
-   dropping or repurposing `H`/`E`/`conn`. It will change every TFCE number.
-
-   *Who calls what:* `call_pTFCE` <- only `tfce_one_fmri_dat` <- only
-   `group_tfce_from_subject_maps` <- **nothing in this repo**. The chain is unreferenced here, but
-   `group_tfce_from_subject_maps` is library code for study repos, exactly like the ML pipelines
-   (`PLSR_neuroimaging_pipeline` also has no in-repo caller). Deleting `call_pTFCE` alone would break
-   `tfce_one_fmri_dat`, and would not touch the live copy of the bug in the decoding script. So the
-   decoding script needs fixing regardless of what happens to the TFCE chain.
+3. ~~**`call_pTFCE` calls pTFCE with entirely the wrong arguments.**~~ **RESOLVED** by retiring
+   pTFCE altogether (see "The TFCE stack" below). For the record, what was wrong: the installed
+   signature is `pTFCE(imgZ, mask, Rd, V, Nh, Zest, C, verbose)` while `call_pTFCE` passed
+   `(vol, voxsize, H, E, conn)`; pTFCE's `switch nargin` handles only cases 1-4, so the 6- and
+   5-argument attempts always failed and every call fell through to the 4-argument form, where
+   `mask` got a scalar voxel size (never used in pTFCE's body) and `Rd`/`V` got H = 2 and E = 0.5
+   instead of a resel count and a voxel count. pTFCE has no `H` or `E` parameter at all, and `conn`
+   never reached it. Measured impact: within a map the wrong parameterisation was exactly
+   rank-preserving (Spearman 1.0000) so the spatial pattern survived, but values were inflated
+   (max 7.00 vs 4.11) and across maps the rank correlation was 0.9654, so permutation p-values were
+   approximately but not exactly right. **The same bug existed inline in
+   `decoding_toolbox/LaBGAScore_decoding_SVM_between_subjects.m` and is fixed in the same change.**
+   All TFCE numbers change; results predating this must be re-run.
 
 **Hard errors waiting to happen:**
 
@@ -208,12 +186,17 @@ remaining files were read through afterwards. Nothing below is fixed yet.
    two images (its sibling `dice_statistic_image` does check), and its option `switch` has no
    `otherwise`, so a mistyped option name is silently ignored (the sibling errors).
 
-**Dead code — no callers anywhere in the repo:** `pvals_from_ranks`, `tfce_transform_3d`,
-`dice_statistic_image`, `dice_statistic_image_by_roi`, `thresholded_fmri_data_from_statistic_image`.
-Either wire them up or drop them. If `pvals_from_ranks` is revived, note that it assigns arbitrary
-distinct p-values to tied statistics (a real problem for TFCE maps, which are full of ties at zero),
-and that despite its comment it computes a *spatial rank across voxels*, not a p-value against a
-null. `tfce_transform_3d` integrates only positive thresholds, which its docstring does not say.
+**Dead code — no callers:** `pvals_from_ranks`, `dice_statistic_image`,
+`dice_statistic_image_by_roi`. Either wire them up or drop them. If `pvals_from_ranks` is revived,
+note that it assigns arbitrary distinct p-values to tied statistics (a real problem for TFCE maps,
+which are full of ties at zero), and that despite its comment it computes a *spatial rank across
+voxels*, not a p-value against a null.
+
+Two entries have been removed from this list after checking outside `secondlevel/`:
+`tfce_transform_3d` is called by `CanlabCore/Statistics_tools/searchlight_disti_Lukas.m` (and is now
+also the base of this repo's own TFCE stack), and `thresholded_fmri_data_from_statistic_image` is
+called by `CANlab_help_examples/.../c2_SVM_contrasts_masked.m`. The original "no callers" claim was
+scoped to LaBGAScore only.
 
 ## Three layers, different contracts
 
@@ -297,19 +280,31 @@ Layered, with an external dependency at the bottom:
 ```
 group_tfce_from_subject_maps   % group inference: sign-flip / label-exchange permutation,
                                % optional Freedman-Lane covariate control, parfor over permutations
-  └─ tfce_one_fmri_dat         % parfor-safe single t-map transform; rebuilds a 3D volume from
-                               % the masked vector, handles one- vs two-sided
-       └─ call_pTFCE           % defensive wrapper: retries pTFCE with fewer args, returns zeros
-                               % rather than throwing on numerical edge cases
-            └─ pTFCE           % EXTERNAL, not vendored
+  └─ tfce_one_fmri_dat         % parfor-safe single-map transform; rebuilds a 3D volume from the
+                               % masked vector and hands it to tfce_volume
+       └─ tfce_volume          % sidedness/tail handling and the shared integration step
+            └─ tfce_transform_3d   % classic TFCE (Smith & Nichols 2009), via bwconncomp
 ```
 
-`tfce_transform_3d.m` is a self-contained textbook TFCE (Smith & Nichols 2009, via `bwconncomp`) —
-an alternative to the pTFCE path, not part of that chain. `pvals_from_ranks.m` turns permutation
-ranks into uncorrected voxelwise p-values.
+`decoding_toolbox/LaBGAScore_decoding_SVM_between_subjects.m` enters the same stack at
+`tfce_volume`, so there is one TFCE implementation in the repo rather than two.
+`pvals_from_ranks.m` turns permutation ranks into uncorrected voxelwise p-values.
 
-Because `call_pTFCE` swallows failures and returns zeros, a broken pTFCE install produces an
-all-zero map instead of an error. Check for empty results before assuming the statistics are wrong.
+**One algorithm, deliberately.** The repo previously mixed classic TFCE with pTFCE, and the pTFCE
+side was calling its dependency with mismatched arguments. Standardising on classic TFCE was chosen
+because: `CanlabCore/Statistics_tools/searchlight_disti_Lukas.m` already uses `tfce_transform_3d`
+correctly for the searchlight path; the options the whole ecosystem exposes (`H`, `E`, `conn`) are
+classic-TFCE parameters that pTFCE does not have; pTFCE exists to avoid permutation, so using it
+inside a permutation loop discards its only advantage while paying its costs (Z-map, resel count,
+GRF assumptions); and it is 10-13x faster in that loop (measured 0.50 s vs 6.36 s per map on a
+64x76x64 volume, i.e. 8 min vs 106 min at nPerm = 1000). `call_pTFCE.m` has been deleted and no
+`pTFCE` call remains in the repo.
+
+**The integration step is shared.** `tfce_transform_3d` defaults to `dh = max(stat)/100`, a grid
+derived from each map's own maximum, which inside a permutation loop gives every permuted map a
+different grid. The observed map now fixes `dh` and all permutations reuse it (recorded as
+`info.tfce_dh`). Measured effect of not doing this: ~0.6% difference in the TFCE maximum and a rank
+correlation of 0.995, small but injected straight into the null.
 
 **Turning p-maps into something viewable:** `thresholded_fmri_data_from_statistic_image.m` (from an
 in-memory `statistic_image`) and `thresholded_fmri_data_from_pval_nii.m` (from a p-value `.nii` on
