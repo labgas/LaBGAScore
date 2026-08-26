@@ -134,6 +134,17 @@ if nargin < 3 || isempty(roiNames)
 end
 roiNames = cellstr(roiNames(:));
 
+% A wrong-length name list is worse than an error: too few names throws part
+% way through, AFTER the NIfTIs have been written, and too many (or names from
+% a different ROI set) silently mislabels every row of ROI_table.
+if numel(roiNames) ~= p
+    error('plot_PLSDA_diagnostics_neuroimaging:roiNamesLength', ...
+        ['roiNames has %d entries but there are %d features. They must ' ...
+         'correspond one-to-one, in the same order as the columns of X and ' ...
+         'the atlas labels 1..%d.'], numel(roiNames), p, p);
+end
+
+
 % Robust LV selection/clamping
 LV = max(1, min(LV, size(XL,2)));
 % if isfield(results,'finalLV') && ~isempty(results.finalLV)

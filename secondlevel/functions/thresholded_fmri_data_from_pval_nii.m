@@ -1,4 +1,6 @@
 function [stat_img, fmri_dat, region_obj, region_table] = thresholded_fmri_data_from_pval_nii (fullpath_to_pval_nii, stat_vec, mask_obj, atlas_obj, p, p_type, stat_type, thr_type, k)
+% thresholded_fmri_data_from_pval_nii  Thresholded map and region table for a
+% non-standard statistic, from a p-value NIfTI on disk.
 %
 % USAGE
 %
@@ -69,15 +71,37 @@ function [stat_img, fmri_dat, region_obj, region_table] = thresholded_fmri_data_
                 region_obj = region_obj.autolabel_regions_using_atlas(atlas_obj);
 
                 [~,~,region_table] = table(region_obj);
-                average_region = zeros(height(region_table),1);
-                k_region = zeros(height(region_table),1);
-                for r = 1:size(region_obj,2)
-                    average_region(r,1) = mean(region_obj(1,r).val);
-                    k_region(r,1) = region_obj(1,r).numVox;
+
+                % Preallocate and loop over the SAME count. These used to
+                % disagree: preallocation used height(region_table) while the
+                % loop ran over size(region_obj,2), so if those differed the
+                % array grew silently and the write-back below failed with a
+                % table-height error.
+                nReg = numel(region_obj);
+                average_region = zeros(nReg,1);
+                k_region = zeros(nReg,1);
+                for r = 1:nReg
+                    average_region(r,1) = mean(region_obj(r).val);
+                    k_region(r,1) = region_obj(r).numVox;
                 end
-                region_table.minP = [];
-                region_table.(['mean_' stat_type]) = average_region;
-                region_table.k = k_region;
+
+                if height(region_table) ~= nReg
+                    % Returning the plain table beats dying in a visualisation
+                    % helper, but say so clearly.
+                    warning('thresholded_fmri_data:regionCountMismatch', ...
+                        ['region() returned %d regions but its table has %d rows, so the ' ...
+                         'mean-%s and k columns cannot be appended. Returning the ' ...
+                         'un-augmented table.'], nReg, height(region_table), stat_type);
+                else
+                    % Assigning [] to a table variable DELETES it, and deleting
+                    % a column that does not exist is an error rather than a
+                    % no-op, so check first.
+                    if ismember('minP', region_table.Properties.VariableNames)
+                        region_table.minP = [];
+                    end
+                    region_table.(['mean_' stat_type]) = average_region;
+                    region_table.k = k_region;
+                end
                 
             end
             

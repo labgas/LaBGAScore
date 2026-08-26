@@ -159,32 +159,29 @@ remaining files were read through afterwards. Nothing below is fixed yet.
    `decoding_toolbox/LaBGAScore_decoding_SVM_between_subjects.m` and is fixed in the same change.**
    All TFCE numbers change; results predating this must be re-run.
 
-**Hard errors waiting to happen:**
+**Hard errors — all now FIXED.**
 
-0. ~~**`TopN` is not capped by the number of features**~~ **FIXED.** In
-   `plot_PLSR_diagnostics_neuroimaging` and `plot_PLSDA_diagnostics_neuroimaging` the ROI table was
-   capped with `min(TopN, height(...))`, but the top-weights block indexed `idx(1:TopN)` directly, so
-   the default `TopN = 20` with fewer than 20 features threw "Index exceeds the number of array
-   elements" — *after* the NIfTIs and figures had been written. `TopN = max(1, min(TopN, p))` is now
-   applied once, immediately after `p` is resolved and before any use. Added to the ENet plotter too,
-   where it is a no-op today (its only use site was already guarded) but prevents the same drift.
-   Verified for p = 3, 4, 5, 20, 25 and 30 with both the default `TopN` and `TopN = 999`; the
-   exported CSV now also names the true row count (`..._top5_weights.csv` rather than `_top20_`).
-
-4. `tfce_one_fmri_dat`: the `switch sidedness` has no `otherwise`, so any value other than `'one'` or
-   `'two'` leaves `tf` undefined and fails three lines later with an unrelated message.
-5. `region_table.minP = []` in both `thresholded_fmri_data_from_*` errors outright if the region
-   table has no `minP` column (verified: "Cannot delete 'minP' ... because it does not exist").
-6. Same two files preallocate with `height(region_table)` but loop over `size(region_obj,2)`. If
-   those differ the array grows silently and the write-back fails with a table-height error.
-7. `thresholded_fmri_data_from_pval_nii` assigns `path = fileparts(...)`, **shadowing the builtin
-   `path`** — the same class of bug as the `diag` shadow already fixed in `quickCV_ENet`. This file
-   has a real caller (`decoding_toolbox/LaBGAScore_decoding_SVM_between_subjects.m`).
-8. No plotter checks `numel(roiNames) == p`. Too few names errors mid-run *after* NIfTIs are written;
-   too many, or names from a different ROI set, mislabels every row of `ROI_table` in silence.
-9. `dice_statistic_image_by_roi` does not check that `roi_img` occupies the same voxel space as the
-   two images (its sibling `dice_statistic_image` does check), and its option `switch` has no
-   `otherwise`, so a mistyped option name is silently ignored (the sibling errors).
+0. `TopN` was not capped by the feature count in the PLSR and PLSDA plotters. Fixed; see the note
+   above.
+4. `tfce_one_fmri_dat`'s `switch sidedness` had no `otherwise`, leaving `tf` undefined. Resolved by
+   the TFCE overhaul: that switch now lives in `tfce_volume`, which validates both `sidedness` and
+   `tail` with identified errors.
+5. `region_table.minP = []` errored when the table had no `minP` column, because assigning `[]`
+   deletes a variable and deleting a non-existent one is an error rather than a no-op. Now guarded
+   with `ismember('minP', ...)`.
+6. Both `thresholded_fmri_data_from_*` preallocated with `height(region_table)` but looped over
+   `size(region_obj,2)`. If those differed the array grew silently and the write-back failed with a
+   table-height error. Both now use `numel(region_obj)`, and a genuine mismatch warns and returns
+   the un-augmented table rather than killing a visualisation helper.
+7. `thresholded_fmri_data_from_pval_nii` shadowed the builtin `path`. Fixed (renamed `out_dir`) as
+   part of the significance-thresholding change.
+8. No plotter checked `numel(roiNames) == p`. All three now error up front, before any NIfTI is
+   written. Verified: 3 or 8 names against 5 features are both rejected.
+9. `dice_statistic_image_by_roi` checked nothing. It now verifies the input types, that the two
+   statistic images share a voxel space, that `roi_img` is in that same space, that supplied
+   `binary_mask` entries match the voxel count, and that p-values exist when no mask is given; and
+   its option `switch` gained the `otherwise` error its sibling always had, so a mistyped option no
+   longer falls through to the default. Its accumulators are also preallocated rather than grown.
 
 **Dead code — no callers:** `pvals_from_ranks`, `dice_statistic_image`,
 `dice_statistic_image_by_roi`. Either wire them up or drop them. If `pvals_from_ranks` is revived,
