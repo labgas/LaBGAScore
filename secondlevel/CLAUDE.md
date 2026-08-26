@@ -183,17 +183,25 @@ remaining files were read through afterwards. Nothing below is fixed yet.
    its option `switch` gained the `otherwise` error its sibling always had, so a mistyped option no
    longer falls through to the default. Its accumulators are also preallocated rather than grown.
 
-**Dead code — no callers:** `pvals_from_ranks`, `dice_statistic_image`,
-`dice_statistic_image_by_roi`. Either wire them up or drop them. If `pvals_from_ranks` is revived,
-note that it assigns arbitrary distinct p-values to tied statistics (a real problem for TFCE maps,
-which are full of ties at zero), and that despite its comment it computes a *spatial rank across
-voxels*, not a p-value against a null.
+**Dead code — resolved.** `pvals_from_ranks` has been deleted: it had no callers in any repo on
+this machine, it assigned arbitrary distinct p-values to tied statistics (a real problem for TFCE
+maps, which are full of ties at zero), and despite its comment it computed a *spatial rank across
+voxels* rather than a p-value against a null.
 
-Two entries have been removed from this list after checking outside `secondlevel/`:
-`tfce_transform_3d` is called by `CanlabCore/Statistics_tools/searchlight_disti_Lukas.m` (and is now
-also the base of this repo's own TFCE stack), and `thresholded_fmri_data_from_statistic_image` is
-called by `CANlab_help_examples/.../c2_SVM_contrasts_masked.m`. The original "no callers" claim was
-scoped to LaBGAScore only.
+The two `dice_*` functions are kept and corrected. They had drifted apart: `dice_statistic_image`
+thresholded with `p <= threshold` while `dice_statistic_image_by_roi` used `p < threshold`, so the
+pair disagreed on voxels sitting exactly at the threshold. Both now use strict `<`, matching
+`thresholded_fmri_data_from_*`. `dice_statistic_image` also lost a commented-out "repair geometry"
+block and gained the binary-mask size check its sibling has; `dice_statistic_image_by_roi` gained
+guards against being handed a continuous map instead of a label image. Verified that the whole-image
+and per-ROI counts agree over the labelled voxels.
+
+Note on earlier claims in this file: "no callers anywhere in the repo" was twice scoped to
+LaBGAScore only. `tfce_transform_3d` is called by
+`CanlabCore/Statistics_tools/searchlight_disti_Lukas.m`, and
+`thresholded_fmri_data_from_statistic_image` by
+`CANlab_help_examples/.../c2_SVM_contrasts_masked.m`. Check every repo before calling something dead.
+
 
 ## Three layers, different contracts
 

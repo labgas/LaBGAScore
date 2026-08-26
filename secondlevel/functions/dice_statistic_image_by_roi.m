@@ -1,23 +1,41 @@
 function roi_table = dice_statistic_image_by_roi(imgA, imgB, roi_img, varargin)
 % dice_statistic_image_by_roi  Per-ROI Dice overlap between two statistic images.
 %
-% Compute per-ROI Dice coefficients between two statistic_image objects.
+%   roi_table = dice_statistic_image_by_roi(imgA, imgB, roi_img)
+%   roi_table = dice_statistic_image_by_roi(imgA, imgB, roi_img, 'p_threshold', 0.01)
+%   roi_table = dice_statistic_image_by_roi(imgA, imgB, roi_img, 'binary_mask', {mA, mB})
 %
-% INPUTS
-%  imgA, imgB : statistic_image
-%  roi_img   : ROI definition (statistic_image or fmri_data)
+%   Computes the Dice similarity coefficient separately within each ROI of a
+%   label image. The whole-image counterpart is dice_statistic_image.
 %
-% OPTIONAL NAME–VALUE
-%  'binary_mask' : {maskA, maskB}
-%  'p_threshold' : p-value threshold (default = 0.05)
+%   INPUTS
+%     imgA, imgB  statistic_image objects sharing one voxel space
+%     roi_img     LABEL image in that same space (atlas, statistic_image or
+%                 fmri_data). Its .dat must hold integer region labels, with 0
+%                 for background; one table row is produced per distinct
+%                 non-zero label. Do not pass a continuous statistic map: every
+%                 distinct value would be treated as its own ROI.
 %
-% OUTPUT
-%  roi_table : table with columns:
-%      ROI      ROI_label
-%      Dice     Dice coefficient
-%      nA       Voxels in A within ROI
-%      nB       Voxels in B within ROI
-%      nOverlap Overlapping voxels in ROI
+%   OPTIONAL NAME-VALUE PAIRS
+%     'p_threshold'  p-value threshold, default 0.05. The comparison is strict
+%                    (p < threshold), matching dice_statistic_image and
+%                    thresholded_fmri_data_from_statistic_image.
+%     'binary_mask'  {maskA, maskB} logical vectors, which override p-value
+%                    thresholding entirely.
+%
+%   OUTPUT
+%     roi_table  one row per ROI, with columns
+%        ROI       the integer label
+%        Dice      Dice coefficient, NaN where neither image has a
+%                  suprathreshold voxel in that ROI (undefined, not zero)
+%        nA        suprathreshold voxels of imgA within the ROI
+%        nB        suprathreshold voxels of imgB within the ROI
+%        nOverlap  voxels suprathreshold in both, within the ROI
+%
+%   All three images are checked to share a voxel space. NaN p-values are
+%   treated as non-significant, since any comparison against NaN is false.
+%
+%   See also dice_statistic_image, thresholded_fmri_data_from_statistic_image.
 %
 
 %% defaults
@@ -69,8 +87,8 @@ if isempty(binary_mask)
            'Images carry no p-values; supply ''binary_mask'' explicitly.');
    end
    % NaN < thresh is false, so non-finite p-values count as non-significant
-   maskA = imgA.p < p_thresh;
-   maskB = imgB.p < p_thresh;
+   maskA = imgA.p(:) < p_thresh;
+   maskB = imgB.p(:) < p_thresh;
 else
    if numel(binary_mask) ~= 2
        error('dice_statistic_image_by_roi:binaryMask', ...
@@ -85,8 +103,23 @@ else
 end
 
 %% ROI labels
-roi_labels = unique(roi_img.dat);
+roi_labels = unique(roi_img.dat(:));
 roi_labels(roi_labels == 0 | isnan(roi_labels)) = [];
+
+% A continuous map passed as roi_img would yield one "ROI" per distinct voxel
+% value, silently producing a table with thousands of meaningless rows.
+if any(roi_labels ~= round(roi_labels))
+    error('dice_statistic_image_by_roi:nonIntegerLabels', ...
+        ['roi_img holds non-integer values, so it is not a label image. Pass an ' ...
+         'atlas or ROI mask whose .dat contains integer region labels.']);
+end
+
+if numel(roi_labels) > numel(roi_img.dat)/10
+    warning('dice_statistic_image_by_roi:manyLabels', ...
+        ['roi_img has %d distinct labels across %d voxels. If this is not really ' ...
+         'a label image, the table below will be meaningless.'], ...
+        numel(roi_labels), numel(roi_img.dat));
+end
 
 nROI     = numel(roi_labels);
 ROI      = zeros(nROI,1);
@@ -95,7 +128,7 @@ nA       = zeros(nROI,1);
 nB       = zeros(nROI,1);
 nOverlap = zeros(nROI,1);
 
-for r = 1:numel(roi_labels)
+for r = 1:nROI
    lab = roi_labels(r);
    roi_mask = roi_img.dat == lab;
 
