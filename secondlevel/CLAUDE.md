@@ -183,12 +183,15 @@ remaining files were read through afterwards. Nothing below is fixed yet.
 
 **Hard errors waiting to happen:**
 
-0. **`TopN` is not capped by the number of features** in `plot_PLSR_diagnostics_neuroimaging` (`:566`)
-   and `plot_PLSDA_diagnostics_neuroimaging` (`:483`). The ROI table is capped correctly with
-   `min(TopN, height(...))`, but the top-weights block indexes `idx(1:TopN)` directly. With the
-   default `TopN = 20` and fewer than 20 features the plotter throws "Index exceeds the number of
-   array elements" — *after* it has already written the NIfTIs and figures. Reproduced with `p = 5`.
-   One-line fix: `TopN = min(TopN, p)`.
+0. ~~**`TopN` is not capped by the number of features**~~ **FIXED.** In
+   `plot_PLSR_diagnostics_neuroimaging` and `plot_PLSDA_diagnostics_neuroimaging` the ROI table was
+   capped with `min(TopN, height(...))`, but the top-weights block indexed `idx(1:TopN)` directly, so
+   the default `TopN = 20` with fewer than 20 features threw "Index exceeds the number of array
+   elements" — *after* the NIfTIs and figures had been written. `TopN = max(1, min(TopN, p))` is now
+   applied once, immediately after `p` is resolved and before any use. Added to the ENet plotter too,
+   where it is a no-op today (its only use site was already guarded) but prevents the same drift.
+   Verified for p = 3, 4, 5, 20, 25 and 30 with both the default `TopN` and `TopN = 999`; the
+   exported CSV now also names the true row count (`..._top5_weights.csv` rather than `_top20_`).
 
 4. `tfce_one_fmri_dat`: the `switch sidedness` has no `otherwise`, so any value other than `'one'` or
    `'two'` leaves `tf` undefined and fails three lines later with an unrelated message.

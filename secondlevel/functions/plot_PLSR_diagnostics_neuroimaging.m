@@ -155,6 +155,13 @@ end
 
 p = length(results.VIP);
 
+% TopN is a display/export count, so cap it at the number of features. The ROI
+% table below is capped with min(TopN, height(...)), but the top-weights block
+% indexes idx(1:TopN) directly: with the default TopN = 20 and fewer than 20
+% features that threw "Index exceeds the number of array elements", AFTER the
+% NIfTIs and figures had already been written.
+TopN = max(1, min(TopN, p));
+
 if nargin < 2 || isempty(XL)
     if isfield(results,'finalXLoadings') && ~isempty(results.finalXLoadings)
         XL = results.finalXLoadings;
