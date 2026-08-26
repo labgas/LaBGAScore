@@ -229,3 +229,41 @@ observed statistic, giving a measured false-positive rate near 40 % at
 alpha = 0.05). And Elastic Net hyperparameters were previously selected by the
 single best-performing inner fold rather than a fold-averaged score, which
 produced markedly under-regularized, unstable weight maps.
+
+---
+
+## Input contracts now enforced
+
+Three requirements that used to fail silently, or fail late, are checked up
+front. All three abort **before** any NIfTI or figure is written.
+
+### Atlas labels must be exactly `1..p`
+
+The painting loop is `for i = 1:p, mask = atlasData == i`, so atlas integer
+label `i` must BE feature `i`. `validateAtlasLabels` now errors when a label in
+`1:p` is missing from the atlas volume, and warns when the atlas carries labels
+beyond `p` (those regions simply stay empty in the maps).
+
+The old guard only tested `max(labels) < p`, which misses the case that
+actually bites: **gaps**. With labels `[1 2 5 7 9]` and `p = 5`, `max(labels)`
+is 9 so nothing fired, yet features 3 and 4 matched no voxels and were dropped,
+and feature 5 was painted onto atlas label 5 — the *third* ROI in the set. The
+result looked like a perfectly normal brain map. Gaps arise whenever an ROI
+loses all of its voxels during masking or resampling.
+
+If you hit this error, rebuild the ROI atlas so its labels run `1..p` without
+gaps, or subset `X` to match.
+
+### `roiNames` must have exactly `p` entries
+
+Too few names used to throw part way through, after the NIfTIs had been
+written; too many, or names from a different ROI set, silently mislabelled
+every row of `ROI_table`.
+
+### `TopN` is capped at `p`
+
+`TopN` is a display and export count. With the default `TopN = 20` and fewer
+than 20 features the top-weights block used to throw "Index exceeds the number
+of array elements", again after the NIfTIs were written. The exported CSV is
+named for the true row count, so a 5-feature analysis writes
+`..._top5_weights.csv`.

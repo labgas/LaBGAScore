@@ -1,6 +1,5 @@
 function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, atlasFile, varargin)
-%
-% Plot/diagnose PLSR neuroimaging results (ROI/parcellation).
+% plot_PLSR_diagnostics_neuroimaging  Plot and diagnose PLSR neuroimaging results (ROI/parcellation).
 %
 % This function provides generic visualization and diagnostics for PLSR
 % results produced by pipelines such as PLSR_neuroimaging_pipeline.
@@ -117,6 +116,22 @@ function ROI_table = plot_PLSR_diagnostics_neuroimaging(results, XL, roiNames, a
 %   Requires SPM (spm_vol, spm_read_vols, spm_write_vol) for NIfTI mapping.
 %   The robust fitted line in the predicted-vs-observed panel uses robustfit
 %   if available.
+%
+% ENFORCED INPUT CONTRACTS (all checked before anything is written to disk)
+%   - Atlas labels must be exactly 1..p, with no gaps. The painting loop is
+%     "for i = 1:p, mask = atlasData == i", so atlas label i must BE feature i.
+%     validateAtlasLabels errors on a label missing from 1..p and warns on
+%     labels beyond p (those regions stay empty in the maps). Gaps used to be
+%     silent: with labels [1 2 5 7 9] and p = 5 the old guard, which only
+%     tested max(labels) < p, never fired, yet features 3 and 4 matched no
+%     voxels and feature 5 was painted onto the THIRD ROI. Gaps arise whenever
+%     an ROI loses all its voxels during masking or resampling. Rebuild the ROI
+%     atlas without gaps, or subset X to match.
+%   - numel(roiNames) must equal p. Too few names used to throw part way
+%     through, after the NIfTIs were written; too many, or names from another
+%     ROI set, silently mislabelled every row of ROI_table.
+%   - TopN is capped at p. It is a display/export count, not a model setting;
+%     the exported CSV is named for the true row count.
 %
 % See also: plsregress, robustfit, spm_vol, spm_read_vols, spm_write_vol
 
