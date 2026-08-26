@@ -252,11 +252,10 @@ if doAtlas
     V = spm_vol(atlasFile);
     atlasData = spm_read_vols(V);
 
-    labels = unique(atlasData(:));
-    labels(labels==0 | isnan(labels)) = [];
-    if ~isempty(labels) && max(labels) < p
-        warning('Atlas max label (%d) < number of features p (%d). Mapping may be wrong.', max(labels), p);
-    end
+    % The painting loop below is "for i = 1:p, mask = atlasData == i", so atlas
+    % label i must BE feature i. The previous guard only caught max(labels) < p,
+    % which misses the case that actually bites: labels with gaps.
+    validateAtlasLabels(atlasData, p, 'plot_PLSR_diagnostics_neuroimaging');
 
     % Prefer slices that contain atlas content
     zHasData = squeeze(any(any(atlasData>0,1),2));

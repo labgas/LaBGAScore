@@ -40,9 +40,21 @@ function [fmri_dat, region_obj, region_table] = thresholded_fmri_data_from_stati
         else
         
             fmri_dat = fmri_data_st(p_stat_img);
-            fmri_dat.dat = stat_vec;
             fmri_dat.dat_descrip = [stat_type ' thresholded at p_' thr_type ' < ' num2str(p)];
-            fmri_dat = fmri_dat.threshold([min(fmri_dat.dat(p_stat_img.sig))-0.001 max(fmri_dat.dat(p_stat_img.sig))+0.001],'raw-between','k',k);
+
+            % Keep the SIGNIFICANT voxels, not every voxel whose statistic
+            % happens to land in the significant range. Thresholding
+            % 'raw-between' on [min(sig) max(sig)] retains anything inside that
+            % window, which only equals masking when the p-value is monotonic
+            % in the statistic. It is not: each voxel has its own permutation
+            % null, so a non-significant voxel can easily carry a statistic
+            % between the smallest and largest significant ones.
+            % maskToSignificant parks the non-significant voxels on a sentinel
+            % below the retained window, so the range threshold selects exactly
+            % the significant set while 'k' still applies the extent rule.
+            [dat_masked, lo, hi] = maskToSignificant(stat_vec, p_stat_img.sig);
+            fmri_dat.dat = dat_masked;
+            fmri_dat = fmri_dat.threshold([lo hi],'raw-between','k',k);
             fmri_dat.image_names = [stat_type '_' strrep(num2str(p),'.','_') '_' thr_type '_k_' num2str(k) '.nii'];
             
             if isempty(fmri_dat)

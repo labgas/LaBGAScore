@@ -44,12 +44,19 @@ function [stat_img, fmri_dat, region_obj, region_table] = thresholded_fmri_data_
         else
         
             fmri_dat = fmri_data_st(stat_img);
-            fmri_dat.dat = stat_vec;
             fmri_dat.dat_descrip = [stat_type ' thresholded at p_' thr_type ' < ' num2str(p)];
-            path = fileparts(fullpath_to_pval_nii); 
-            fmri_dat = fmri_dat.threshold([min(fmri_dat.dat(stat_img.sig))-0.001 max(fmri_dat.dat(stat_img.sig))+0.001],'raw-between','k',k);
+            out_dir = fileparts(fullpath_to_pval_nii);
+
+            % See maskToSignificant: thresholding 'raw-between' on the range of
+            % the significant values also retains non-significant voxels whose
+            % statistic falls inside that window, which happens whenever the
+            % p-value is not monotonic in the statistic (it is not, because each
+            % voxel has its own permutation null).
+            [dat_masked, lo, hi] = maskToSignificant(stat_vec, stat_img.sig);
+            fmri_dat.dat = dat_masked;
+            fmri_dat = fmri_dat.threshold([lo hi],'raw-between','k',k);
             fmri_dat.image_names = [stat_type '_' strrep(num2str(p),'.','_') '_' thr_type '_k_' num2str(k) '.nii'];
-            fmri_dat.fullpath = fullfile(path,[stat_type '_' strrep(num2str(p),'.','_') '_' thr_type '_k_' num2str(k) '.nii']);
+            fmri_dat.fullpath = fullfile(out_dir,[stat_type '_' strrep(num2str(p),'.','_') '_' thr_type '_k_' num2str(k) '.nii']);
             
             if isempty(fmri_dat)
                 fprintf('\n No suprathreshold voxels after k threshold\n');

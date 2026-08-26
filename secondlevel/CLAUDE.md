@@ -74,9 +74,12 @@ were producing invalid inference, and neither problem was confined to covariates
   `Y_hat` and Freedman-Lane added it back into every permuted dataset. Covariates are now
   mean-centered and regressed out without an intercept column, via `residualizeFold`.
 - *Two-sample had almost no power, with or without covariates.* `perm_idx` was applied to both the
-  residuals and the group labels, which preserves their pairing and so changes nothing — with no
-  covariates, 200/200 permutations produced a statistic bit-identical to the observed one. Labels are
-  now held fixed while the residuals are permuted.
+  residuals and the group labels, which preserves their pairing and so permutes nothing: the permuted
+  group sets are the observed ones, reordered. The t-statistic is then bit-identical to the observed
+  (verified 200/200). End to end through pTFCE the maps differ only in the last bits, because
+  floating-point summation is not associative — the null took **2 distinct values across 40
+  permutations**, sd 0.011 against 0.608 for the fixed version, so p-values were decided by rounding
+  noise. Labels are now held fixed while the residuals are permuted.
 - `send(q,1)` ran unconditionally although `q` only existed when `'parallel'` was true, so that
   documented option errored instead of disabling parallelism. Now guarded and honoured via `parfor`'s
   worker cap.
@@ -91,6 +94,20 @@ of [0.020 0.080]):
 
 **Any TFCE result from this function predates a working permutation test and should be re-run.**
 
+Re-verified end to end against real CANlab / SPM12 / pTFCE once those dependencies were available
+(`fmri_data_st` lives in the `canlab_single_trials` repo, which must be on the path). On data
+containing a genuine effect, `p_global` pre-fix vs post-fix:
+
+| design | pre-fix | post-fix |
+|---|---|---|
+| one-sample, no covariates | 0.0244 | 0.0244 |
+| one-sample, **with covariates** | **1.0000** | **0.0244** |
+| two-sample, no covariates | 0.4634 | **0.0244** |
+| two-sample, with covariates | 0.4146 | **0.0244** |
+
+The `send(q,1)` bug also reproduced live: the pre-fix code dies with `Unrecognized function or
+variable 'q'` under `'parallel',false`.
+
 *Constructing the null correctly is subtler than it looks, and cost two rounds of measurement here.*
 The covariate-adjusted mean is only zero if the covariate effect is generated around the covariate's
 own mean — `Y = b*(cv - mean(cv)) + e`. Validating against `Y = b*cv + e` makes every scheme look
@@ -98,6 +115,102 @@ broken, because the adjusted mean is then `b*mean(cv)`, nonzero in any finite sa
 
 **Results produced before this work are not numerically comparable to results produced after it**,
 and prior ENet results in particular were selected by a flawed tuning rule.
+
+### Audit of the remaining `functions/` files — findings, not yet fixed
+
+The overhaul above covered the ML pipeline family and `group_tfce_from_subject_maps.m`. The
+remaining files were read through afterwards. Nothing below is fixed yet.
+
+**Silently wrong output — findings 1 and 2 are FIXED; finding 3 turned out to be something else.**
+
+1. ~~**Atlas label gaps mis-map features to brain regions**~~ (all three plotters). **FIXED** via the
+   shared `validateAtlasLabels`, which errors on labels missing from `1:p` and warns on labels beyond
+   `p`. Verified end to end through the real plotter: a contiguous atlas runs clean, `[1 2 5 7 9]`
+   with `p=5` is now blocked, and an atlas with extra regions runs with a warning. Original defect
+   description follows. The painting loop is
+   `for i = 1:p, mask = atlasData == i`, so the convention "atlas label `i` = column `i`" must hold
+   exactly. The only guard is `if max(labels) < p, warning(...)`, which does **not** fire when the
+   labels are non-contiguous. With labels `[1 2 5 7 9]` and `p = 5`: `max(labels)=9`, so no warning;
+   features 3 and 4 paint onto nothing and are silently dropped, and feature 5 paints onto atlas
+   label 5, which is the *third* ROI. Gaps arise whenever an ROI ends up with no voxels after
+   masking or resampling. The check that catches it is `isequal(labels(:)', 1:p)`.
+2. ~~**`thresholded_fmri_data_from_statistic_image` / `_from_pval_nii` threshold by value, not by
+   significance.**~~ **FIXED** via the shared `maskToSignificant`, which parks non-significant voxels
+   on a sentinel below the retained window so the range threshold selects exactly the significant
+   set, and replaces the hardcoded `0.001` pad with a relative tolerance. Measured through CANlab's
+   real `threshold` method on a case with 159 significant voxels: the old path kept **2544** voxels
+   (2385 of them not significant), the new path keeps **exactly 159**. Original description follows. Both compute the significant voxels, then call
+   `threshold([min(sig)-0.001 max(sig)+0.001], 'raw-between', ...)` — which keeps *every* voxel whose
+   statistic falls in that range, significant or not. This is only equivalent to masking when the
+   p-value is monotonic in the statistic, which it is not for voxelwise permutation p-values (each
+   voxel has its own null). The `0.001` pad is also a hardcoded absolute tolerance on an arbitrary
+   statistic scale.
+3. **`call_pTFCE` calls pTFCE with entirely the wrong arguments.** This supersedes the original
+   finding, which was that it silently returns zeros — it almost never does. Running the real pTFCE
+   showed:
+   - Installed signature is `pTFCE(imgZ, mask, Rd, V, Nh, Zest, C, verbose)`; `call_pTFCE` passes
+     `(vol, voxsize, H, E, conn)`.
+   - pTFCE's `switch nargin` handles only cases 1-4, so the 6- and 5-argument attempts **always**
+     fail with "Not enough input arguments". Every call falls through to the 4-argument form. The
+     cascade is not version tolerance, it is masking a signature mismatch.
+   - In that form `mask`<-`voxsize` (never used in pTFCE's body, so harmless), `Rd`<-`H`=2 and
+     `V`<-`E`=0.5. Real values would be a resel count in the hundreds and the voxel count in the
+     tens of thousands.
+   - **pTFCE has no `H` or `E` parameter at all** — it is probabilistic TFCE via GRF theory, not
+     Smith & Nichols. So the documented `'H'` and `'E'` options do not do what the docs say, and
+     `'conn'` never reaches pTFCE.
+   - It is also fed a t-map where a Z-map is documented; the toolbox ships `img_t2z.m` for that.
+
+   Measured impact: within a map the wrong parameterisation is exactly rank-preserving
+   (Spearman 1.0000), so the spatial pattern survives and values are inflated (max 7.00 vs 4.11).
+   Across maps — which is what a permutation test compares — rank correlation is 0.9654 and the
+   ordering does change, so p-values are approximately but not exactly right.
+
+   **The same bug exists independently, inline, in
+   `decoding_toolbox/LaBGAScore_decoding_SVM_between_subjects.m`** (`:599`, `:601`, `:637`, `:639`),
+   with the same misleading `% Height exponent (Smith & Nichols default)` comments.
+
+   Not fixed: calling pTFCE correctly is a redesign, not a patch. It needs a real mask, a t->Z
+   conversion with the right df, and a resel count (`spm_est_smoothness` or `SPM.xVol.R(4)`), plus
+   dropping or repurposing `H`/`E`/`conn`. It will change every TFCE number.
+
+   *Who calls what:* `call_pTFCE` <- only `tfce_one_fmri_dat` <- only
+   `group_tfce_from_subject_maps` <- **nothing in this repo**. The chain is unreferenced here, but
+   `group_tfce_from_subject_maps` is library code for study repos, exactly like the ML pipelines
+   (`PLSR_neuroimaging_pipeline` also has no in-repo caller). Deleting `call_pTFCE` alone would break
+   `tfce_one_fmri_dat`, and would not touch the live copy of the bug in the decoding script. So the
+   decoding script needs fixing regardless of what happens to the TFCE chain.
+
+**Hard errors waiting to happen:**
+
+0. **`TopN` is not capped by the number of features** in `plot_PLSR_diagnostics_neuroimaging` (`:566`)
+   and `plot_PLSDA_diagnostics_neuroimaging` (`:483`). The ROI table is capped correctly with
+   `min(TopN, height(...))`, but the top-weights block indexes `idx(1:TopN)` directly. With the
+   default `TopN = 20` and fewer than 20 features the plotter throws "Index exceeds the number of
+   array elements" — *after* it has already written the NIfTIs and figures. Reproduced with `p = 5`.
+   One-line fix: `TopN = min(TopN, p)`.
+
+4. `tfce_one_fmri_dat`: the `switch sidedness` has no `otherwise`, so any value other than `'one'` or
+   `'two'` leaves `tf` undefined and fails three lines later with an unrelated message.
+5. `region_table.minP = []` in both `thresholded_fmri_data_from_*` errors outright if the region
+   table has no `minP` column (verified: "Cannot delete 'minP' ... because it does not exist").
+6. Same two files preallocate with `height(region_table)` but loop over `size(region_obj,2)`. If
+   those differ the array grows silently and the write-back fails with a table-height error.
+7. `thresholded_fmri_data_from_pval_nii` assigns `path = fileparts(...)`, **shadowing the builtin
+   `path`** — the same class of bug as the `diag` shadow already fixed in `quickCV_ENet`. This file
+   has a real caller (`decoding_toolbox/LaBGAScore_decoding_SVM_between_subjects.m`).
+8. No plotter checks `numel(roiNames) == p`. Too few names errors mid-run *after* NIfTIs are written;
+   too many, or names from a different ROI set, mislabels every row of `ROI_table` in silence.
+9. `dice_statistic_image_by_roi` does not check that `roi_img` occupies the same voxel space as the
+   two images (its sibling `dice_statistic_image` does check), and its option `switch` has no
+   `otherwise`, so a mistyped option name is silently ignored (the sibling errors).
+
+**Dead code — no callers anywhere in the repo:** `pvals_from_ranks`, `tfce_transform_3d`,
+`dice_statistic_image`, `dice_statistic_image_by_roi`, `thresholded_fmri_data_from_statistic_image`.
+Either wire them up or drop them. If `pvals_from_ranks` is revived, note that it assigns arbitrary
+distinct p-values to tied statistics (a real problem for TFCE maps, which are full of ties at zero),
+and that despite its comment it computes a *spatial rank across voxels*, not a p-value against a
+null. `tfce_transform_3d` integrates only positive thresholds, which its docstring does not say.
 
 ## Three layers, different contracts
 
