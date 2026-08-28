@@ -1,0 +1,63 @@
+# Line-ending and diff handling for LaBGAScore.
+#
+# This repository is used from BOTH Windows (Git Bash) and the lab's Linux
+# server. These rules make that work without anyone needing particular local
+# git settings, and without the two platforms fighting over line endings.
+#
+#   text=auto  git normalises to LF in the repository on commit, on every
+#              platform. Working copies get platform-native endings: CRLF on
+#              Windows, LF on Linux. This is what makes a mixed-platform repo
+#              behave, and it does not depend on core.autocrlf being set.
+#
+#   eol=lf     force LF in the working copy as well. Used only for files a
+#              shell executes: CRLF breaks the shebang, and Git Bash on
+#              Windows fails such a script with "\r: command not found".
+#              Note this bites when running the script from the WINDOWS
+#              working copy, which is exactly the Git Bash case.
+#
+#   binary     shorthand for -text -diff; never convert, never diff as text.
+#
+# If a text file ever shows a whole-file diff after someone else commits it,
+# the fix is `git add --renormalize .` on a clean tree, not a local config
+# change.
+
+* text=auto
+
+# --- executed by a shell: must be LF even in a Windows working copy --------
+*.sh      text eol=lf
+*.bash    text eol=lf
+*.zsh     text eol=lf
+*.slurm   text eol=lf
+*.pbs     text eol=lf
+
+# --- source and documentation: platform-native endings are fine -----------
+*.m       text
+*.py      text
+*.sas     text
+*.md      text
+*.txt     text
+*.json    text
+*.yml     text
+*.yaml    text
+*.csv     text
+*.tsv     text
+
+# --- neuroimaging and other binary data -----------------------------------
+*.nii     binary
+*.nii.gz  binary
+*.gii     binary
+*.mgz     binary
+*.gz      binary
+*.zip     binary
+*.mat     binary
+*.fig     binary
+*.mex*    binary
+
+# --- images and documents -------------------------------------------------
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.tif     binary
+*.tiff    binary
+*.svg     text
+*.pdf     binary
