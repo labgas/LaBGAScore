@@ -15,7 +15,7 @@ Core scripts (and templates for them) for LaBGAS's (Laboratory for Brain-Gut Axi
 
 ## What this is
 
-LaBGAScore is a curated collection of MATLAB scripts and helper functions implementing LaBGAS's standard neuroimaging analysis workflow, spanning BIDS conversion, first-level and second-level fMRI modeling, MVPA/machine-learning pipelines, PET, MRS, and several auxiliary toolkits. Scripts can either be run directly from this repo, or — more commonly for a real study — copied into that study's own project repo and adapted there for study-specific purposes.
+LaBGAScore is a curated collection of MATLAB scripts and helper functions implementing LaBGAS's standard neuroimaging analysis workflow, spanning BIDS conversion, first-level and second-level fMRI modeling, MVPA/machine-learning pipelines, PET, MRS, and several auxiliary toolkits. A small amount of code is in other languages — SAS macros under `stats_tools/sas_macros/`, and standalone Python utilities under `qr_code/`. Scripts can either be run directly from this repo, or — more commonly for a real study — copied into that study's own project repo and adapted there for study-specific purposes.
 
 This is not a packaged software product: there is no build system or automated test suite. A lightweight static-analysis helper is available (see [Tests and CI](#tests-and-ci)).
 
@@ -62,6 +62,7 @@ Several domain folders assume their own external toolbox, also not vendored, exp
 | `graphvar/` | [GraphVar](http://rfmri.org/GraphVar) |
 | `juspace/` | [JuSpace](https://github.com/juryxy/JuSpace) |
 | `mrs/` | [Osprey](https://github.com/schorschinho/osprey) |
+| `stats_tools/sas_macros/` | [SAS](https://www.sas.com/) with SAS/STAT (not MATLAB — these are `.sas` macro files) |
 
 Exception: `pet/functions/LCN_*.m` are legacy KU Leuven PET-processing functions vendored directly into this repo rather than pulled from an external toolbox.
 
@@ -83,7 +84,7 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 
 **`secondlevel/`** — group-level statistics and MVPA/ML pipelines: TFCE permutation inference using classic TFCE, Smith & Nichols 2009 (`group_tfce_from_subject_maps.m` → `tfce_one_fmri_dat.m` → `tfce_volume.m` → `tfce_transform_3d.m`), PLS-DA/PLSR/Elastic Net pipelines with matching diagnostic-plotting functions (see the seven `README_*.md` guides above), the shared per-fold helpers they are built from (`foldPreprocess.m`, `residualizeFold.m`, `residualizeY.m`, `applyScaling.m`, `capLV.m`, `validateCovariates.m`, `warnUnknownOptions.m`, `setParforStream.m`, `globalBaselineCV.m`, `selectENetHyperparams.m`, `enetLambdaGrid.m`, `logitSafe.m`, `quickCV_*.m`, `bootstrapOOB_*.m`, `makeGroupedFolds.m`, `swapWithinSubjectLabels.m`, `quickGroupedCV.m`), atlas/threshold validation helpers (`validateAtlasLabels.m`, `maskToSignificant.m`), dice-overlap tools (`dice_statistic_image*.m`), an ROI/parcel extraction script (`LaBGAScore_secondlevel_extractparcels_sessions.m`), a MACS-toolbox model-space batch-setup script (`LaBGAScore_secondlevel_MS_mat_pipeline.m`), an MVPA-regression-on-connectivity-betas script (`LaBGAScore_secondlevel_mvpa_beta_maps_conn.m`), a PLS/ENet ROI-pipeline wrapper (`LaBGAScore_secondlevel_roi_run_plot_PLS_ENet_pipeline.m`), an object-oriented ML toolkit example (`LaBGAScore_secondlevel_ooFmriDataObjML_example.m`), and the `ProgressTracker` class.
 
-**`stats_tools/`** — `LaBGAScore_Storey_FDR.m`, implementing Storey's positive FDR correction (falling back to Benjamini-Hochberg when its precondition isn't met).
+**`stats_tools/`** — general-purpose statistics helpers, in two languages. `functions/LaBGAScore_Storey_FDR.m` implements Storey's positive FDR correction (falling back to Benjamini-Hochberg when its precondition isn't met). `sas_macros/` holds SAS macros for statistics the MATLAB side does not cover: `mixed_effectsize.sas` (`%mixed_effectsize`) computes effect sizes — partial eta-squared with a noncentral-F confidence interval, Cohen's f², and optionally eta-squared/omega-squared — for the fixed effects of a model fitted with `PROC MIXED`, and `es_identify.sas` (`%es_identify`, `%es_identify_ds`) audits effect sizes in an existing results table to determine which statistic was actually reported. Both files are self-contained; `%include` the one you need. They require SAS with SAS/STAT, and are the only non-MATLAB code in the analysis workflow proper. See [`stats_tools/sas_macros/README.md`](stats_tools/sas_macros/README.md) for usage, the formulas used, the marginal-versus-conditional residual distinction, and the caveats to state in a Methods section — including its note that the macros have not yet been run against a real model in SAS.
 
 **`atlas_mask_tools/`** — `LaBGAScore_atlas_binary_mask_from_atlas.m` and `LaBGAScore_atlas_rois_from_atlas.m` generate custom atlas/mask and per-ROI objects from a chosen atlas; the folder also ships a set of ready-made brain/gray-matter mask and template NIfTIs (`brain_masks/`, `brain_templates/`, `gray_matter_masks/`).
 
