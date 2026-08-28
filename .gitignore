@@ -1,1 +1,7 @@
+# MATLAB autosave files
 **.asv
+
+# Claude Code machine-local settings.
+# Only the per-machine settings file is ignored: CLAUDE.md and any shared
+# .claude/ content (commands, agents) stay tracked deliberately.
+**/.claude/settings.local.json
