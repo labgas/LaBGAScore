@@ -208,6 +208,95 @@
  |     Satterthwaite was not requested.
  |
  |  ---------------------------------------------------------------------
+ |  CORRESPONDENCE WITH PROC GLM
+ |  ---------------------------------------------------------------------
+ |  PROC GLM's EFFECTSIZE option defines the partial correlation ratio as
+ |
+ |      partial eta-squared = SS_effect / (SS_effect + SS_error)
+ |
+ |  The formula used here is algebraically identical to it.  In GLM,
+ |  F = (SS_effect/df_effect) / MSE with MSE = SS_error/df_error, so
+ |  SS_effect = df_effect*F*MSE and SS_error = df_error*MSE.  Substituting,
+ |  the MSE cancels:
+ |
+ |      SS_effect/(SS_effect + SS_error)
+ |          = (df_effect*F*MSE) / (df_effect*F*MSE + df_error*MSE)
+ |          = (NumDF*F) / (NumDF*F + DenDF)
+ |
+ |  Verified numerically on an unbalanced 2x3 factorial with Type III sums
+ |  of squares: the two expressions agree to machine precision (largest
+ |  discrepancy 5.6e-17 across three effects).  The semipartial (plain)
+ |  eta-squared, SS_effect/SS_total, likewise agrees exactly, which
+ |  confirms that reconstructing SS_effect as NumDF*FValue*MSE is exact in
+ |  the fixed-effects case.
+ |
+ |  TWO THINGS THAT "IDENTICAL FORMULA" DOES NOT MEAN:
+ |
+ |    1. In GLM, DenDF is the single residual df, the same for every
+ |       effect.  Under Kenward-Roger in MIXED it is effect-specific and
+ |       usually fractional.  That is correct -- it is the right df for
+ |       that effect's test -- but the values are not slices of one sum-of-
+ |       squares decomposition the way GLM's are.
+ |
+ |    2. In a mixed or marginal model there is NO exact sum-of-squares
+ |       decomposition at all.  With correlated errors the F test is a
+ |       Wald-type test on generalised least squares estimates, not a ratio
+ |       of orthogonal sums of squares.  So the identity runs one way only:
+ |       the formula can be computed, but the result cannot be recovered as
+ |       SS_effect/(SS_effect + SS_error) from any real decomposition.
+ |       Read it as the effect size implied by the F test -- which is
+ |       precisely what Edwards et al. (2008) formalise as R-squared-beta.
+ |       Worth one sentence in a Methods section.
+ |
+ |  ---------------------------------------------------------------------
+ |  OPEN QUESTION: WHICH OMEGA-SQUARED CONVENTION
+ |  ---------------------------------------------------------------------
+ |  The omega-squared computed here uses
+ |
+ |      (SS_effect - NumDF*MSE) / (SS_total + MSE)
+ |
+ |  inherited from the 2021 script.  That is the classic Hays / Keppel
+ |  convention, and is also what Olejnik & Algina (2003) use.
+ |
+ |  The SAS documentation for the EFFECTSIZE option renders semipartial
+ |  omega-squared with SS_total alone in the denominator in one place, and
+ |  describes it as "the total sum of squares adjusted by MSE terms" in
+ |  another.  The formulas on those pages are published as images rather
+ |  than text, so THIS HAS NOT BEEN VERIFIED against SAS's actual output.
+ |
+ |  The difference is small -- about 0.8 per cent in a test case -- and partial
+ |  eta-squared is unaffected either way.  To settle it, run PROC GLM with
+ |  the EFFECTSIZE option on any small dataset and compare the printed
+ |  semipartial omega-squared against both:
+ |
+ |      (SS_effect - df_effect*MSE) / SS_total
+ |      (SS_effect - df_effect*MSE) / (SS_total + MSE)
+ |
+ |  then update this header and the README with what you find.
+ |
+ |  ---------------------------------------------------------------------
+ |  REFERENCES
+ |  ---------------------------------------------------------------------
+ |  Edwards LJ, Muller KE, Wolfinger RD, Qaqish BF, Schabenberger O.
+ |      An R2 statistic for fixed effects in the linear mixed model.
+ |      Statistics in Medicine 2008;27(29):6137-6157.
+ |      doi:10.1002/sim.3429   (PMID 18816511)
+ |
+ |  Olejnik S, Algina J.  Generalized eta and omega squared statistics:
+ |      measures of effect size for some common research designs.
+ |      Psychological Methods 2003;8(4):434-447.
+ |      doi:10.1037/1082-989X.8.4.434
+ |
+ |  Steiger JH.  Beyond the F test: effect size confidence intervals and
+ |      tests of close fit in the analysis of variance and contrast
+ |      analysis.  Psychological Methods 2004;9(2):164-182.
+ |      doi:10.1037/1082-989X.9.2.164   (PMID 15137887)
+ |
+ |  SAS Institute.  Effect Size Measures for F Tests in GLM.
+ |      SAS/STAT User's Guide.
+ |      https://support.sas.com/documentation/cdl/en/statug/63962/HTML/default/statug_glm_sect032.htm
+ |
+ |  ---------------------------------------------------------------------
  |  Written for the Laboratory for Brain-Gut Axis Studies (LaBGAS),
  |  KU Leuven.  Supersedes "Calculation of effect size following marginal
  |  linear mixed models" (B. Dalile, 3 December 2021).
