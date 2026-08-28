@@ -6,19 +6,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 LaBGAScore holds LaBGAS's (Laboratory for Brain-Gut Axis Studies, KU Leuven) core/template MATLAB scripts for its standard neuroimaging analysis workflow. Scripts are either run directly from this repo, or (more commonly, for a real study) downloaded and adapted into that study's own `code` subdataset — every LaBGAS project is a DataLad superdataset (`proj_xxx`) with subdatasets `sourcedata`, `BIDS`, `derivatives`, `code`, `firstlevel`, `secondlevel`. GPLv3. No build system, test suite, or CI; this is a curated collection of runnable/copyable `.m` scripts, not a packaged product. One lightweight exception: `clean/LaBGAScore_check_all_scripts.m` (see "Static analysis" below).
 
+Not everything here is MATLAB: `stats_tools/sas_macros/` holds SAS macros (`.sas`) for mixed-model effect sizes, and `qr_code/` holds standalone Python. Both are self-contained and outside the MATLAB conventions described below.
+
 ## Dependencies (not vendored)
 
-Most workflows require **CANlabCore** and **SPM12** on the MATLAB path. Some domain folders assume their own external toolbox, also not vendored: `cosmomvpa/` → CoSMoMVPA, `decoding_toolbox/` → The Decoding Toolbox (TDT), `graphvar/` → GraphVar, `juspace/` → JuSpace, `mrs/` → Osprey. Exception: `pet/functions/LCN_*.m` are legacy KU Leuven PET-processing functions vendored directly into the repo. No package manager/manifest.
+Most workflows require **CANlabCore** and **SPM12** on the MATLAB path. Some domain folders assume their own external toolbox, also not vendored: `cosmomvpa/` → CoSMoMVPA, `decoding_toolbox/` → The Decoding Toolbox (TDT), `graphvar/` → GraphVar, `juspace/` → JuSpace, `mrs/` → Osprey, `stats_tools/sas_macros/` → SAS with SAS/STAT (no MATLAB involved). Exception: `pet/functions/LCN_*.m` are legacy KU Leuven PET-processing functions vendored directly into the repo. No package manager/manifest.
 
 ## Repository structure
 
-Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlevel/`, `secondlevel/`, `stats_tools/`, `atlas_mask_tools/`, `pet/`, `mrs/`, `decoding_toolbox/`, `cosmomvpa/`, `graphvar/`, `juspace/`, `power/`, `figures/`, `clean/`, `qr_code/` (Python, not MATLAB). Most domains split into `<domain>/scripts/` + `<domain>/functions/`. One class in the whole repo: `secondlevel/classes/ProgressTracker.m`. `secondlevel/` also has seven standalone usage guides (`README_ENet_*.md`, `README_PLSDA_*.md`, `README_PLSR_*.md`) — don't duplicate their content.
+Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlevel/`, `secondlevel/`, `stats_tools/`, `atlas_mask_tools/`, `pet/`, `mrs/`, `decoding_toolbox/`, `cosmomvpa/`, `graphvar/`, `juspace/`, `power/`, `figures/`, `clean/`, `qr_code/` (Python, not MATLAB). Most domains split into `<domain>/scripts/` + `<domain>/functions/`; `stats_tools/` splits into `functions/` (MATLAB) + `sas_macros/` (SAS). One class in the whole repo: `secondlevel/classes/ProgressTracker.m`. `secondlevel/` also has seven standalone usage guides (`README_ENet_*.md`, `README_PLSDA_*.md`, `README_PLSR_*.md`), and `stats_tools/sas_macros/` has its own — all authoritative for their subject; don't duplicate their content.
 
 ## Script conventions
 
 - Numbered/lettered prefixes (`prep_1_`, `s0_`/`s1_`/`s2_`/`s3_`, `a_`/`a2_`, and lettered variants `s1a_`/`s1b_`/`s2a_`/`s2b_`) mark ordered pipeline steps meant to be copied into a study's `code` subdataset and adapted — not generic library code.
 - A `_example` suffix marks a script that is illustrative only.
 - **Scripts** (no `function`/`classdef` declaration) use a comment header: `%% scriptname.m` title, `*USAGE*`, optionally `*OPTIONS*`/`*DEPENDENCIES*`/`*NOTES*`, then an author/date/version block — see `prep/LaBGAScore_prep_s0_define_directories.m`. **Functions** (`*/functions/` files, plus a few top-level ones like `power/holmthreshold.m`) use MATLAB's standard function help-text convention (H1 line, syntax) — a different, already-consistent convention, out of scope for the header-consistency work below.
+- The `.sas` files follow neither: they use their own header block and the conventions recorded at the end of `stats_tools/sas_macros/README.md` (validate inputs and abort with `ERROR:` rather than emit a silently wrong dataset; state unverifiable assumptions in the log with `NOTE:`; suffix approximations `*_APPROX`).
 
 ## Relationship to sibling repo `CANlab_help_examples` (LaBGAS fork)
 
@@ -47,3 +50,5 @@ Three documentation goals, mirroring work already done for `CANlab_help_examples
 ## Static analysis
 
 `clean/LaBGAScore_check_all_scripts.m` runs MATLAB's built-in Code Analyzer (`checkcode`) across every `.m` file in the repo (or a subtree passed as its `rootdir` argument) and prints a report, separating genuine syntax errors from style/performance suggestions. Calibrated against real bugs found during the accuracy pass above: `checkcode` reliably catches parse errors (e.g. it did catch the `sort{}` syntax bug fixed in commit `27d8d8a`) but does **not** catch undefined variables used at runtime, calls to functions that don't exist or aren't on the path, or logic bugs (e.g. wrong array indexing) — those all had to be found by reading the code, not by static analysis. Treat it as a fast baseline check run before committing, not a substitute for the kind of full read-through that found the 19 defects above.
+
+It walks `.m` files only, so `stats_tools/sas_macros/` is covered by nothing. Those macros have also not yet been executed against a real model in SAS — their arithmetic was verified independently and their syntax checked by reading, no more. That caveat is stated at the top of their README and should be removed there once someone has run them.
