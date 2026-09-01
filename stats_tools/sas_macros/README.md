@@ -123,7 +123,7 @@ Neither macro here reads `_FREQ_`.
 
 proc mixed data = mydata;
     class id group time;
-    model y = group|time / outpm = outpm_y ddfm = kr;
+    model y = group|time / outpm = outpm_y ddfm = kr2;
     repeated time / subject = id type = un;
     ods output tests3 = tests3_y;
 run;
@@ -297,23 +297,33 @@ more directly interpretable than any variance-explained measure.
 5. **Choose a denominator-df method deliberately.** Everything here depends on
    `DenDF`, so this is the most consequential choice upstream of the macro.
 
-   > ### LaBGAS standard: `ddfm=kr`
+   > ### LaBGAS standard: `ddfm=kr2`
    >
-   > Specify `ddfm=kr` on the MODEL statement of every mixed or marginal model,
-   > unless there is a stated reason not to. Fall back to `ddfm=satterth` if KR
-   > fails to converge or is prohibitively slow, and **record which was used** —
-   > the effect sizes depend on it.
+   > ```sas
+   > model y = <effects> / ddfm = kr2 outpm = <out>;
+   > ```
+   >
+   > On the MODEL statement of every mixed or marginal model, unless there is a
+   > stated reason not to. Fall back in this order, and **record which was
+   > used** — the effect sizes depend on it:
+   >
+   > `kr2` → `kr` (SAS/STAT older than 12.1 has no KR2) → `satterth` (KR will
+   > not converge, or is far too slow).
    >
    > This is a decision about consistency, not a claim that Kenward-Roger is
-   > universally best. SAS picks one of two defaults for you depending on
-   > whether a `RANDOM` statement happens to be present, and those two are on
+   > universally best. SAS otherwise picks one of two defaults for you depending
+   > on whether a `RANDOM` statement happens to be present, and those two are on
    > completely different scales (see below). Naming the method removes that
    > accident, makes effect sizes comparable across models and papers, and gets
    > the small-sample covariance correction as well.
    >
-   > Two practical caveats. KR is designed for `METHOD=REML`. And it can be slow
-   > or fail on a large unstructured V — if a `RANDOM` effect has no `subject=`,
-   > SAS cannot block the problem and KR may be impractical, so fix the blocking
+   > Three conditions. **KR and KR2 are defined for `METHOD=REML`** (the default)
+   > — a likelihood-ratio test on *fixed* effects needs ML, where KR does not
+   > apply, so do not mix the two in one table. **If a variance component is
+   > estimated at the boundary** (`0` in Covariance Parameter Estimates) the
+   > adjustment is built on a Hessian at that boundary; check before trusting the
+   > df. And KR **can be slow or fail on a large unstructured V** — if a `RANDOM`
+   > effect has no `subject=`, SAS cannot block the problem, so fix the blocking
    > first.
 
    The point is not that Kenward-Roger is universally best. It is that the
@@ -374,7 +384,7 @@ more directly interpretable than any variance-explained measure.
    ```sas
    proc mixed data = mydata;
        class id group time;
-       model y = group|time / outpm = outpm_y ddfm = kr;
+       model y = group|time / outpm = outpm_y ddfm = kr2;
        repeated time / subject = id type = un;
        ods output tests3 = t3  modelinfo = mi  dimensions = dm;
    run;
@@ -416,16 +426,29 @@ more directly interpretable than any variance-explained measure.
    `eta2_method = DIRECT` is a third route: a real Type III sum-of-squares
    decomposition is df-independent by construction.
 
-   | Option | What it does | When |
+   | Option (on the `MODEL` statement) | What it does | When |
    |---|---|---|
-   | `DDFM=KR` | inflates the fixed-effect covariance matrix for estimated variance parameters **and** derives a Satterthwaite-type df — so it changes both F and `DenDF`. Designed for `METHOD=REML`. | best default for small-to-moderate N with `UN` or other rich structures — the LaBGAS common case |
-   | `DDFM=KR2` | Kenward-Roger with the 2009 bias adjustment | as above |
-   | `DDFM=SATTERTH` | df adjustment only, no covariance correction | acceptable; usually close to KR, less prone to convergence trouble |
-   | `EMPIRICAL=MBN`/`MOREL` | sandwich estimator with a small-sample correction | consider **instead** when the covariance structure itself is doubtful — KR is model-based and gives a precise df for the model you specified, right or wrong |
-   | `CONTAIN`/`BETWITHIN`/`RESIDUAL` | defaults | fine in large balanced designs, where all methods converge; **also fine under `type=UN`, see below**; check the df in an unbalanced between-within design with a residual term |
+   | **`ddfm=kr2`** | Kenward-Roger with the Kenward & Roger (2009) precision estimator. Inflates the fixed-effect covariance matrix to allow for the covariance parameters having been *estimated*, **and** derives a Satterthwaite-type df from it — so it changes both F and `DenDF`. | **the LaBGAS standard**, everywhere |
+   | `ddfm=kr` | Kenward & Roger (1997). **Identical to `kr2` for a covariance structure that is linear in its parameters** — `UN`, `CS`, `VC`, `TOEP`, i.e. the LaBGAS common case. The two differ only for **nonlinear** structures — `AR(1)`, `ARH(1)`, `CSH`, `TOEPH`, `SP()` — where the KR second-order term *"can result in standard error shrinkage"* and the adjusted matrix *"can then be indefinite and is not invariant under reparameterization"* ([SAS](http://support.sas.com/documentation/cdl/en/statug/68162/HTML/default/statug_glimmix_details40.htm)). | only where `kr2` is unavailable |
+   | `ddfm=kr(firstorder)` | drops the second-derivative term from the adjustment | subsumed by `kr2`; no reason to choose it |
+   | `ddfm=satterth` | df adjustment only, no covariance correction | acceptable fallback: usually close to KR, and less prone to convergence trouble |
+   | `ddfm=contain` / `betwithin` / `residual` | the SAS defaults | fine in large balanced designs, and fine under `type=UN` (see below). Not wrong — but they do not allow for the covariance parameters having been estimated, and they leave the choice to SAS |
+   | `empirical=mbn` / `morel`<br/>(on the `PROC MIXED` statement, **not** `MODEL`) | sandwich estimator with a small-sample correction | consider it **instead** of KR when the covariance *structure* itself is doubtful — KR is model-based and gives a precise df for the model you specified, right or wrong |
 
-   KR is also computationally heavier and can be slow or fail with large
-   unstructured matrices.
+   Why `kr2` and not `kr` as the standard: for the structures we normally use
+   the two are the same estimator, so nothing moves; for the ones we
+   occasionally use they are not, and `kr2` is the one that behaves. It is a
+   strict superset, which is what makes a single blanket rule defensible. In a
+   Methods section write "second-order Kenward-Roger (Kenward & Roger 2009;
+   SAS `DDFM=KENWARDROGER2`)" — plain "Kenward-Roger" is now ambiguous.
+
+   KR and KR2 are computationally heavier than the defaults and can be slow or
+   fail with large unstructured matrices.
+
+   **The macro runs fine on any of these, the SAS defaults included.** Nothing
+   about the df method can stop it — every df diagnostic is `NOTE`/`WARNING`
+   text, never an abort. What changes is the *interpretation*, as above:
+   `partial_eta2` is conditioned on `DenDF`, so state the df method beside it.
 
    #### The unstructured case — read this before "fixing" a df method
 
@@ -478,6 +501,9 @@ more directly interpretable than any variance-explained measure.
 
    - Kenward MG, Roger JH. Small sample inference for fixed effects from
      restricted maximum likelihood. *Biometrics* 1997;53(3):983–997.
+   - Kenward MG, Roger JH. An improved approximation to the precision of fixed
+     effects from restricted maximum likelihood. *Comput Stat Data Anal*
+     2009;53:2583–2595.
    - Schaalje GB, McBride JB, Fellingham GW. Adequacy of approximations to
      distributions of test statistics in complex mixed linear models.
      *J Agric Biol Environ Stat* 2002;7(4):512–524.

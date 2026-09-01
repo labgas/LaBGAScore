@@ -149,7 +149,7 @@
  |
  |      proc mixed data = mydata;
  |          class id group time;
- |          model y = group|time / outpm = outpm_y ddfm = kr;
+ |          model y = group|time / outpm = outpm_y ddfm = kr2;
  |          repeated time / subject = id type = un;
  |          ods output tests3 = tests3_y;
  |      run;
@@ -165,7 +165,7 @@
  |
  |      proc mixed data = mydata;
  |          class id group time;
- |          model y = group|time / outpm = outpm_y outp = outp_y ddfm = kr;
+ |          model y = group|time / outpm = outpm_y outp = outp_y ddfm = kr2;
  |          random intercept / subject = id;
  |          ods output tests3 = tests3_y;
  |      run;
@@ -342,172 +342,109 @@
  |     Kenward-Roger df that N is an approximation, so treat the interval
  |     as approximate.
  |
- |  5. Choose a denominator-df method deliberately; do not leave it at
- |     the default.  Everything here depends on DenDF, so this is the
- |     single most consequential choice upstream of the macro.
+ |  5. Choose the denominator-df method deliberately.  Everything here
+ |     depends on DenDF, so this is the single most consequential choice
+ |     upstream of the macro.
  |
  |     ****************************************************************
- |     *  LaBGAS STANDARD:  ddfm = kr                                  *
+ |     *  LaBGAS STANDARD:  ddfm = kr2                                 *
  |     *                                                              *
- |     *  Specify it on the MODEL statement of every mixed or marginal *
- |     *  model unless there is a stated reason not to.  Fall back to  *
- |     *  ddfm = satterth if KR will not converge or is far too slow,  *
- |     *  and RECORD WHICH WAS USED -- the effect sizes depend on it.  *
+ |     *     model y = <effects> / ddfm = kr2 outpm = <out>;           *
+ |     *                                                              *
+ |     *  On the MODEL statement of every mixed or marginal model,     *
+ |     *  unless there is a stated reason not to.  Fall back in this   *
+ |     *  order, and RECORD WHICH WAS USED -- effect sizes depend on   *
+ |     *  it:                                                         *
+ |     *     kr2  ->  kr        (SAS/STAT older than 12.1 has no KR2)  *
+ |     *          ->  satterth  (KR will not converge, or is far too   *
+ |     *                         slow)                                *
  |     ****************************************************************
  |
- |     This is a decision about CONSISTENCY, not a claim that
- |     Kenward-Roger is universally best.  SAS picks one of two defaults
- |     for you depending on whether a RANDOM statement happens to be
- |     present, and the two are on completely different scales (below).
- |     Naming the method removes that accident, makes effect sizes
- |     comparable across models and papers, and buys the small-sample
- |     covariance correction as well.
+ |     Why a fixed standard: otherwise SAS picks one of two defaults FOR
+ |     you, decided by whether a RANDOM statement happens to be present,
+ |     and the two are on different SCALES --
  |
- |     Caveats: KR is designed for METHOD = REML; and it can be slow or
- |     fail on a large unstructured V, so if a RANDOM effect has no
- |     SUBJECT= option -- SAS then cannot block the problem -- fix the
- |     blocking before reaching for KR.
+ |       RANDOM present  -> CONTAIN    falls through to N - rank(XZ),
+ |                                     i.e. OBSERVATION-scale df
+ |       REPEATED only   -> BETWITHIN  SUBJECT-scale df for a
+ |                                     between-subject predictor
  |
- |     The point is NOT that Kenward-Roger is universally best.  It is
- |     that the default containment / between-within methods do not
- |     account for the fact that the covariance parameters were
- |     ESTIMATED.  In compound-symmetry and split-plot settings that can
- |     make them markedly anticonservative.  Note the important exception
- |     under UNSTRUCTURED covariance, below -- there the default df are
- |     close to exact, and KR earns its place for a different reason.
+ |     so the same data and the same F can give a partial eta-squared
+ |     several times smaller in one model than in the other.  Naming the
+ |     method removes that accident and buys the small-sample covariance
+ |     correction as well.  Full reasoning, the SAS quotes and a worked
+ |     contrast: README.md, "Choose a denominator-df method".
  |
- |     WHICH DEFAULT YOU GET IS DECIDED BY YOUR MODEL STATEMENTS, and
- |     the two defaults are on completely different scales.  Verified
- |     against the SAS documentation (MODEL statement, DDFM= option):
+ |     THE OPTIONS, AND HOW TO WRITE THEM
+ |     ................................................................
+ |     ddfm = kr2   Kenward-Roger with the Kenward & Roger (2009)
+ |                  precision estimator.  THE STANDARD.  Does two
+ |                  things: inflates the covariance matrix of the fixed
+ |                  effects to allow for the covariance parameters
+ |                  having been ESTIMATED, and derives a Satterthwaite-
+ |                  type df from it.  So it changes both F and DenDF.
+ |     ddfm = kr    Kenward & Roger (1997).  IDENTICAL to kr2 for a
+ |                  covariance structure that is linear in its
+ |                  parameters -- UN, CS, VC, TOEP, the LaBGAS common
+ |                  case.  The two differ only for NONLINEAR structures
+ |                  (AR(1), ARH(1), CSH, TOEPH, SP()), where the KR
+ |                  second-order term can SHRINK standard errors and is
+ |                  not invariant to reparameterisation.  Use kr only
+ |                  where kr2 is unavailable.
+ |     ddfm = kr(firstorder)   drops the second-derivative term.
+ |                  Subsumed by kr2; no reason to choose it.
+ |     ddfm = satterth   df adjustment only, no covariance correction.
+ |                  Acceptable fallback: usually close to KR, and less
+ |                  prone to convergence trouble.
+ |     ddfm = contain | betwithin | residual   the defaults.  Fine in
+ |                  large balanced designs, and fine under type=UN (see
+ |                  below).  Not wrong -- but they do not allow for the
+ |                  covariance parameters having been estimated, and
+ |                  they leave the choice to SAS.
+ |     empirical = mbn | morel   goes on the PROC MIXED statement, not
+ |                  the MODEL statement.  Consider it INSTEAD of KR when
+ |                  the covariance STRUCTURE itself is doubtful: KR is
+ |                  model-based, and gives a precise df for the model
+ |                  you specified, right or wrong.
  |
- |       "DDFM=CONTAIN ... is the default when you specify a RANDOM
- |        statement.  The DDFM=BETWITHIN option is the default for
- |        REPEATED statement specifications (with no RANDOM statements)."
+ |     Three conditions on KR / KR2:
+ |       * they are defined for METHOD = REML (the PROC MIXED default).
+ |         A likelihood-ratio test on FIXED effects needs ML, where KR
+ |         does not apply -- do not mix the two in one table.
+ |       * if a variance component is estimated at the boundary (0 in
+ |         Covariance Parameter Estimates), the adjustment is built on a
+ |         Hessian at that boundary.  Check before trusting the df.
+ |       * a RANDOM effect with no SUBJECT= spans subjects, so SAS
+ |         cannot block the problem and Dimensions reports Subjects = 1.
+ |         Fix the blocking before reaching for KR -- and note the macro
+ |         cannot use that subject count, which is why NSUBJECTS=
+ |         exists.
  |
- |       CONTAIN   an effect takes the df of the smallest RANDOM effect
- |                 that CONTAINS it.  "If no effects are found, the DDF
- |                 for A is set equal to the residual degrees of freedom,
- |                 N - rank(XZ)."  A subject-level predictor is contained
- |                 by no G-side random effect unless one is nested in
- |                 subject, so it falls through to OBSERVATION-scale df.
- |       BETWITHIN divides the residual df into between- and
- |                 within-subject portions, then "checks whether a fixed
- |                 effect changes within any subject.  If so, it assigns
- |                 within-subject degrees of freedom to the effect;
- |                 otherwise, it assigns the between-subject degrees of
- |                 freedom."  A between-subject predictor therefore gets
- |                 SUBJECT-scale df.
+ |     UNDER type = UN, DO NOT "FIX" THE DEFAULT.  BETWITHIN prints the
+ |     same DenDF for every effect there, and that is very nearly right:
+ |     the exact multivariate df are n - rank for between-subject
+ |     effects and n - rank - q + 1 for within-subject ones, so SAS is
+ |     out by a couple of df (161 against 159 in a verified 164 x 4
+ |     design; at most 0.006 on partial eta-squared).  KR2 still earns
+ |     its place there -- for the covariance correction, not the df --
+ |     and will move F, and so the effect sizes, slightly DOWNWARD.
+ |     Do NOT expect a within-subject df of n*t - n - rank; that is the
+ |     compound-symmetry answer and does not apply under UN.
  |
- |     https://documentation.sas.com/doc/en/pgmsascdc/v_078/statug/
- |       statug_mixed_syntax10.htm#statug.mixed.modelstmt_ddfm
- |
- |     THE CONTRAST THAT MATTERS, schematically.  Two repeated-measures
- |     models of the same shape, differing by one statement:
- |
- |       repeated <time> / subject=<id> type=un;          (no RANDOM)
- |         -> Between-Within.  A between-subject predictor gets
- |            SUBJECT-scale df, ~ n_subjects - rank(between-X).
- |
- |       repeated <time> / subject=<id> type=un;
- |       random   <grp>;                                  (RANDOM present)
- |         -> Containment.  If <grp> contains no fixed effect -- which is
- |            the usual case for a grouping ABOVE subject, such as site,
- |            study or batch -- every fixed effect falls through to the
- |            residual df, N - rank(XZ), on the OBSERVATION scale.  A
- |            subject-level predictor then carries far more denominator df
- |            than there are subjects.
- |
- |     Same data, same covariance structure, same F values -- but partial
- |     eta-squared computed from the second can be several times smaller
- |     than from the first, because it is conditioned on DenDF.  Nothing
- |     about the TEST changes.  See section 6ab for how the macro flags it.
- |
- |     A related trap in the same situation: a RANDOM effect with no
- |     SUBJECT= option spans subjects, so SAS cannot block the problem and
- |     the Dimensions table reports Subjects = 1 with Max Obs per Subject
- |     = N.  The subject count is then NOT a usable bound, which is why
- |     NSUBJECTS= exists and why the macro refuses to use a reported
- |     Subjects <= 1.
- |
- |       DDFM = KR    Kenward-Roger.  Does two things: inflates the
- |                    covariance matrix of the fixed effects to allow for
- |                    estimated variance parameters, AND derives a
- |                    Satterthwaite-type df from it.  So it changes both
- |                    F and DenDF.  Designed for METHOD = REML.  The best
- |                    default for small-to-moderate N with UN or other
- |                    rich structures -- which is the LaBGAS common case.
- |       DDFM = KR2   Kenward-Roger with the 2009 bias adjustment.
- |       DDFM = SATTERTH   df adjustment only, without the covariance
- |                    correction.  Acceptable; usually close to KR, and
- |                    less prone to convergence trouble.
- |       EMPIRICAL = MBN | MOREL   worth considering INSTEAD when the
- |                    covariance structure itself is doubtful.  KR is
- |                    model-based: it gives a precise df for the model
- |                    you specified, correct or not.
- |       CONTAIN / BETWITHIN / RESIDUAL   fine in large balanced designs,
- |                    where all methods converge.  In an unbalanced
- |                    between-within design, check the df before trusting
- |                    them.
- |
- |     ----------------------------------------------------------------
- |     THE UNSTRUCTURED CASE -- read this before "fixing" a df method
- |     ----------------------------------------------------------------
- |     With  repeated <time> / subject=<id> type=UN  the Model
- |     Information table shows
- |
- |         Covariance Structure       Unstructured
- |         Residual Variance Method   None
- |         Degrees of Freedom Method  Between-Within
- |
- |     and SAS then prints THE SAME DenDF for every effect, because with
- |     a saturated R-side matrix there is no residual variance left over
- |     and BETWITHIN has no within-subject stratum to draw on.  It falls
- |     back to the between-subject df, n_subjects - rank(between-X), for
- |     all effects.
- |
- |     THAT IS VERY NEARLY CORRECT, and it is NOT the pathology it looks
- |     like.  Under UN the independent units are the SUBJECTS, for a
- |     within-subject contrast as much as for a between-subject one: the
- |     estimator is a mean of within-subject differences over n people,
- |     not an average over n*t quasi-independent observations.  The exact
- |     multivariate (Hotelling / Wilks) denominator df are
- |
- |         between-subject effect :  n - rank(between-X)
- |         within-subject effect  :  n - rank(between-X) - q + 1
- |
- |     Verified against the exact multivariate test on a simulated
- |     164-subject x 4-timepoint design with a deliberately non-spherical
- |     UN covariance: exact df were 161 (between) and 159 (within), where
- |     SAS BETWITHIN printed 161 throughout.  Two df out of 160.  The
- |     effect on partial eta-squared was at most 0.006, in the third
- |     decimal.
- |
- |     DO NOT expect a within-subject df of n*t - n - rank here.  That is
- |     the compound-symmetry / split-plot answer and it does not apply
- |     under UN; assuming it overstates the correction several-fold.
- |
- |     So under UN the reason to request KR is NOT the degrees of
- |     freedom, which are already close to exact.  It is the OTHER thing
- |     KR does: inflating the fixed-effects covariance matrix to allow
- |     for the covariance parameters having been estimated -- 10 of them
- |     for four timepoints.  Expect KR to move F, and hence p and the
- |     effect sizes, slightly DOWNWARD.  It matters most with
- |     substantial missingness.
- |
- |     Sanity check for OTHER structures (CS, VC, AR(1) with a residual):
- |     there a within-subject effect should carry substantially MORE
- |     denominator df than a between-subject one.  If every effect shows
- |     the same DenDF and the structure is NOT unstructured, the df
- |     method is not stratifying and the table needs checking.
- |
- |     The macro prints a NOTE when every DenDF is a whole number, which
- |     usually means neither KR nor Satterthwaite was requested.
+ |     THE MACRO RUNS FINE ON ANY OF THESE, defaults included.  Nothing
+ |     about the df method can stop it -- the df diagnostics are NOTE
+ |     and WARNING text only.  What changes is the INTERPRETATION:
+ |     partial eta-squared is conditioned on DenDF and has no df-free
+ |     value, so report the df method beside the effect size.
  |
  |     Kenward MG, Roger JH. Small sample inference for fixed effects
- |     from restricted maximum likelihood. Biometrics 1997;53(3):983-997.
- |     Schaalje GB, McBride JB, Fellingham GW. Adequacy of approximations
- |     to distributions of test statistics in complex mixed linear
- |     models. J Agric Biol Environ Stat 2002;7(4):512-524.
+ |     from restricted maximum likelihood. Biometrics 1997;53:983-997.
+ |     Kenward MG, Roger JH. An improved approximation to the precision
+ |     of fixed effects from restricted maximum likelihood.
+ |     Comput Stat Data Anal 2009;53:2583-2595.
+ |     Schaalje GB, McBride JB, Fellingham GW. Adequacy of
+ |     approximations to distributions of test statistics in complex
+ |     mixed linear models. J Agric Biol Environ Stat 2002;7:512-524.
  |     (Verify page numbers before citing.)
  |
  |  ---------------------------------------------------------------------
@@ -1155,36 +1092,21 @@
             select max(nobs_dendf) into :_worst trimmed
               from &out where nobs_dendf is not missing;
         quit;
-        %put WARNING: (mixed_effectsize) ETA2_METHOD=FROM_F reconstructs SS_effect as NumDF x F x MSE.;
-        %put WARNING- That is exact only in a fixed-effects ANOVA. For a mixed or marginal model it is not:;
-        %put WARNING-   (a) MSE = SS_error/DenDF is taken over all N_obs residuals (worst N_obs/DenDF here: &_worst);
-        %put WARNING-   (b) F from PROC MIXED is a Wald statistic on GLS estimates, not a ratio of;
-        %put WARNING-       orthogonal sums of squares, so it need not match the OLS F at all.;
-        %put WARNING- The net error is the PRODUCT of the two and is not predictable from the df. In a;
-        %put WARNING- simulated 120x4 design the between-subject effect was out by 1.3x and the WITHIN-;
-        %put WARNING- subject effects by 4.5x, despite the within rows having the SMALLER N_obs/DenDF.;
-        %put WARNING- Report PARTIAL_ETA2 / PARTIAL_OMEGA2 / PARTIAL_EPSILON2, or rerun with ETA2_METHOD=DIRECT.;
-        %put WARNING- Those three are NOT affected: they use only NumDF, DenDF and FValue.;
+        %put WARNING: (mixed_effectsize) ETA2_METHOD=FROM_F reconstructs SS_effect as NumDF x F x MSE,;
+        %put WARNING- which is exact only in a fixed-effects ANOVA. Here it can be out by several fold;
+        %put WARNING- in EITHER direction -- worst N_obs/DenDF on this table: &_worst -- and the error;
+        %put WARNING- is NOT predictable from the df. Report PARTIAL_ETA2 / PARTIAL_OMEGA2 /;
+        %put WARNING- PARTIAL_EPSILON2, which are unaffected, or rerun with ETA2_METHOD=DIRECT.;
+        %put WARNING- The measured errors: README.md, "Caveats to state in a Methods section", item 2.;
     %end;
 
     /*-- 6ab. Between-subject effects tested on observation-scale df -------*
      |  A BETWEEN-subject effect has at most one independent unit per
      |  subject, so a DenDF above the subject count puts it on the
-     |  OBSERVATION scale rather than the subject scale.
-     |
-     |  This does NOT make the test wrong.  The model-based standard error
-     |  already uses the fitted covariance structure, so the estimate, its
-     |  SE and the p value are unaffected in any material way.
-     |
-     |  What it means is that PARTIAL ETA-SQUARED for those rows is
-     |  CONDITIONED ON THE DF METHOD.  A mixed model has no sum-of-squares
-     |  decomposition, so partial eta-squared has no df-free value: it is
-     |  DEFINED through F and DenDF (Edwards et al. R2_beta).  Under
-     |  subject-scale df the same F gives a value roughly DENDF_RATIO times
-     |  larger.  Neither is the truth; they answer the question with
-     |  different denominators.  Report the df method beside the effect
-     |  size, or report an estimate with a confidence interval, which does
-     |  not depend on the df method at all.
+     |  OBSERVATION scale.  The TEST is not wrong -- the model-based SE
+     |  already uses the fitted covariance -- but PARTIAL_ETA2 is then
+     |  conditioned on the df method.  See README.md, "Choose a
+     |  denominator-df method", for what to report.
      *-------------------------------------------------------------------*/
     %if &_havesub = 1 %then %do;
         %local _nover _worstratio _overlist;
@@ -1205,29 +1127,16 @@
             %put WARNING- Effects: &_overlist;
             %put WARNING- Worst DenDF/subjects ratio: &_worstratio..;
             %if %superq(between) ne %then %do;
-            %put WARNING- These were declared BETWEEN-subject via BETWEEN=. Such an effect has at most;
-            %put WARNING- one independent unit per subject, so its DenDF here is on the OBSERVATION;
-            %put WARNING- scale rather than the subject scale.;
-            %put WARNING- This does NOT make the test wrong. The GLS standard error already uses the;
-            %put WARNING- fitted covariance structure, so the estimate, its SE and the p-value are;
-            %put WARNING- unaffected in any material way.;
-            %put WARNING- What it means is that PARTIAL_ETA2 for those rows is CONDITIONED ON THE DF;
-            %put WARNING- METHOD. A mixed model has no sum-of-squares decomposition, so partial;
-            %put WARNING- eta-squared has no df-free value -- it is defined through F and DenDF;
-            %put WARNING- (Edwards et al. R2_beta). Under subject-scale df the SAME F would give a;
-            %put WARNING- value roughly DENDF_RATIO times larger. Neither is "the truth"; they answer;
-            %put WARNING- the question with different denominators.;
-            %put WARNING- Either state the df method beside the effect size, or report an estimate;
-            %put WARNING- with a confidence interval, which does not depend on the df method at all.;
+            %put WARNING- Declared BETWEEN-subject via BETWEEN=, so these are on OBSERVATION-scale df.;
             %end;
             %else %do;
-            %put WARNING- Declare which effects are between-subject with BETWEEN= to sharpen this.;
-            %put WARNING- For a WITHIN-subject effect a DenDF above the subject count can be correct;
-            %put WARNING- under compound symmetry, but NOT under an unstructured covariance, where;
-            %put WARNING- the independent units are the subjects for within-subject contrasts too.;
-            %put WARNING- Either way PARTIAL_ETA2 is conditioned on the df method, not wrong; see the;
-            %put WARNING- BETWEEN= wording above for how to report it.;
+            %put WARNING- Pass BETWEEN= to sharpen this. A WITHIN-subject effect may legitimately;
+            %put WARNING- exceed the subject count under compound symmetry, but not under UN.;
             %end;
+            %put WARNING- The TEST is unaffected -- the GLS standard error already uses the fitted;
+            %put WARNING- covariance. PARTIAL_ETA2 is CONDITIONED on the df method and has no df-free;
+            %put WARNING- value: state the method beside it, or report an estimate with a CI instead.;
+            %put WARNING- Why: README.md, "Choose a denominator-df method".;
             %if %superq(_ddfm) ne %then
             %put WARNING- Degrees of Freedom Method in this fit: &_ddfm..;
         %end;
@@ -1237,13 +1146,10 @@
     /*-- 6ac. Containment fall-through -------------------------------------*/
     %if %superq(_ddfm) ne %then %do;
         %if %index(%upcase(&_ddfm), CONTAIN) > 0 %then %do;
-            %put NOTE: (mixed_effectsize) DDFM=CONTAINMENT is in force -- SAS uses it by DEFAULT;
-            %put NOTE- whenever a RANDOM statement is present (BETWEEN-WITHIN is the default for a;
-            %put NOTE- REPEATED statement with no RANDOM). Under containment a fixed effect gets the;
-            %put NOTE- df of the smallest RANDOM effect that CONTAINS it, and if none does it falls;
-            %put NOTE- through to the residual df, N - rank(XZ) -- which is on the OBSERVATION scale.;
-            %put NOTE- A subject-level predictor is typically contained by no G-side random effect,;
-            %put NOTE- so it lands on observation-scale df. See ASSUMPTIONS 5 in the macro header.;
+            %put NOTE: (mixed_effectsize) DDFM=CONTAINMENT is in force -- the SAS default whenever a;
+            %put NOTE- RANDOM statement is present. An effect contained by no RANDOM effect falls;
+            %put NOTE- through to the residual df, N - rank(XZ), on the OBSERVATION scale, which a;
+            %put NOTE- subject-level predictor usually does. LaBGAS standard is DDFM=KR2 -- README.md.;
             %if %superq(_colz) ne %then %put NOTE-   Columns in Z = &_colz (a RANDOM statement is active).;
         %end;
     %end;
@@ -1256,17 +1162,11 @@
     quit;
     %if %superq(_fracdf) ne and %superq(_fracdf) ne . %then %do;
         %if &_fracdf = 0 %then %do;
-            %put NOTE: (mixed_effectsize) Every DenDF is a whole number, so the denominator df were;
-            %put NOTE- probably left at the default -- neither DDFM=KR nor DDFM=SATTERTH was requested.;
-            %put NOTE- The LaBGAS standard is DDFM=KR on every mixed or marginal model, so that effect;
-            %put NOTE- sizes are comparable across models rather than depending on which default SAS;
-            %put NOTE- happened to pick. If KR was deliberately not used, record why.;
-            %put NOTE- Under an UNSTRUCTURED covariance the default BETWEEN-WITHIN df are close to the;
-            %put NOTE- exact multivariate values and need no correction; requesting KR there buys the;
-            %put NOTE- small-sample covariance adjustment, which moves F rather than DenDF.;
-            %put NOTE- Under CS / VC / AR(1) with a residual term, the defaults do not allow for the;
-            %put NOTE- covariance parameters having been ESTIMATED and can be anticonservative.;
-            %put NOTE- See ASSUMPTIONS 5 in the macro header before changing anything.;
+            %put NOTE: (mixed_effectsize) Every DenDF is a whole number, so the df were probably left;
+            %put NOTE- at the SAS default -- neither KR/KR2 nor SATTERTH was requested. The LaBGAS;
+            %put NOTE- standard is DDFM=KR2 on every mixed or marginal model. If it was deliberately;
+            %put NOTE- not used, record why. Under type=UN the default df are close to exact and need;
+            %put NOTE- no correction -- see README.md, "Choose a denominator-df method".;
         %end;
     %end;
 
@@ -1280,14 +1180,10 @@
     %if %superq(_ndistinct) ne and %superq(_neff) ne %then %do;
         %if &_ndistinct = 1 and &_neff > 1 %then %do;
             %put NOTE: (mixed_effectsize) All &_neff effects share the same DenDF.;
-            %put NOTE- If the covariance structure is UNSTRUCTURED this is EXPECTED and very nearly;
-            %put NOTE- correct: with a saturated R-side there is no residual variance, so BETWEEN-WITHIN;
-            %put NOTE- uses n_subjects - rank(between-X) for every effect. The exact multivariate df are;
-            %put NOTE- n - rank for between-subject effects and n - rank - q + 1 for within-subject ones,;
-            %put NOTE- a difference of a couple of df. Do not "fix" it, and do NOT expect a within df of;
-            %put NOTE- n*t - n - rank; that is the compound-symmetry answer and does not apply under UN.;
-            %put NOTE- If the structure is CS, VC or AR(1) WITH a residual term, one value for every;
-            %put NOTE- effect does indicate the df method is not stratifying. Check Model Information.;
+            %put NOTE- Under an UNSTRUCTURED covariance that is EXPECTED and very nearly correct --;
+            %put NOTE- do not "fix" it. Under CS, VC or AR(1) WITH a residual term it does indicate;
+            %put NOTE- that the df method is not stratifying. Check Model Information, and see;
+            %put NOTE- README.md, "Choose a denominator-df method".;
         %end;
     %end;
 
