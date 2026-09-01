@@ -21,28 +21,60 @@ cross-dependencies.
 
 ## Why these exist
 
-An earlier in-house script (*Calculation of effect size following marginal
-linear mixed models*, B. Dalile, 3 December 2021) computed three statistics —
-`eta_2`, `omega_2` and `partial_eta_2` — and it was easy to report one of them
-under the name of another. It also contained a bug. The error sum of squares
-was formed as
+The method previously used in this lab comes from a published SAS Users Group
+paper — Tippey KG & Longnecker MT, *An Ad Hoc Method for Computing Pseudo-Effect
+Size for Mixed Models*, Texas A&M University — by way of an in-house adaptation
+(*Calculation of effect size following marginal linear mixed models*,
+B. Dalile, 3 December 2021).
+
+It computes three statistics — `eta_2`, `omega_2` and `partial_eta_2` — into one
+dataset, so it is easy to report one of them under the name of another. It also
+forms the error sum of squares as
 
 ```sas
 ss_error = mse * (_freq_ - numdf);
 ```
 
 which uses the **number of observations** minus the effect's **numerator**
-degrees of freedom, where the model's **denominator** degrees of freedom
-belong. Substituting the definitions, the `mse` cancels out entirely and the
-expression reduces to
+degrees of freedom, where the model's **denominator** degrees of freedom belong.
+**That line is verbatim in the published macro's appendix** — this is a defect
+in the method as published, not a local slip, and any analysis built on that
+paper inherits it.
+
+### When it bites, and when it does not
+
+Substituting the definitions, the `mse` cancels out entirely and the expression
+reduces to
 
 ```
 numdf*F / (numdf*F + N_obs - numdf)
 ```
 
-In a repeated-measures design with ~660 observations and a denominator df of
-~161, that inflates the denominator roughly fourfold and shrinks partial
-eta-squared by the same factor.
+against the correct `numdf*F / (numdf*F + DenDF)`. **The two agree if and only if
+`N_obs - numdf = DenDF`** — an accident of design, not a property of the method:
+
+| Design | `DenDF` driven by | Result |
+|---|---|---|
+| No between-subject factor (e.g. within-subject time × a covariate) | observations | `N_obs - q` lands within a few units of `DenDF`; the error vanishes into the third decimal |
+| **Between-subject factor in a repeated design** | participants | `N_obs` and `DenDF` diverge by the number of repeats per participant |
+
+That is why analyses of the first kind validate cleanly against this macro, and
+why the bug survived so long.
+
+The published paper's own worked example shows it. Case 1 (fev1: 72 patients ×
+8 hours = 576 observations) reports partial eta-squared .029 / .082 / .057 for
+Drug / Hour / Drug×Hour. Recomputed against the design's real denominator df:
+
+| Effect | published | correct | error |
+|---|---|---|---|
+| Drug (**between**) | 0.029 | 0.199 | **6.9×** |
+| Hour (within) | 0.082 | 0.095 | 1.2× |
+| Drug×Hour (within) | 0.057 | 0.066 | 1.2× |
+
+When auditing an old results table, the question is therefore not *"was this
+script used"* but *"does the effect being reported cross subjects"*.
+
+### The fix
 
 Partial eta-squared needs **nothing but the Type 3 table**, because `PROC
 MIXED` already reports the Kenward-Roger or Satterthwaite denominator df

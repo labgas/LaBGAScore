@@ -5,11 +5,59 @@
  |  degrees of freedom, work out which statistic it actually is.
  |
  |  Written for auditing existing results tables -- including tables
- |  produced by the older in-house effect-size script, in which the
- |  quantity reported as "partial eta-squared" was in fact eta-squared.
+ |  produced by the older effect-size script, in which the quantity
+ |  reported as "partial eta-squared" was in fact eta-squared.
  |
  |  Companion file:  mixed_effectsize.sas  -- computes effect sizes
  |  correctly for new analyses.
+ |
+ |  ---------------------------------------------------------------------
+ |  PROVENANCE -- WHAT YOU ARE ACTUALLY AUDITING
+ |  ---------------------------------------------------------------------
+ |  The old script derives from a published SAS Users Group paper:
+ |
+ |      Tippey KG, Longnecker MT.  An Ad Hoc Method for Computing
+ |      Pseudo-Effect Size for Mixed Models.  Texas A&M University.
+ |
+ |  The line  ss_error = mse * (_freq_ - numdf);  is verbatim in that
+ |  paper's macro appendix.  So this is a defect in the method as
+ |  published, and tables from ANY project built on it are candidates for
+ |  audit -- not only ones using the local adaptation.
+ |
+ |  ---------------------------------------------------------------------
+ |  WHEN THE OLD FORMULA IS ACCIDENTALLY RIGHT
+ |  ---------------------------------------------------------------------
+ |  The old partial_eta_2 reduces to  qF / (qF + _freq_ - q).  The correct
+ |  value is  qF / (qF + DenDF).  They agree IF AND ONLY IF
+ |
+ |      _freq_ - q  =  DenDF
+ |
+ |  which is a property of the DESIGN, not of the code:
+ |
+ |    * NO between-subject factor -- a within-subject time factor crossed
+ |      with a covariate, say.  DenDF is observation-driven, so _freq_ - q
+ |      lands within a few units of it and the error disappears into the
+ |      third decimal.  Such tables audit clean.  This is why the bug
+ |      survived: whole projects can validate perfectly.
+ |    * A BETWEEN-subject factor in a repeated design.  DenDF is
+ |      participant-driven while _freq_ counts observations; they diverge
+ |      by the number of repeats per participant.
+ |
+ |  The published paper's own Case 1 (fev1, 72 patients x 8 hours = 576
+ |  observations) demonstrates it: recomputed against the design's real
+ |  denominator df, the two WITHIN-subject effects move by 1.2x and the
+ |  BETWEEN-subject Drug effect by 6.9x (.029 -> .199).
+ |
+ |  SO: when auditing an old table, the question is not "was this script
+ |  used" but "does the effect being reported cross subjects".  Audit
+ |  between-subject rows first.
+ |
+ |  A caution on eta-squared specifically: the constant-ratio test below
+ |  identifies WHICH statistic was reported, but it cannot tell you
+ |  whether the eta-squared itself was computed from the right variable.
+ |  A copy-paste error that feeds another outcome's variance into
+ |  ss_total changes only the constant, so every row stays mutually
+ |  consistent and the test passes.  Check the source code too.
  |
  |  ---------------------------------------------------------------------
  |  THE THREE CANDIDATES

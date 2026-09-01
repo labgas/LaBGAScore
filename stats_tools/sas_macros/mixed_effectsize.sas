@@ -21,17 +21,49 @@
  |  ---------------------------------------------------------------------
  |  WHY THIS EXISTS
  |  ---------------------------------------------------------------------
- |  An earlier in-house script computed three statistics and it was easy to
- |  report one of them under the name of another. It also contained a bug:
- |  the error sum of squares was formed as
+ |  The method previously used in this lab comes from a published SAS
+ |  Users Group paper:
+ |
+ |      Tippey KG, Longnecker MT.  An Ad Hoc Method for Computing
+ |      Pseudo-Effect Size for Mixed Models.  Texas A&M University.
+ |
+ |  Its macro computes three statistics -- eta_2, omega_2 and
+ |  partial_eta_2 -- into one dataset, so it is easy to report one of them
+ |  under the name of another.  It also forms the error sum of squares as
  |
  |      ss_error = mse * (_freq_ - numdf);
  |
  |  which uses the NUMBER OF OBSERVATIONS minus the effect's NUMERATOR
  |  degrees of freedom, where the model's DENOMINATOR degrees of freedom
- |  belong.  In a repeated-measures design with ~660 observations and a
- |  denominator df of ~161, that inflates the denominator roughly fourfold
- |  and shrinks partial eta-squared by the same factor.
+ |  belong.  That line is verbatim in the published macro's appendix, so
+ |  this is a defect in the method as published, not a local slip -- and
+ |  any analysis built on that paper inherits it.
+ |
+ |  WHEN IT BITES, AND WHEN IT DOES NOT.  The mse cancels, leaving
+ |
+ |      partial_eta_2 = qF / (qF + _freq_ - q)
+ |
+ |  against the correct qF / (qF + DenDF).  The two AGREE if and only if
+ |  _freq_ - q = DenDF.  That is an accident of design:
+ |
+ |    * No between-subject factor -- e.g. a within-subject time factor
+ |      crossed with a covariate.  DenDF is observation-driven, lands
+ |      within a few units of _freq_ - q, and the error disappears into
+ |      the third decimal.  Such analyses validate cleanly against this
+ |      macro, which is why the bug survived so long.
+ |    * A BETWEEN-subject factor in a repeated design.  DenDF is
+ |      participant-driven while _freq_ counts observations, and the two
+ |      diverge by the number of repeats per participant.
+ |
+ |  The published paper's own worked example shows this.  Its Case 1
+ |  (fev1: 72 patients x 8 hours = 576 observations) reports partial
+ |  eta-squared .029 / .082 / .057 for Drug / Hour / Drug*Hour.  Recomputed
+ |  against the design's real denominator df: the two WITHIN-subject
+ |  effects move by 1.2x, the BETWEEN-subject Drug effect by 6.9x
+ |  (.029 -> .199).
+ |
+ |  So when auditing an old table, the question is not "was this script
+ |  used" but "does the effect being reported cross subjects".
  |
  |  This macro never touches _FREQ_.  Partial eta-squared needs nothing but
  |  the Type 3 table, because PROC MIXED already reports the Kenward-Roger
