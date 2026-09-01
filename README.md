@@ -10,6 +10,7 @@ Core scripts (and templates for them) for LaBGAS's (Laboratory for Brain-Gut Axi
 - [Dependencies](#dependencies)
 - [Domain-by-domain overview](#domain-by-domain-overview)
 - [Relationship to `CANlab_help_examples` (LaBGAS fork)](#relationship-to-canlab_help_examples-labgas-fork)
+- [Provenance and dependency documentation](#provenance-and-dependency-documentation)
 - [Tests and CI](#tests-and-ci)
 - [License](#license)
 
@@ -121,6 +122,53 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 | `LaBGAScore_atlas_rois_from_atlas.m` (`atlas_mask_tools/`) | referenced via `roi_names`/`roi_modelname`/`roi_set_name` options | Generates per-ROI atlas objects for ROI-average analysis |
 
 In short: LaBGAScore owns study setup, first-level modeling, and atlas/mask generation; `CANlab_help_examples` (LaBGAS fork) owns the second-level/group analysis templates built on top of LaBGAScore's outputs. For that repo's own internals, see its own [`README.md`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/README.md) under `Second_level_analysis_template_scripts/`.
+
+## Provenance and dependency documentation
+
+Scripts are copied into a study's `code` subdataset and frozen there, but their
+**dependencies are not**: CanlabCore, our fork of CANlab_help_examples, CanlabPrivate and
+the rest are shared clones that keep moving. `clean/` holds tooling that closes that gap.
+See **[`clean/README_provenance.md`](clean/README_provenance.md)** for the full guide.
+
+**Record provenance when you publish a script** — replace the `publish` call documented in
+each script header:
+
+```matlab
+LaBGAScore_prov_publish('my_secondlevel_script', htmlsavedir)
+```
+
+The html report gains a Provenance section listing the commit of every dependency the
+script reaches, plus the screen and figure dimensions it was produced at, and a
+machine-readable copy lands in the model's `results/notes/`.
+
+**Reconstruct provenance for analyses already run** with
+`LaBGAScore_prov_resolve_retrospective`, which recovers the same information from each
+artifact's own embedded date and each clone's git reflog. It writes sidecar files and
+never modifies the existing ones.
+
+It covers **result `.mat` files as well as published reports** — only a few scripts per
+model are ever published, so reports alone would leave most of the pipeline undocumented.
+Output is one page per *run*, grouping a script's report with the `.mat` files it wrote and
+ranking them by how well each is dated.
+
+**Check your display before publishing.** `publish()` captures figures from the screen, so
+your X2go window size and DPI decide how figures in the report come out:
+
+```matlab
+LaBGAScore_check_display        % what can this session produce, and what to change
+```
+
+Recommended settings per screen size are in
+[`LaBGAS_fMRI_analysis_workflow.md`](LaBGAS_fMRI_analysis_workflow.md#2-set-up-your-x2go-display-for-publishing-figures).
+
+> **Run [`clean/labgascore_prov_protect_reflogs.sh`](clean/labgascore_prov_protect_reflogs.sh)
+> once per machine.** Git prunes reflogs after 90 days by default, silently. The reflog is
+> the only record of which commit a clone actually had checked out at a past moment, and it
+> cannot be reconstructed afterwards.
+
+**[`DEPENDENCIES.md`](DEPENDENCIES.md)** documents what every script in this repo calls and
+which repository each of those lives in. It, `dependencies.tsv` and `dependencies.yml` are
+**generated** by `clean/LaBGAScore_dep_report.m` — regenerate them rather than editing.
 
 ## Tests and CI
 
