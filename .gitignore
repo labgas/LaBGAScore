@@ -5,3 +5,7 @@
 # Only the per-machine settings file is ignored: CLAUDE.md and any shared
 # .claude/ content (commands, agents) stay tracked deliberately.
 **/.claude/settings.local.json
+
+# Machine-local dependency index cache built by clean/LaBGAScore_dep_build_index.m.
+# Large, host-specific, and regenerated on demand - never committed.
+clean/.dep_index_*.mat
