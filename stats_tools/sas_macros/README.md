@@ -328,8 +328,10 @@ more directly interpretable than any variance-explained measure.
        -> Containment. 'study' contains nothing, so every fixed effect gets
           N - rank(XZ) = 1606 -- including the subject-level microbiome
           predictors. With ~203 subjects those main effects are
-          pseudo-replicated in the df and their partial eta-squared is ~8x
-          too small.
+          on observation-scale df. With ~203 subjects, subject-scale df
+          would be ~201, and the SAME F values would give partial
+          eta-squared ~8x larger for those predictors and ~2x larger for
+          the within-subject time effects. The tests are unaffected.
 
    repeated Time / subject=Participant_ID type=un;   (no RANDOM)
        -> Between-Within. Subject-scale df, 161 with 164 participants.
@@ -361,14 +363,33 @@ more directly interpretable than any variance-explained measure.
 
    | Check | Fires when |
    |---|---|
-   | **Between-subject df bound** | any effect (or any named in `between=`) has `DenDF` > the subject count. A between-subject effect has at most one independent unit per subject, so this is pseudo-replication in the df, whatever the covariance structure. New `dendf_ratio` column. |
+   | **Between-subject df bound** | any effect (or any named in `between=`) has `DenDF` > the subject count. Such an effect has at most one independent unit per subject, so its `DenDF` is on the observation scale rather than the subject scale. New `dendf_ratio` column. |
    | **Containment fall-through** | `Degrees of Freedom Method` is Containment — explains that a subject-level predictor lands on observation-scale df, and reports `Columns in Z`. |
    | **Unusable subject count** | Dimensions reports `Subjects = 1`, i.e. SAS could not block; asks for `nsubjects=`. |
 
-   The F test itself is usually about right in these cases — the model-based
-   standard error already uses the fitted covariance structure — so p-values
-   move very little. It is `partial_eta2` that does not survive, because it
-   depends on `DenDF` directly.
+   **None of this makes the test wrong.** The GLS standard error already uses
+   the fitted covariance structure, so the estimate, its SE and the p-value are
+   unaffected in any material way — moving the microbiome predictors to
+   subject-scale df shifts p from 0.5859 to 0.5845.
+
+   What it means is that **`partial_eta2` is conditioned on the df method**. A
+   mixed model has no sum-of-squares decomposition, so partial eta-squared has
+   no df-free value: it is *defined* through F and `DenDF` (Edwards et al.'s
+   R²_β, cited below). Under subject-scale df the same F gives a value roughly
+   `dendf_ratio` times larger. Neither is "the truth" — they answer the question
+   with different denominators.
+
+   Two ways to report responsibly without re-fitting anything:
+
+   - state the df method beside the effect size, so a reader can recompute it
+     from the F and df in the same table; or
+   - report an **estimate with a confidence interval** for the effects in
+     question, which does not depend on the df method at all. For a continuous
+     or two-level predictor that is more interpretable than any
+     variance-explained measure anyway.
+
+   `eta2_method = DIRECT` is a third route: a real Type III sum-of-squares
+   decomposition is df-independent by construction.
 
    | Option | What it does | When |
    |---|---|---|

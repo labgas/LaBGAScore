@@ -386,9 +386,12 @@
  |       repeated Snum / subject=ppNrs type=un;  random study;
  |         -> Containment.  'study' contains nothing, so every fixed
  |            effect gets N - rank(XZ) = 1606, including the SUBJECT-LEVEL
- |            microbiome predictors.  With ~203 subjects those main
- |            effects are pseudo-replicated in the df and their partial
- |            eta-squared is about 8x too small.
+ |            microbiome predictors.  With ~203 subjects, subject-scale df
+ |            would be ~201, and the SAME F values would then give partial
+ |            eta-squared about 8x larger for those predictors and about 2x
+ |            larger for the within-subject time effects.  The TESTS are
+ |            unaffected; only the effect sizes move, because they are
+ |            conditioned on the df method.
  |       repeated Time / subject=Participant_ID type=un;  (no RANDOM)
  |         -> Between-Within.  Effects get subject-scale df, 161 with 164
  |            participants.  Correct.
@@ -1138,14 +1141,23 @@
     %end;
 
     /*-- 6ab. Between-subject effects tested on observation-scale df -------*
-     |  The hard bound: a BETWEEN-subject effect has at most one independent
-     |  unit per subject, so its denominator df cannot legitimately exceed
-     |  the subject count.  DenDF above it means repeated observations on the
-     |  same person are being counted as independent -- pseudo-replication in
-     |  the degrees of freedom.  The F test itself is usually fine, because
-     |  the model-based standard error already uses the fitted covariance
-     |  structure; it is PARTIAL ETA-SQUARED that does not survive, since it
-     |  depends on DenDF directly.
+     |  A BETWEEN-subject effect has at most one independent unit per
+     |  subject, so a DenDF above the subject count puts it on the
+     |  OBSERVATION scale rather than the subject scale.
+     |
+     |  This does NOT make the test wrong.  The model-based standard error
+     |  already uses the fitted covariance structure, so the estimate, its
+     |  SE and the p value are unaffected in any material way.
+     |
+     |  What it means is that PARTIAL ETA-SQUARED for those rows is
+     |  CONDITIONED ON THE DF METHOD.  A mixed model has no sum-of-squares
+     |  decomposition, so partial eta-squared has no df-free value: it is
+     |  DEFINED through F and DenDF (Edwards et al. R2_beta).  Under
+     |  subject-scale df the same F gives a value roughly DENDF_RATIO times
+     |  larger.  Neither is the truth; they answer the question with
+     |  different denominators.  Report the df method beside the effect
+     |  size, or report an estimate with a confidence interval, which does
+     |  not depend on the df method at all.
      *-------------------------------------------------------------------*/
     %if &_havesub = 1 %then %do;
         %local _nover _worstratio _overlist;
@@ -1166,15 +1178,28 @@
             %put WARNING- Effects: &_overlist;
             %put WARNING- Worst DenDF/subjects ratio: &_worstratio..;
             %if %superq(between) ne %then %do;
-            %put WARNING- These were declared BETWEEN-subject via BETWEEN=. A between-subject effect;
-            %put WARNING- has at most one independent unit per subject, so this is pseudo-replication;
-            %put WARNING- in the degrees of freedom and PARTIAL_ETA2 for those rows is too SMALL by;
-            %put WARNING- roughly that ratio. The F test itself is usually about right.;
+            %put WARNING- These were declared BETWEEN-subject via BETWEEN=. Such an effect has at most;
+            %put WARNING- one independent unit per subject, so its DenDF here is on the OBSERVATION;
+            %put WARNING- scale rather than the subject scale.;
+            %put WARNING- This does NOT make the test wrong. The GLS standard error already uses the;
+            %put WARNING- fitted covariance structure, so the estimate, its SE and the p-value are;
+            %put WARNING- unaffected in any material way.;
+            %put WARNING- What it means is that PARTIAL_ETA2 for those rows is CONDITIONED ON THE DF;
+            %put WARNING- METHOD. A mixed model has no sum-of-squares decomposition, so partial;
+            %put WARNING- eta-squared has no df-free value -- it is defined through F and DenDF;
+            %put WARNING- (Edwards et al. R2_beta). Under subject-scale df the SAME F would give a;
+            %put WARNING- value roughly DENDF_RATIO times larger. Neither is "the truth"; they answer;
+            %put WARNING- the question with different denominators.;
+            %put WARNING- Either state the df method beside the effect size, or report an estimate;
+            %put WARNING- with a confidence interval, which does not depend on the df method at all.;
             %end;
             %else %do;
             %put WARNING- Declare which effects are between-subject with BETWEEN= to sharpen this.;
             %put WARNING- For a WITHIN-subject effect a DenDF above the subject count can be correct;
-            %put WARNING- under compound symmetry, but NOT under an unstructured covariance.;
+            %put WARNING- under compound symmetry, but NOT under an unstructured covariance, where;
+            %put WARNING- the independent units are the subjects for within-subject contrasts too.;
+            %put WARNING- Either way PARTIAL_ETA2 is conditioned on the df method, not wrong; see the;
+            %put WARNING- BETWEEN= wording above for how to report it.;
             %end;
             %if %superq(_ddfm) ne %then
             %put WARNING- Degrees of Freedom Method in this fit: &_ddfm..;
