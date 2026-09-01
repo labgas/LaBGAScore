@@ -34,6 +34,15 @@ Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlev
 | `LaBGAScore_firstlevel_s2_fit_model.m` (`firstlevel/`) | upstream of `prep_3f_create_fmri_data_single_trial_object.m` | Fits first-level models; produces single-trial con images |
 | `LaBGAScore_atlas_binary_mask_from_atlas.m` (`atlas_mask_tools/`) | `atlasname_glm`/`atlasname_svm` options | Generates custom atlas/mask objects |
 | `LaBGAScore_atlas_rois_from_atlas.m` (`atlas_mask_tools/`) | `roi_names`/`roi_modelname`/`roi_set_name` options | Generates per-ROI atlas objects |
+| `LaBGAScore_smart_parallel_pool_setup.m` (`clean/`) | `c2a_second_level_regression.m`, `prep_3a_run_second_level_regression_and_save.m`, `prep_3c_run_SVMs_on_contrasts_masked.m` | Sets up the parallel pool before bootstrapping/permutation |
+| `group_tfce_from_subject_maps.m` (`secondlevel/functions/`) | `prep_3a_run_second_level_regression_and_save.m` | Group TFCE from subject-level maps |
+| `thresholded_fmri_data_from_statistic_image.m` (`secondlevel/functions/`) | `prep_3a_run_second_level_regression_and_save.m`, `c2_SVM_contrasts_masked.m` | Thresholded `fmri_data` object from a `statistic_image` |
+
+The first two rows above are call-graph verified; the two `atlas_mask_tools` entries are
+reached through option strings (`atlasname_glm`, `roi_names`) rather than direct calls, so
+they do not appear in `dependencies.tsv`. The last three rows were found by the dependency
+tooling and were previously undocumented. `DEPENDENCIES.md` in each repo is the generated,
+authoritative version of this table.
 
 LaBGAScore = study setup + first-level + atlas/mask generation; CANlab_help_examples (LaBGAS fork) = second-level templates built on top. See that repo's own `README.md`/`CLAUDE.md` under `Second_level_analysis_template_scripts/` for its internals.
 
@@ -47,8 +56,81 @@ Three documentation goals, mirroring work already done for `CANlab_help_examples
 
 3. **Review script header content against actual code — accuracy pass.** ✅ Done (commits `27d8d8a`, `f53dacb`). For the same 47 script files, read each script's full body and checked whether its structurally-normalized header content was accurate, complete, and current. This also surfaced 19 real code defects (undefined variables, wrong/nonexistent function calls, hardcoded study-specific setup calls left in generic templates, copy-paste errors) unrelated to documentation, all fixed alongside the header content.
 
+## Provenance and dependency tooling
+
+`clean/LaBGAScore_prov_*` and `clean/LaBGAScore_dep_*` record which version of each
+dependency produced a given result, and generate the dependency documentation. Full
+detail in `clean/README_provenance.md`; the essentials:
+
+- **The dependencies are the reproducibility gap.** Scripts are frozen per project in the
+  `code` subdataset; CanlabCore and the other clones under `/data/master_github_repos` are
+  not. Vendoring them per project was considered and rejected (Neuroimaging_Pattern_Masks
+  is 18 GB, and pinning blocks bug fixes).
+- **`LaBGAScore_prov_publish`** replaces the bare `publish(...)` call documented in each
+  script header, and adds a provenance table to the html report plus a `.tsv`/`.mat` in
+  `results/notes/`. No script templates were edited — deliberately, since every study has
+  its own renamed copies.
+- **`LaBGAScore_prov_resolve_retrospective`** reconstructs the same information for
+  analyses already run, from each artifact's own embedded date and each clone's git
+  reflog. Writes sidecars; never modifies existing files.
+  - It covers **result `.mat` files as well as published reports** — only a few scripts
+    per model are ever published, so reports alone leave most of the pipeline
+    undocumented (in `proj_cfs`: 29 reports against 98 result files). A `.mat` carries a
+    `Created on:` stamp in its 116-byte header, which dates it the way a report's
+    `DC.date` does, with a time of day and surviving git-annex.
+  - Output is **one page per run**, not per file: a script's report and its `.mat` files
+    are grouped together, ranked by evidence quality. The group key includes the subject
+    where there is one, since at first level the same script runs once per subject.
+  - It follows whichever directory layout a model already has — `results/notes` and
+    `results/html` at second level, `<model>/provenance/` at first level, where no
+    `results/` directory exists.
+- **Reflogs are the critical, perishable evidence.** `gc.reflogExpire` defaults to 90 days
+  and prunes silently. `clean/labgascore_prov_protect_reflogs.sh` disables that; it has
+  been run on all 29 clones on the LaBGAS server.
+- **Nothing shells out.** Commit, branch, remote, reflog and dirty state are read straight
+  from the plain-text files under `.git`. `LaBGAScore_prov_gitstatus.m` reimplements git's
+  own dirty check and is verified to reproduce `git status --porcelain` exactly.
+- **`DEPENDENCIES.md`, `dependencies.tsv` and `dependencies.yml` are generated** by
+  `clean/LaBGAScore_dep_report.m`. Never hand-edit them. The LaBGAS website collects the
+  `.yml` via `scripts/refresh_dependencies.py`. In this repo they sit at the root and cover
+  all ~130 files; in `CANlab_help_examples` they sit in
+  `Second_level_analysis_template_scripts/` and cover exactly the 19 scripts listed in that
+  folder's README, not the ~113 scripts present.
+- **`LaBGAScore_check_display`** reports whether the current X2go session can produce a
+  full-size report figure, and what to change if not. `publish()` captures figures from the
+  screen, so session size and DPI decide how figures come out; recommended settings per
+  screen are in `LaBGAS_fMRI_analysis_workflow.md` ("Set up your X2go display for
+  publishing figures"). `LaBGAScore_prov_publish` records the screen geometry, DPI and the
+  resulting figure dimensions in every report, and flags figures whose size was set by the
+  display rather than by the script.
+
+Resolution is index-based rather than `which()`-based, because `which` returns one
+path-order-dependent answer and on this setup it is the wrong one for the calls that
+matter most: `which('predict')` returns a liblinear `.mexa64` from SPM's decoding
+toolbox and `which('ttest')` returns MATLAB's Statistics Toolbox, where the second-level
+scripts actually call `@fmri_data/predict` and `@fmri_data/ttest`. `which()` is used only
+to break ties among candidates the index already found.
+
+Six rules stop the call graph inventing dependencies (classdef property declarations are
+not calls; dot-calls and ambiguous names may reinforce a repository but never introduce
+one; core-language builtins are never third-party calls; evidence must be repo-unique;
+genuine cross-repo ties are broken with `which()`). Together they cut the `proj_cfs`
+second-level record from 1639 rows to 552 and removed BrainSpace, gift, cocoanCORE,
+ExploreASL and others that nothing here calls. See `clean/README_provenance.md` — do not
+relax these without re-checking the negative controls documented there.
+
+**State as of 2026-09-01:** the retrospective has been run over `proj_cfs` and
+`proj_discoverie` (second and first level). Those outputs are written but **not committed**
+in the `proj_*` datasets, pending review.
+
 ## Static analysis
 
 `clean/LaBGAScore_check_all_scripts.m` runs MATLAB's built-in Code Analyzer (`checkcode`) across every `.m` file in the repo (or a subtree passed as its `rootdir` argument) and prints a report, separating genuine syntax errors from style/performance suggestions. Calibrated against real bugs found during the accuracy pass above: `checkcode` reliably catches parse errors (e.g. it did catch the `sort{}` syntax bug fixed in commit `27d8d8a`) but does **not** catch undefined variables used at runtime, calls to functions that don't exist or aren't on the path, or logic bugs (e.g. wrong array indexing) — those all had to be found by reading the code, not by static analysis. Treat it as a fast baseline check run before committing, not a substitute for the kind of full read-through that found the 19 defects above.
+
+`matlab.codetools.requiredFilesAndProducts` is **not** usable in this tree and should not
+be re-attempted: it aborts entirely on a syntax error anywhere in the transitive closure,
+and there are 33 such files (CanlabCore 10, CanlabPrivate 21, canlab_single_trials 1,
+CANlab_help_examples 1). `clean/LaBGAScore_dep_map.m` records those as `unparseable` and
+carries on.
 
 It walks `.m` files only, so `stats_tools/sas_macros/` is covered by nothing. Those macros have also not yet been executed against a real model in SAS — their arithmetic was verified independently and their syntax checked by reading, no more. That caveat is stated at the top of their README and should be removed there once someone has run them.

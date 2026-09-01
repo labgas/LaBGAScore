@@ -23,7 +23,45 @@
 
 Follow the instructions in *Getting started with the LaBGAS Linux server*, or mail [linuxteam.gbiomed@kuleuven.be](mailto:linuxteam.gbiomed@kuleuven.be) (or, better, create a ticket via the ICTS helpdesk) with Lukas in cc, to request access to the server if you do not have it yet.
 
-### 2. Study the following documents
+### 2. Set up your X2go display for publishing figures
+
+MATLAB's `publish` function, which produces the HTML reports for first- and second-level analyses, **captures figures from the screen**. Your X2go display settings therefore decide how the figures in your reports come out, and mismatched settings are why the same script can produce different-looking reports for two people.
+
+Two settings matter, and they trade against each other:
+
+- **Window size** — how many pixels are available.
+- **Display DPI** (*Session preferences > Input/Output > "Set display DPI"*) — how those pixels convert to inches. Figure sizes are specified in inches, because MATLAB font sizes are in points (1 pt = 1/72 inch), so **raising the DPI shrinks the figure you can produce** at a given window size. High DPI makes menus comfortable and figures small.
+
+The analysis scripts target a **12 × 7.5 inch** figure, which needs `12 × DPI` by `7.5 × DPI` pixels of window. Find your screen and use these settings:
+
+| Your screen | X2go window | Set display DPI | Figure in report | Still works up to |
+|---|---|---|---|---|
+| 1366 × 768 laptop | fullscreen / maximum available | **96** | 1152 × 720 px | 96 (at the limit) |
+| 1600 × 900 laptop | fullscreen / maximum available | **96** | 1152 × 720 px | 112 |
+| 1920 × 1080 | fullscreen, or custom ≥ 1470 × 960 | **120** | 1440 × 900 px | 135 |
+| 2560 × 1440 or larger | fullscreen | **144** | 1728 × 1080 px | 180 |
+| 3440 × 1440 ultrawide, half width | custom ≈ 1720 × 1400 | **133** | 1596 × 998 px | 140 |
+
+Set the value in the **"Set display DPI"** column; that is the single number to type. The last column is only there in case your window ends up smaller than assumed — anything at or below it still produces the full-size figure.
+
+Why the recommended DPI is not simply the lowest that works: **as long as the target fits, a higher DPI is better.** The figure stays 12 × 7.5 inches either way, so it stays comparable with everyone else's, but it is captured at more pixels and is therefore sharper in the report — and on-screen text is more comfortable to work with. The only cost is that a higher DPI needs a bigger window.
+
+Rules of thumb:
+
+- **On a laptop, use fullscreen or "maximum available" and leave DPI at 96.** A small window at high DPI is the one combination that cannot produce a usable figure.
+- **"Custom" width and height only set the size the session *starts* at.** If you drag the X2go window afterwards, the session resizes with it, and the new size is what `publish` captures. What counts is the window size at the moment you run the script.
+
+To check your own session rather than read from the table:
+
+```matlab
+LaBGAScore_check_display        % from LaBGAScore/clean
+```
+
+It reports what your session can currently produce, whether it meets the target, and — if not — both fixes (lower the DPI to a stated value, or enlarge the window to a stated size). Run it once after changing your X2go settings.
+
+If your session is too small, nothing breaks: `plugin_set_figure_size` scales the figure down proportionally, so the aspect ratio is always correct and nothing is cropped. The figure is simply smaller than a colleague's, and text looks relatively larger. `LaBGAScore_prov_publish` records your screen size, DPI and the resulting figure dimensions in every report, so such differences are visible afterwards instead of merely puzzling.
+
+### 3. Study the following documents
 
 Use the learning resources in them to familiarize yourself with the tools we will be using:
 
@@ -31,7 +69,7 @@ Use the learning resources in them to familiarize yourself with the tools we wil
 2. *Getting started with Git, Github, GIN, and DataLad*
 3. *Getting started with BIDS, mriqc, and fmriprep*
 
-### 3. Take an fMRI course/tutorials which focuses on SPM
+### 4. Take an fMRI course/tutorials which focuses on SPM
 
 For example:
 
@@ -41,13 +79,13 @@ For example:
    - [Andy's Brain Book](https://andysbrainbook.readthedocs.io/en/latest/#)
 3. [Designing and analysing fMRI experiments](https://ucl.podia.com/view/courses/designing-and-analysing-fmri-experiments/1228405-week-0-getting-started/3741966-welcome) (UCL)
 
-### 4. Familiarize yourself with Matlab, SPM, and CANlab tools
+### 5. Familiarize yourself with Matlab, SPM, and CANlab tools
 
 1. [Matlab learning resources](https://matlabacademy.mathworks.com/?s_tid=pl_learn)
 2. [Tutorials with Matlab live scripts](https://canlab.github.io/tutorials/)
 3. [Walkthroughs](https://canlab.github.io/walkthroughs/)
 
-### 5. Configure your Git identity
+### 6. Configure your Git identity
 
 Follow [these instructions](http://handbook.datalad.org/en/latest/intro/installation.html#initial-configuration) in the Datalad Handbook.
 
@@ -1152,6 +1190,16 @@ Scripts under `b_copy_to_local_scripts_dir_and_modify/` are always study-specifi
 ### 5. Run script(s)
 
 **NOTE:** rather than wrapping scripts in a `datalad run` command (see above), it is recommended to run second-level scripts from the Matlab terminal, as even in `-r` mode, the automatic `datalad save` operation normally executed at the end of `datalad run` does not work, because datalad does not know when Matlab finished executing. Moreover, Matlab's `publish` function, used by several scripts, does not seem to be compatible with runs from the Linux command line rather than the Matlab terminal. If the script produces any output, perform a manual `datalad save` to the relevant subdataset and superdataset after running it.
+
+**Record which version of the dependencies you ran against.** The scripts in your `code` subdataset are frozen once you copy them, but CanlabCore, the LaBGAS fork of CANlab_help_examples and the other repos under `/data/master_github_repos` keep changing. Instead of the bare `publish` call given in each script header, use:
+
+```matlab
+LaBGAScore_prov_publish('<projname>_secondlevel_m<M>_s<N>_<scriptname>', htmlsavedir)
+```
+
+This publishes the html report at exactly the same figure resolution as before (it does not set `maxWidth`/`maxHeight`, which would permanently shrink the saved `.png` files), adds a small stylesheet so the report reads correctly on a laptop as well as a large desktop screen, and adds a Provenance section recording the commit of every dependency the script reaches, any uncommitted local changes to files it uses, and the MATLAB and SPM versions. A machine-readable copy is written to `<model>/results/notes/`, small enough to stay in git rather than git-annex.
+
+For analyses you have **already** run, `LaBGAScore_prov_resolve_retrospective('/data/proj_<yourstudy>')` reconstructs the same record after the fact and writes it alongside the existing reports without modifying them. See [`clean/README_provenance.md`](https://github.com/labgas/LaBGAScore/blob/main/clean/README_provenance.md) in LaBGAScore.
 
 ## Publish your dataset on GIN and/or Github
 
