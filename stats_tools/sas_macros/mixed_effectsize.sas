@@ -231,6 +231,26 @@
  |             refit -- the fixed effects only, exactly as written in
  |             PROC MIXED.
  |
+ |  --- degrees-of-freedom diagnostics (all optional) -------------------
+ |  modelinfo  Dataset from ODS OUTPUT MODELINFO=.  Supplies the
+ |             covariance structure, the df method actually used, the
+ |             residual variance method and the subject effect, so the
+ |             macro can tailor its df checks instead of guessing.
+ |  dimensions Dataset from ODS OUTPUT DIMENSIONS=.  Supplies Columns in
+ |             Z (whether a RANDOM statement is active) and the subject
+ |             count -- but see NSUBJECTS=.
+ |  nsubjects  Number of subjects.  Give this explicitly whenever you
+ |             want the between-subject df check.  It is needed because
+ |             the Dimensions subject count is NOT always usable: a
+ |             RANDOM effect with no SUBJECT= option spans subjects, so
+ |             SAS reports Subjects=1 and Max Obs per Subject = N.  The
+ |             macro detects that case and asks for this parameter.
+ |  between    Space-separated list of effect names that are
+ |             BETWEEN-subject, exactly as they appear in TESTS3.  With
+ |             NSUBJECTS= this turns the df check from a hint into a
+ |             statement: a between-subject effect cannot have more
+ |             denominator df than there are subjects.
+ |
  |  NOTE on DIRECT: PROC GLM ignores the repeated-measures covariance
  |  structure entirely.  Only its SUMS OF SQUARES are used; its F values
  |  and p values are NOT valid for these designs and are never reported
@@ -334,6 +354,50 @@
  |     make them markedly anticonservative.  Note the important exception
  |     under UNSTRUCTURED covariance, below -- there the default df are
  |     close to exact, and KR earns its place for a different reason.
+ |
+ |     WHICH DEFAULT YOU GET IS DECIDED BY YOUR MODEL STATEMENTS, and
+ |     the two defaults are on completely different scales.  Verified
+ |     against the SAS documentation (MODEL statement, DDFM= option):
+ |
+ |       "DDFM=CONTAIN ... is the default when you specify a RANDOM
+ |        statement.  The DDFM=BETWITHIN option is the default for
+ |        REPEATED statement specifications (with no RANDOM statements)."
+ |
+ |       CONTAIN   an effect takes the df of the smallest RANDOM effect
+ |                 that CONTAINS it.  "If no effects are found, the DDF
+ |                 for A is set equal to the residual degrees of freedom,
+ |                 N - rank(XZ)."  A subject-level predictor is contained
+ |                 by no G-side random effect unless one is nested in
+ |                 subject, so it falls through to OBSERVATION-scale df.
+ |       BETWITHIN divides the residual df into between- and
+ |                 within-subject portions, then "checks whether a fixed
+ |                 effect changes within any subject.  If so, it assigns
+ |                 within-subject degrees of freedom to the effect;
+ |                 otherwise, it assigns the between-subject degrees of
+ |                 freedom."  A between-subject predictor therefore gets
+ |                 SUBJECT-scale df.
+ |
+ |     https://documentation.sas.com/doc/en/pgmsascdc/v_078/statug/
+ |       statug_mixed_syntax10.htm#statug.mixed.modelstmt_ddfm
+ |
+ |     WORKED CONTRAST, two LaBGAS projects using the same effect-size
+ |     code on the same kind of design:
+ |
+ |       repeated Snum / subject=ppNrs type=un;  random study;
+ |         -> Containment.  'study' contains nothing, so every fixed
+ |            effect gets N - rank(XZ) = 1606, including the SUBJECT-LEVEL
+ |            microbiome predictors.  With ~203 subjects those main
+ |            effects are pseudo-replicated in the df and their partial
+ |            eta-squared is about 8x too small.
+ |       repeated Time / subject=Participant_ID type=un;  (no RANDOM)
+ |         -> Between-Within.  Effects get subject-scale df, 161 with 164
+ |            participants.  Correct.
+ |
+ |     Note also that in the first project SAS reported Subjects = 1 and
+ |     Max Obs per Subject = 1624 in the Dimensions table, because
+ |     'random study' has no SUBJECT= option and therefore spans subjects.
+ |     SAS could not block the problem; the subject count in Dimensions is
+ |     then not a usable bound, which is why NSUBJECTS= exists.
  |
  |       DDFM = KR    Kenward-Roger.  Does two things: inflates the
  |                    covariance matrix of the fixed effects to allow for
@@ -559,13 +623,21 @@
                         eta2_method = FROM_F,
                         data      = ,
                         class     = ,
-                        fixed     = );
+                        fixed     = ,
+                        modelinfo = ,
+                        dimensions = ,
+                        nsubjects = ,
+                        between   = );
 
     %local _abort _havess _haveprobf _cilevel _mdl _rt _src
-           _e2 _o2 _e2lab _o2lab _rtword _srcword _e2m _glmok;
+           _e2 _o2 _e2lab _o2lab _rtword _srcword _e2m _glmok
+           _covstruct _ddfm _resvar _subjeff _colz _nsub _havesub _bi;
     %let _abort     = 0;
     %let _glmok     = 0;
+    %let _havesub   = 0;
     %let _e2m       = %upcase(%superq(eta2_method));
+    %let _covstruct = ;  %let _ddfm = ;  %let _resvar = ;  %let _subjeff = ;
+    %let _colz      = ;  %let _nsub = ;
     %let _havess    = 0;
     %let _haveprobf = 0;
     %let _cilevel   = %sysevalf((1 - &alpha) * 100);
@@ -707,6 +779,67 @@
             %put NOTE- &_e2 is a WITHIN-SUBJECT proportion and is not comparable with eta-squared from other studies.;
     %end;
 
+    /*-- 3b. Read the model metadata, if it was captured ------------------*
+     |  ODS OUTPUT ModelInfo= and Dimensions= cost one line each in the
+     |  PROC MIXED step and turn the df checks below from guesswork into
+     |  arithmetic.  Everything here is optional; the macro degrades to
+     |  its previous behaviour without them.
+     *-------------------------------------------------------------------*/
+    %if %superq(modelinfo) ne %then %do;
+        %if %sysfunc(exist(&modelinfo)) %then %do;
+            data _null_;
+                set &modelinfo;
+                length d $60 v $80;
+                d = upcase(strip(vvalue(Descr)));
+                v = strip(vvalue(Value));
+                if d = 'COVARIANCE STRUCTURE'      then call symputx('_covstruct', v);
+                else if d = 'DEGREES OF FREEDOM METHOD' then call symputx('_ddfm', v);
+                else if d = 'RESIDUAL VARIANCE METHOD'  then call symputx('_resvar', v);
+                else if d = 'SUBJECT EFFECT'           then call symputx('_subjeff', v);
+            run;
+        %end;
+        %else %put WARNING: (mixed_effectsize) MODELINFO=&modelinfo does not exist; df diagnostics limited.;
+    %end;
+
+    %if %superq(dimensions) ne %then %do;
+        %if %sysfunc(exist(&dimensions)) %then %do;
+            data _null_;
+                set &dimensions;
+                length d $60;
+                d = upcase(strip(vvalue(Descr)));
+                if d = 'SUBJECTS'      then call symputx('_nsub', input(strip(vvalue(Value)), ?? best32.));
+                else if d = 'COLUMNS IN Z' then call symputx('_colz', input(strip(vvalue(Value)), ?? best32.));
+            run;
+        %end;
+        %else %put WARNING: (mixed_effectsize) DIMENSIONS=&dimensions does not exist; df diagnostics limited.;
+    %end;
+
+    /* Dimensions "Subjects" is only meaningful when SAS could actually block
+       the problem by subject.  A RANDOM effect with no SUBJECT= option spans
+       subjects, so SAS reports Subjects=1 and Max Obs per Subject = N -- the
+       count is then useless and must not be used as a bound.               */
+    %if %superq(nsubjects) ne %then %let _nsub = &nsubjects;   /* explicit always wins */
+    %else %if %superq(_nsub) ne %then %do;
+        %if %sysevalf(&_nsub <= 1) %then %do;
+            %put NOTE: (mixed_effectsize) Dimensions reports Subjects=&_nsub, so SAS could not block;
+            %put NOTE- the problem by subject -- usually a RANDOM effect with no SUBJECT= option.;
+            %put NOTE- The subject count is not usable as a bound. Pass NSUBJECTS= to enable the;
+            %put NOTE- between-subject degrees-of-freedom check.;
+            %let _nsub = ;
+        %end;
+    %end;
+    %if %superq(_nsub) ne %then %if %sysevalf(&_nsub > 1) %then %let _havesub = 1;
+
+    %if %superq(_covstruct) ne or &_havesub = 1 %then %do;
+        %put NOTE: (mixed_effectsize) Model metadata read:;
+        %if %superq(_covstruct) ne %then %put NOTE-   covariance structure  : &_covstruct;
+        %if %superq(_resvar)    ne %then %put NOTE-   residual variance     : &_resvar;
+        %if %superq(_ddfm)      ne %then %put NOTE-   df method             : &_ddfm;
+        %if %superq(_subjeff)   ne %then %put NOTE-   subject effect        : &_subjeff;
+        %if %superq(_colz)      ne %then %put NOTE-   columns in Z          : &_colz;
+        %if &_havesub = 1          %then %put NOTE-   subjects              : &_nsub;
+    %end;
+
     /*-- 4. Sums of squares from the residuals dataset -------------------*
      |  CSS = corrected SS   = sum((y - ybar)**2)   -> SS_total
      |  USS = uncorrected SS = sum(resid**2)        -> SS_error
@@ -833,6 +966,25 @@
         _eskey      = upcase(compress(Effect));
         _seq        = _n_;   /* preserve Type 3 order across the merge sort */
 
+        %if &_havesub = 1 %then %do;
+            /* A BETWEEN-subject effect cannot have more independent units than
+               there are subjects, whatever the covariance structure.  This is
+               a hard bound; DenDF above it means the test is treating repeated
+               observations on the same person as independent.               */
+            n_subjects  = &_nsub;
+            dendf_ratio = DenDF / &_nsub;
+        %end;
+        %if %superq(between) ne %then %do;
+            length is_between $3;
+            is_between = 'no';
+            %let _bi = 1;
+            %do %while (%scan(%superq(between), &_bi, %str( )) ne );
+                if upcase(compress(Effect)) = upcase(compress("%scan(%superq(between), &_bi, %str( ))"))
+                    then is_between = 'YES';
+                %let _bi = %eval(&_bi + 1);
+            %end;
+        %end;
+
         /* ---- partial eta-squared: needs only NumDF, DenDF, FValue ---- */
         if NumDF > 0 and DenDF > 0 and not missing(FValue) then do;
             partial_eta2 = (NumDF * FValue) / (NumDF * FValue + DenDF);
@@ -907,6 +1059,13 @@
             n_obs            = 'Observations used'
             nobs_dendf       = 'N_obs / DenDF (>1.5 : eta-squared from F unreliable)'
         %end;
+        %if &_havesub = 1 %then %do;
+            n_subjects       = 'Subjects'
+            dendf_ratio      = 'DenDF / subjects (>1 : more df than independent units)'
+        %end;
+        %if %superq(between) ne %then %do;
+            is_between       = 'Between-subject effect?'
+        %end;
             eta2_source      = 'Source of eta-squared'
             model_label      = 'Model'
             model_type       = 'Model type'
@@ -978,6 +1137,65 @@
         %put WARNING- Those three are NOT affected: they use only NumDF, DenDF and FValue.;
     %end;
 
+    /*-- 6ab. Between-subject effects tested on observation-scale df -------*
+     |  The hard bound: a BETWEEN-subject effect has at most one independent
+     |  unit per subject, so its denominator df cannot legitimately exceed
+     |  the subject count.  DenDF above it means repeated observations on the
+     |  same person are being counted as independent -- pseudo-replication in
+     |  the degrees of freedom.  The F test itself is usually fine, because
+     |  the model-based standard error already uses the fitted covariance
+     |  structure; it is PARTIAL ETA-SQUARED that does not survive, since it
+     |  depends on DenDF directly.
+     *-------------------------------------------------------------------*/
+    %if &_havesub = 1 %then %do;
+        %local _nover _worstratio _overlist;
+        %let _nover = 0; %let _worstratio = .; %let _overlist = ;
+        proc sql noprint;
+            select count(*), max(dendf_ratio) into :_nover trimmed, :_worstratio trimmed
+              from &out where dendf_ratio > 1
+              %if %superq(between) ne %then %str(and is_between = 'YES');
+              ;
+            select Effect into :_overlist separated by ', '
+              from &out where dendf_ratio > 1
+              %if %superq(between) ne %then %str(and is_between = 'YES');
+              ;
+        quit;
+        %if %superq(_nover) ne and %superq(_nover) ne . %then %do;
+        %if &_nover > 0 %then %do;
+            %put WARNING: (mixed_effectsize) &_nover effect(s) have DenDF above the subject count (&_nsub).;
+            %put WARNING- Effects: &_overlist;
+            %put WARNING- Worst DenDF/subjects ratio: &_worstratio..;
+            %if %superq(between) ne %then %do;
+            %put WARNING- These were declared BETWEEN-subject via BETWEEN=. A between-subject effect;
+            %put WARNING- has at most one independent unit per subject, so this is pseudo-replication;
+            %put WARNING- in the degrees of freedom and PARTIAL_ETA2 for those rows is too SMALL by;
+            %put WARNING- roughly that ratio. The F test itself is usually about right.;
+            %end;
+            %else %do;
+            %put WARNING- Declare which effects are between-subject with BETWEEN= to sharpen this.;
+            %put WARNING- For a WITHIN-subject effect a DenDF above the subject count can be correct;
+            %put WARNING- under compound symmetry, but NOT under an unstructured covariance.;
+            %end;
+            %if %superq(_ddfm) ne %then
+            %put WARNING- Degrees of Freedom Method in this fit: &_ddfm..;
+        %end;
+        %end;
+    %end;
+
+    /*-- 6ac. Containment fall-through -------------------------------------*/
+    %if %superq(_ddfm) ne %then %do;
+        %if %index(%upcase(&_ddfm), CONTAIN) > 0 %then %do;
+            %put NOTE: (mixed_effectsize) DDFM=CONTAINMENT is in force -- SAS uses it by DEFAULT;
+            %put NOTE- whenever a RANDOM statement is present (BETWEEN-WITHIN is the default for a;
+            %put NOTE- REPEATED statement with no RANDOM). Under containment a fixed effect gets the;
+            %put NOTE- df of the smallest RANDOM effect that CONTAINS it, and if none does it falls;
+            %put NOTE- through to the residual df, N - rank(XZ) -- which is on the OBSERVATION scale.;
+            %put NOTE- A subject-level predictor is typically contained by no G-side random effect,;
+            %put NOTE- so it lands on observation-scale df. See ASSUMPTIONS 5 in the macro header.;
+            %if %superq(_colz) ne %then %put NOTE-   Columns in Z = &_colz (a RANDOM statement is active).;
+        %end;
+    %end;
+
     /*-- 6b. Warn if the denominator df look like a default ---------------*/
     %local _fracdf;
     %let _fracdf = .;
@@ -1032,6 +1250,8 @@
                 partial_eta2 partial_eta2_lcl partial_eta2_ucl
                 partial_omega2 partial_epsilon2 cohen_f2
                 %if &_havess = 1 %then &_e2 &_o2 nobs_dendf;
+                %if &_havesub = 1 %then dendf_ratio;
+                %if %superq(between) ne %then is_between;
                 eta2_source
                 ;
             format FValue 8.2 NumDF 8. DenDF 8.1
@@ -1039,6 +1259,7 @@
                    partial_eta2 partial_eta2_lcl partial_eta2_ucl
                    partial_omega2 partial_epsilon2 cohen_f2 8.3
                    %if &_havess = 1 %then %str(&_e2 &_o2 8.4 nobs_dendf 8.2);
+                   %if &_havesub = 1 %then %str(dendf_ratio 8.2);
                    ;
         run;
         title;

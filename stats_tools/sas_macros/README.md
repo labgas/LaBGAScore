@@ -305,6 +305,71 @@ more directly interpretable than any variance-explained measure.
    default df are close to exact, and KR earns its place for a different
    reason.
 
+   #### Which default you get is decided by your MODEL statements
+
+   The two SAS defaults are on **completely different scales**, and which one
+   applies is a one-line difference in the code. From the
+   [SAS documentation for `DDFM=`](https://documentation.sas.com/doc/en/pgmsascdc/v_078/statug/statug_mixed_syntax10.htm#statug.mixed.modelstmt_ddfm):
+
+   > "DDFM=CONTAIN … is the default when you specify a RANDOM statement. The
+   > DDFM=BETWITHIN option is the default for REPEATED statement specifications
+   > (with no RANDOM statements)."
+
+   | Default | Rule | Consequence for a **subject-level** predictor |
+   |---|---|---|
+   | `CONTAIN`<br/>(a RANDOM statement is present) | an effect takes the df of the smallest RANDOM effect that *contains* it; *"if no effects are found, the DDF for A is set equal to the residual degrees of freedom, N − rank(XZ)"* | contained by no G-side random effect unless one is nested in subject → falls through to **observation-scale** df |
+   | `BETWITHIN`<br/>(REPEATED only, no RANDOM) | splits residual df into between- and within-subject, then *"checks whether a fixed effect changes within any subject. If so, it assigns within-subject degrees of freedom … otherwise … between-subject"* | gets **subject-scale** df |
+
+   Two LaBGAS projects running the same effect-size code on the same kind of
+   design landed on opposite sides of this:
+
+   ```
+   repeated Snum / subject=ppNrs type=un;   random study;
+       -> Containment. 'study' contains nothing, so every fixed effect gets
+          N - rank(XZ) = 1606 -- including the subject-level microbiome
+          predictors. With ~203 subjects those main effects are
+          pseudo-replicated in the df and their partial eta-squared is ~8x
+          too small.
+
+   repeated Time / subject=Participant_ID type=un;   (no RANDOM)
+       -> Between-Within. Subject-scale df, 161 with 164 participants.
+   ```
+
+   In the first project SAS also reported `Subjects = 1` and
+   `Max Obs per Subject = 1624`, because `random study` has no `subject=`
+   option and therefore spans subjects — SAS could not block the problem. The
+   Dimensions subject count is then not a usable bound, which is why the macro
+   takes `nsubjects=` explicitly.
+
+   #### What the macro checks
+
+   Give it `modelinfo=`, `dimensions=`, `nsubjects=` and optionally `between=`
+   and it will do the arithmetic instead of leaving it to you:
+
+   ```sas
+   proc mixed data = mydata;
+       class id group time;
+       model y = group|time / outpm = outpm_y ddfm = kr;
+       repeated time / subject = id type = un;
+       ods output tests3 = t3  modelinfo = mi  dimensions = dm;
+   run;
+
+   %mixed_effectsize(tests3 = t3, resids = outpm_y, dv = y,
+                     modelinfo = mi, dimensions = dm,
+                     nsubjects = 164, between = Group Centered_BMI);
+   ```
+
+   | Check | Fires when |
+   |---|---|
+   | **Between-subject df bound** | any effect (or any named in `between=`) has `DenDF` > the subject count. A between-subject effect has at most one independent unit per subject, so this is pseudo-replication in the df, whatever the covariance structure. New `dendf_ratio` column. |
+   | **Containment fall-through** | `Degrees of Freedom Method` is Containment — explains that a subject-level predictor lands on observation-scale df, and reports `Columns in Z`. |
+   | **Unusable subject count** | Dimensions reports `Subjects = 1`, i.e. SAS could not block; asks for `nsubjects=`. |
+
+   The F test itself is usually about right in these cases — the model-based
+   standard error already uses the fitted covariance structure — so p-values
+   move very little. It is `partial_eta2` that does not survive, because it
+   depends on `DenDF` directly.
+
    | Option | What it does | When |
    |---|---|---|
    | `DDFM=KR` | inflates the fixed-effect covariance matrix for estimated variance parameters **and** derives a Satterthwaite-type df — so it changes both F and `DenDF`. Designed for `METHOD=REML`. | best default for small-to-moderate N with `UN` or other rich structures — the LaBGAS common case |
