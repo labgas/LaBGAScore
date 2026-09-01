@@ -297,13 +297,32 @@ more directly interpretable than any variance-explained measure.
 5. **Choose a denominator-df method deliberately.** Everything here depends on
    `DenDF`, so this is the most consequential choice upstream of the macro.
 
+   > ### LaBGAS standard: `ddfm=kr`
+   >
+   > Specify `ddfm=kr` on the MODEL statement of every mixed or marginal model,
+   > unless there is a stated reason not to. Fall back to `ddfm=satterth` if KR
+   > fails to converge or is prohibitively slow, and **record which was used** —
+   > the effect sizes depend on it.
+   >
+   > This is a decision about consistency, not a claim that Kenward-Roger is
+   > universally best. SAS picks one of two defaults for you depending on
+   > whether a `RANDOM` statement happens to be present, and those two are on
+   > completely different scales (see below). Naming the method removes that
+   > accident, makes effect sizes comparable across models and papers, and gets
+   > the small-sample covariance correction as well.
+   >
+   > Two practical caveats. KR is designed for `METHOD=REML`. And it can be slow
+   > or fail on a large unstructured V — if a `RANDOM` effect has no `subject=`,
+   > SAS cannot block the problem and KR may be impractical, so fix the blocking
+   > first.
+
    The point is not that Kenward-Roger is universally best. It is that the
    default containment / between-within methods do not account for the
    covariance parameters having been *estimated*. In compound-symmetry and
-   split-plot settings that can make them markedly anticonservative. Note the
-   important exception under **unstructured** covariance below — there the
-   default df are close to exact, and KR earns its place for a different
-   reason.
+   split-plot settings that can make them markedly anticonservative. Under
+   **unstructured** covariance, as the section below sets out, the default df
+   are close to exact and KR earns its place for the covariance correction
+   instead.
 
    #### Which default you get is decided by your MODEL statements
 

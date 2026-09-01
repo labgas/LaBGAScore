@@ -343,9 +343,30 @@
  |     as approximate.
  |
  |  5. Choose a denominator-df method deliberately; do not leave it at
- |     the default for a between-within design.  Everything here depends
- |     on DenDF, so this is the single most consequential choice upstream
- |     of the macro.
+ |     the default.  Everything here depends on DenDF, so this is the
+ |     single most consequential choice upstream of the macro.
+ |
+ |     ****************************************************************
+ |     *  LaBGAS STANDARD:  ddfm = kr                                  *
+ |     *                                                              *
+ |     *  Specify it on the MODEL statement of every mixed or marginal *
+ |     *  model unless there is a stated reason not to.  Fall back to  *
+ |     *  ddfm = satterth if KR will not converge or is far too slow,  *
+ |     *  and RECORD WHICH WAS USED -- the effect sizes depend on it.  *
+ |     ****************************************************************
+ |
+ |     This is a decision about CONSISTENCY, not a claim that
+ |     Kenward-Roger is universally best.  SAS picks one of two defaults
+ |     for you depending on whether a RANDOM statement happens to be
+ |     present, and the two are on completely different scales (below).
+ |     Naming the method removes that accident, makes effect sizes
+ |     comparable across models and papers, and buys the small-sample
+ |     covariance correction as well.
+ |
+ |     Caveats: KR is designed for METHOD = REML; and it can be slow or
+ |     fail on a large unstructured V, so if a RANDOM effect has no
+ |     SUBJECT= option -- SAS then cannot block the problem -- fix the
+ |     blocking before reaching for KR.
  |
  |     The point is NOT that Kenward-Roger is universally best.  It is
  |     that the default containment / between-within methods do not
@@ -1237,6 +1258,9 @@
         %if &_fracdf = 0 %then %do;
             %put NOTE: (mixed_effectsize) Every DenDF is a whole number, so the denominator df were;
             %put NOTE- probably left at the default -- neither DDFM=KR nor DDFM=SATTERTH was requested.;
+            %put NOTE- The LaBGAS standard is DDFM=KR on every mixed or marginal model, so that effect;
+            %put NOTE- sizes are comparable across models rather than depending on which default SAS;
+            %put NOTE- happened to pick. If KR was deliberately not used, record why.;
             %put NOTE- Under an UNSTRUCTURED covariance the default BETWEEN-WITHIN df are close to the;
             %put NOTE- exact multivariate values and need no correction; requesting KR there buys the;
             %put NOTE- small-sample covariance adjustment, which moves F rather than DenDF.;
