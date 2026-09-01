@@ -29,7 +29,10 @@
  |
  |  Its macro computes three statistics -- eta_2, omega_2 and
  |  partial_eta_2 -- into one dataset, so it is easy to report one of them
- |  under the name of another.  It also forms the error sum of squares as
+ |  under the name of another.  In the ME/CFS analysis the reported
+ |  quantity turned out to be partial_eta_2 itself: the NAME was right and
+ |  the arithmetic was wrong, which is the harder failure to spot.  It
+ |  forms the error sum of squares as
  |
  |      ss_error = mse * (_freq_ - numdf);
  |
@@ -65,6 +68,29 @@
  |  So when auditing an old table, the question is not "was this script
  |  used" but "does the effect being reported cross subjects".
  |
+ |  ---------------------------------------------------------------------
+ |  OBSERVATIONS READ versus OBSERVATIONS USED
+ |  ---------------------------------------------------------------------
+ |  An OUTPM= dataset has one row per observation the procedure READ, not
+ |  per observation it USED.  Rows dropped for a missing response or
+ |  covariate are still there, carrying a missing residual.  In a long
+ |  file laid out on the longest outcome's timepoint grid the gap can be
+ |  enormous: in the analysis this macro replaces, PROC MIXED read 1384
+ |  rows for every model while using between 483 and 1312 of them, and
+ |  the old code's _FREQ_ took the value 1384 in all of them.
+ |
+ |  This macro is immune to that by construction:
+ |    * PARTIAL_ETA2, PARTIAL_OMEGA2, PARTIAL_EPSILON2 and the confidence
+ |      interval read ONLY the Type 3 table.  DenDF already reflects the
+ |      observations the model actually fitted.  Nothing to get wrong.
+ |    * ETA2 and OMEGA2 filter the residuals dataset to rows with a
+ |      non-missing residual before taking any sum of squares, so
+ |      SS_total, SS_error and N_OBS all describe the same set of rows --
+ |      the fitted ones.  N_OBS is therefore observations USED.
+ |  The macro prints a NOTE giving both counts whenever they differ, so
+ |  the size of the gap is visible rather than silently absorbed.
+ |
+ |  ---------------------------------------------------------------------
  |  This macro never touches _FREQ_.  Partial eta-squared needs nothing but
  |  the Type 3 table, because PROC MIXED already reports the Kenward-Roger
  |  or Satterthwaite denominator df there:
@@ -690,13 +716,28 @@
      *-------------------------------------------------------------------*/
     %if &_havess = 1 %then %do;
 
+        /* WHERE clause is load-bearing.  An OUTPM= dataset holds one row per
+           observation the procedure READ, not per observation it USED: rows
+           dropped for a missing covariate still appear, with a missing
+           residual.  Without this filter CSS(dv) would be taken over a
+           different, larger set of rows than USS(resid), and N would count
+           rows the model never fitted.  That mismatch -- observations read
+           standing in for observations used -- is exactly the error in the
+           script this macro replaces.                                      */
         proc means data = &resids noprint nway;
+            where not missing(&resid);
             var &dv &resid;
             output out = _es_ss (drop = _type_ _freq_)
                    css(&dv)    = _ss_total
                    uss(&resid) = _ss_error
-                   n(&dv)      = _n_obs;
+                   n(&resid)   = _n_obs;
         run;
+
+        /* how many rows the residuals dataset actually holds, for the note below */
+        %local _n_rows;
+        proc sql noprint;
+            select count(*) into :_n_rows trimmed from &resids;
+        quit;
 
         data _null_;
             set _es_ss;
@@ -704,6 +745,13 @@
             call symputx('_ss_error', _ss_error);
             call symputx('_n_obs',    _n_obs);
         run;
+
+        %if %superq(_n_rows) ne and %sysevalf(&_n_rows > &_n_obs) %then %do;
+            %put NOTE: (mixed_effectsize) &resids holds &_n_rows rows; &_n_obs have a residual.;
+            %put NOTE- Sums of squares and N_OBS are taken over the &_n_obs rows the model actually;
+            %put NOTE- used. The other rows were read but not fitted (missing response or covariate,;
+            %put NOTE- or timepoint slots belonging to a different outcome in a long file).;
+        %end;
 
         %if %sysevalf(&_ss_total <= 0) %then %do;
             %put WARNING: (mixed_effectsize) SS_total is not positive; eta-squared suppressed.;

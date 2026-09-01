@@ -28,8 +28,10 @@ Size for Mixed Models*, Texas A&M University — by way of an in-house adaptatio
 B. Dalile, 3 December 2021).
 
 It computes three statistics — `eta_2`, `omega_2` and `partial_eta_2` — into one
-dataset, so it is easy to report one of them under the name of another. It also
-forms the error sum of squares as
+dataset, so it is easy to report one of them under the name of another. In the
+ME/CFS analysis that is *not* what happened: the reported quantity was
+`partial_eta_2` itself. **The name was right and the arithmetic was wrong**,
+which is the harder failure to spot. It forms the error sum of squares as
 
 ```sas
 ss_error = mse * (_freq_ - numdf);
@@ -73,6 +75,30 @@ Drug / Hour / Drug×Hour. Recomputed against the design's real denominator df:
 
 When auditing an old results table, the question is therefore not *"was this
 script used"* but *"does the effect being reported cross subjects"*.
+
+### `_freq_` is observations READ, not observations USED
+
+Worse still, `_freq_` counts rows in the `OUTPM=` dataset — and `OUTPM=` keeps
+one row per observation the procedure **read**, including rows dropped for a
+missing response or covariate. In a long file laid out on the longest outcome's
+timepoint grid the gap is large:
+
+| | rows read | rows used | `DenDF` |
+|---|---|---|---|
+| every model on the ME/CFS long file | 1384 | 483 – 1312 | 124 – 161 |
+
+So `_freq_` took the value 1384 in *every* model regardless of how many
+observations that model actually fitted, while the denominator df it was
+standing in for ranged from 124 to 161. Published partial eta-squared values
+came out between 3× and 9× too small.
+
+**This macro is immune by construction.** `partial_eta2`, `partial_omega2`,
+`partial_epsilon2` and the confidence interval read only the Type 3 table, where
+`DenDF` already reflects the observations the model fitted. `eta2` and `omega2`
+filter the residuals dataset to rows with a non-missing residual before taking
+any sum of squares, so `SS_total`, `SS_error` and `N_OBS` all describe the same
+set of rows — the fitted ones — and the macro prints a NOTE giving both counts
+whenever they differ.
 
 ### The fix
 
@@ -478,30 +504,53 @@ then update this README and the macro header with what you find.
 Forensic helper for auditing effect sizes in tables produced by other code,
 including the older script described above.
 
-### The decisive test
+### The decisive test — solve for the implied `_freq_`
 
-For an effect with numerator df *q*, F statistic *F*, and reported effect size
-*r*: if the reported values are eta-squared, then
+If a reported value *r* came from the buggy formula `r = qF/(qF + f − q)`, then
+inverting it recovers the `f` that produced it:
 
 ```
-r / (q * F)
+implied_freq = qF(1 − r)/r + q
 ```
 
-must be **constant across every effect within one model**, whatever the sample
-size happens to be. This requires no assumptions at all — not even N.
+Compute this for every effect in the table. If the values cluster on **one**
+number and that number matches the row count of the source dataset — "Number of
+Observations **Read**" in the PROC MIXED output — the reported values are the
+buggy `partial_eta_2` and the diagnosis is closed. The clustering is itself the
+evidence: `f` is a property of the dataset, so it cannot vary between effects.
 
-Agreement to within a few percent (allowing for rounding in a published table)
-means the reported values are eta-squared. Disagreement by a factor of two or
-more means the value is something else and must be checked against the
-original output. An implied residual/total variance ratio above 1 is
-impossible and is conclusive.
+Worked example — twenty published values across seven ME/CFS models implied `f`
+between 1313 and 1485, median **1381**, against a printed Number of Observations
+Read of **1384** in every one. The spread is entirely two-significant-figure
+rounding.
+
+### The secondary test — and why it is not decisive on its own
+
+If the reported values were `eta_2` instead, then `r/(q × F)` would be constant
+across every effect within one model, because it equals (residual/total
+variance) / N — both properties of the model rather than the effect.
+
+> **This test cannot separate `eta_2` from the buggy `partial_eta_2`.** When `f`
+> is much larger than `qF` — the normal case, since `f` counts observations —
+> the buggy formula behaves like `qF/(qF + f − q) ≈ qF/f`, which is *also*
+> proportional to `qF`. Both candidates give a near-constant ratio. In the
+> ME/CFS audit it passed at a spread of 1.14 against a tolerance of 1.15, and
+> the wrong conclusion survived several rounds of review because of it.
+
+Use the ratio test only to rule out a value that fits *neither* candidate. Use
+the implied-`_freq_` test to decide between them.
+
+Neither test can detect an `eta_2` computed from the **wrong variable**: feeding
+another outcome's variance into `ss_total` changes only the shared constant, so
+every row stays mutually consistent and both tests pass. Read the source code as
+well — that is how the RMSSD/HR variance swap was found.
 
 ### Usage
 
 One effect at a time, printed to the log:
 
 ```sas
-%es_identify(numdf = 1, f = 40.45, dendf = 161, nobs = 664, reported = 0.028);
+%es_identify(numdf = 1, f = 40.45, dendf = 161, nread = 1384, reported = 0.028);
 ```
 
 A whole model at once, which is how the test is meant to be used:
@@ -512,18 +561,18 @@ data mast_stress;
     infile datalines dsd;
     input effect $ numdf dendf f reported;
     datalines;
-group,1,161,40.45,0.028
-time,3,161,66.22,0.130
-group*time,3,161,2.44,0.005
+Time_VAS_U,3,161,66.22,0.13
+Group,1,161,40.45,0.028
+Time_VAS_U*Group,3,161,2.44,0.005
 ;
 run;
 
-%es_identify_ds(data = mast_stress, nobs = 664);
+%es_identify_ds(data = mast_stress, nread = 1384, nobs = 656);
 ```
 
-`nobs=` is optional; without it the macro still reports the correct partial
-eta-squared and the sample-size-free ratio, but cannot evaluate the old
-script's formula or the implied variance ratio.
+`nread=` is the row count PROC MEANS saw — **Number of Observations Read**, not
+Used. It is optional but it is what makes the decisive test possible. `nobs=`
+(observations used) is optional and feeds only the implied variance ratio.
 
 ---
 
