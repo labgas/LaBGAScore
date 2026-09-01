@@ -304,8 +304,10 @@
  |     The point is NOT that Kenward-Roger is universally best.  It is
  |     that the default containment / between-within methods do not
  |     account for the fact that the covariance parameters were
- |     ESTIMATED, and can be markedly anticonservative in small,
- |     unbalanced designs with a rich covariance structure.
+ |     ESTIMATED.  In compound-symmetry and split-plot settings that can
+ |     make them markedly anticonservative.  Note the important exception
+ |     under UNSTRUCTURED covariance, below -- there the default df are
+ |     close to exact, and KR earns its place for a different reason.
  |
  |       DDFM = KR    Kenward-Roger.  Does two things: inflates the
  |                    covariance matrix of the fixed effects to allow for
@@ -327,14 +329,59 @@
  |                    between-within design, check the df before trusting
  |                    them.
  |
- |     Sanity check on any Type 3 table from a repeated-measures model:
- |     a WITHIN-subject effect should normally carry substantially MORE
- |     denominator df than a BETWEEN-subject effect.  If every effect in
- |     the model shows the same DenDF, something is wrong -- either the
- |     df method is not stratifying, or the df were transcribed.
+ |     ----------------------------------------------------------------
+ |     THE UNSTRUCTURED CASE -- read this before "fixing" a df method
+ |     ----------------------------------------------------------------
+ |     With  repeated <time> / subject=<id> type=UN  the Model
+ |     Information table shows
  |
- |     The macro prints a WARNING when every DenDF is a whole number,
- |     which usually means neither KR nor Satterthwaite was requested.
+ |         Covariance Structure       Unstructured
+ |         Residual Variance Method   None
+ |         Degrees of Freedom Method  Between-Within
+ |
+ |     and SAS then prints THE SAME DenDF for every effect, because with
+ |     a saturated R-side matrix there is no residual variance left over
+ |     and BETWITHIN has no within-subject stratum to draw on.  It falls
+ |     back to the between-subject df, n_subjects - rank(between-X), for
+ |     all effects.
+ |
+ |     THAT IS VERY NEARLY CORRECT, and it is NOT the pathology it looks
+ |     like.  Under UN the independent units are the SUBJECTS, for a
+ |     within-subject contrast as much as for a between-subject one: the
+ |     estimator is a mean of within-subject differences over n people,
+ |     not an average over n*t quasi-independent observations.  The exact
+ |     multivariate (Hotelling / Wilks) denominator df are
+ |
+ |         between-subject effect :  n - rank(between-X)
+ |         within-subject effect  :  n - rank(between-X) - q + 1
+ |
+ |     Verified against the exact multivariate test on a simulated
+ |     164-subject x 4-timepoint design with a deliberately non-spherical
+ |     UN covariance: exact df were 161 (between) and 159 (within), where
+ |     SAS BETWITHIN printed 161 throughout.  Two df out of 160.  The
+ |     effect on partial eta-squared was at most 0.006, in the third
+ |     decimal.
+ |
+ |     DO NOT expect a within-subject df of n*t - n - rank here.  That is
+ |     the compound-symmetry / split-plot answer and it does not apply
+ |     under UN; assuming it overstates the correction several-fold.
+ |
+ |     So under UN the reason to request KR is NOT the degrees of
+ |     freedom, which are already close to exact.  It is the OTHER thing
+ |     KR does: inflating the fixed-effects covariance matrix to allow
+ |     for the covariance parameters having been estimated -- 10 of them
+ |     for four timepoints.  Expect KR to move F, and hence p and the
+ |     effect sizes, slightly DOWNWARD.  It matters most with
+ |     substantial missingness.
+ |
+ |     Sanity check for OTHER structures (CS, VC, AR(1) with a residual):
+ |     there a within-subject effect should carry substantially MORE
+ |     denominator df than a between-subject one.  If every effect shows
+ |     the same DenDF and the structure is NOT unstructured, the df
+ |     method is not stratifying and the table needs checking.
+ |
+ |     The macro prints a NOTE when every DenDF is a whole number, which
+ |     usually means neither KR nor Satterthwaite was requested.
  |
  |     Kenward MG, Roger JH. Small sample inference for fixed effects
  |     from restricted maximum likelihood. Biometrics 1997;53(3):983-997.
@@ -891,28 +938,35 @@
     quit;
     %if %superq(_fracdf) ne and %superq(_fracdf) ne . %then %do;
         %if &_fracdf = 0 %then %do;
-            %put WARNING: (mixed_effectsize) Every DenDF is a whole number.;
-            %put WARNING- That usually means the denominator df were left at the default, i.e. neither;
-            %put WARNING- DDFM=KR nor DDFM=SATTERTH was requested. The default containment / between-within;
-            %put WARNING- methods do not allow for the covariance parameters having been ESTIMATED, and can;
-            %put WARNING- be anticonservative in small, unbalanced designs with a rich covariance structure.;
-            %put WARNING- Everything in this table depends on DenDF. This is not a claim that KR is always;
-            %put WARNING- best -- see ASSUMPTIONS 5 in the macro header for when it is and is not.;
+            %put NOTE: (mixed_effectsize) Every DenDF is a whole number, so the denominator df were;
+            %put NOTE- probably left at the default -- neither DDFM=KR nor DDFM=SATTERTH was requested.;
+            %put NOTE- Under an UNSTRUCTURED covariance the default BETWEEN-WITHIN df are close to the;
+            %put NOTE- exact multivariate values and need no correction; requesting KR there buys the;
+            %put NOTE- small-sample covariance adjustment, which moves F rather than DenDF.;
+            %put NOTE- Under CS / VC / AR(1) with a residual term, the defaults do not allow for the;
+            %put NOTE- covariance parameters having been ESTIMATED and can be anticonservative.;
+            %put NOTE- See ASSUMPTIONS 5 in the macro header before changing anything.;
         %end;
     %end;
 
-    /* Same DenDF on every row is a red flag in a between-within design */
+    /* One DenDF on every row: EXPECTED under UN, suspicious under CS/VC/AR(1).
+       The Type 3 table does not carry the covariance structure, so the macro
+       cannot tell which case it is in and must not call this an error.      */
     %local _ndistinct _neff;
     proc sql noprint;
         select count(distinct DenDF), count(*) into :_ndistinct trimmed, :_neff trimmed from &out;
     quit;
     %if %superq(_ndistinct) ne and %superq(_neff) ne %then %do;
         %if &_ndistinct = 1 and &_neff > 1 %then %do;
-            %put WARNING: (mixed_effectsize) All &_neff effects share the same DenDF.;
-            %put WARNING- In a repeated-measures model a WITHIN-subject effect should normally carry;
-            %put WARNING- substantially MORE denominator df than a BETWEEN-subject effect. One value for;
-            %put WARNING- every effect suggests the df method is not stratifying, or that the df were;
-            %put WARNING- transcribed. Check the Type 3 table before reporting anything from here.;
+            %put NOTE: (mixed_effectsize) All &_neff effects share the same DenDF.;
+            %put NOTE- If the covariance structure is UNSTRUCTURED this is EXPECTED and very nearly;
+            %put NOTE- correct: with a saturated R-side there is no residual variance, so BETWEEN-WITHIN;
+            %put NOTE- uses n_subjects - rank(between-X) for every effect. The exact multivariate df are;
+            %put NOTE- n - rank for between-subject effects and n - rank - q + 1 for within-subject ones,;
+            %put NOTE- a difference of a couple of df. Do not "fix" it, and do NOT expect a within df of;
+            %put NOTE- n*t - n - rank; that is the compound-symmetry answer and does not apply under UN.;
+            %put NOTE- If the structure is CS, VC or AR(1) WITH a residual term, one value for every;
+            %put NOTE- effect does indicate the df method is not stratifying. Check Model Information.;
         %end;
     %end;
 

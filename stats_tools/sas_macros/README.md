@@ -273,9 +273,11 @@ more directly interpretable than any variance-explained measure.
 
    The point is not that Kenward-Roger is universally best. It is that the
    default containment / between-within methods do not account for the
-   covariance parameters having been *estimated*, and can be markedly
-   anticonservative in small, unbalanced designs with a rich covariance
-   structure.
+   covariance parameters having been *estimated*. In compound-symmetry and
+   split-plot settings that can make them markedly anticonservative. Note the
+   important exception under **unstructured** covariance below — there the
+   default df are close to exact, and KR earns its place for a different
+   reason.
 
    | Option | What it does | When |
    |---|---|---|
@@ -283,18 +285,59 @@ more directly interpretable than any variance-explained measure.
    | `DDFM=KR2` | Kenward-Roger with the 2009 bias adjustment | as above |
    | `DDFM=SATTERTH` | df adjustment only, no covariance correction | acceptable; usually close to KR, less prone to convergence trouble |
    | `EMPIRICAL=MBN`/`MOREL` | sandwich estimator with a small-sample correction | consider **instead** when the covariance structure itself is doubtful — KR is model-based and gives a precise df for the model you specified, right or wrong |
-   | `CONTAIN`/`BETWITHIN`/`RESIDUAL` | defaults | fine in large balanced designs, where all methods converge; check the df before trusting them in an unbalanced between-within design |
+   | `CONTAIN`/`BETWITHIN`/`RESIDUAL` | defaults | fine in large balanced designs, where all methods converge; **also fine under `type=UN`, see below**; check the df in an unbalanced between-within design with a residual term |
 
    KR is also computationally heavier and can be slow or fail with large
    unstructured matrices.
 
-   **Sanity check on any Type 3 table from a repeated-measures model:** a
-   within-subject effect should normally carry substantially *more* denominator
-   df than a between-subject effect. If every effect shows the same `DenDF`,
-   something is wrong — either the df method is not stratifying, or the df were
-   transcribed. The macro warns when it sees this, and when every `DenDF` is a
-   whole number (which usually means neither KR nor Satterthwaite was asked
-   for).
+   #### The unstructured case — read this before "fixing" a df method
+
+   With `repeated <time> / subject=<id> type=UN`, Model Information shows
+
+   ```
+   Covariance Structure       Unstructured
+   Residual Variance Method   None
+   Degrees of Freedom Method  Between-Within
+   ```
+
+   and SAS prints **the same `DenDF` for every effect**. With a saturated R-side
+   matrix there is no residual variance left over, so Between-Within has no
+   within-subject stratum and falls back to `n_subjects − rank(between-X)` for
+   everything.
+
+   **That is very nearly correct, and not the pathology it appears to be.** Under
+   UN the independent units are the *subjects*, for a within-subject contrast as
+   much as a between-subject one — the estimator is a mean of within-subject
+   differences over n people, not an average over n×t quasi-independent
+   observations. The exact multivariate (Hotelling/Wilks) denominator df are
+
+   ```
+   between-subject effect :  n − rank(between-X)
+   within-subject effect  :  n − rank(between-X) − q + 1
+   ```
+
+   Verified against the exact multivariate test on a simulated 164-subject ×
+   4-timepoint design with a deliberately non-spherical UN covariance: exact df
+   were **161** (between) and **159** (within), where SAS printed 161 throughout.
+   Two df out of 160; the effect on partial eta-squared was at most 0.006.
+
+   Do **not** expect a within-subject df of `n×t − n − rank` here. That is the
+   compound-symmetry / split-plot answer, it does not apply under UN, and
+   assuming it overstates the correction several-fold.
+
+   So under UN the reason to request KR is not the degrees of freedom — those
+   are already close to exact. It is the *other* thing KR does: inflating the
+   fixed-effects covariance matrix to allow for the covariance parameters having
+   been estimated (ten of them for four timepoints). Expect KR to move F, and
+   hence p and the effect sizes, slightly downward. It matters most with
+   substantial missingness.
+
+   **Sanity check for other structures** (CS, VC, AR(1) *with* a residual term):
+   there a within-subject effect should carry substantially more denominator df
+   than a between-subject one. If every effect shows the same `DenDF` and the
+   structure is not unstructured, the df method is not stratifying. The macro
+   emits a NOTE covering both cases, and another when every `DenDF` is a whole
+   number (which usually means neither KR nor Satterthwaite was asked for).
 
    - Kenward MG, Roger JH. Small sample inference for fixed effects from
      restricted maximum likelihood. *Biometrics* 1997;53(3):983–997.
