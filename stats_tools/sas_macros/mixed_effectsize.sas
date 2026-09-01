@@ -380,27 +380,33 @@
  |     https://documentation.sas.com/doc/en/pgmsascdc/v_078/statug/
  |       statug_mixed_syntax10.htm#statug.mixed.modelstmt_ddfm
  |
- |     WORKED CONTRAST, two LaBGAS projects using the same effect-size
- |     code on the same kind of design:
+ |     THE CONTRAST THAT MATTERS, schematically.  Two repeated-measures
+ |     models of the same shape, differing by one statement:
  |
- |       repeated Snum / subject=ppNrs type=un;  random study;
- |         -> Containment.  'study' contains nothing, so every fixed
- |            effect gets N - rank(XZ) = 1606, including the SUBJECT-LEVEL
- |            microbiome predictors.  With ~203 subjects, subject-scale df
- |            would be ~201, and the SAME F values would then give partial
- |            eta-squared about 8x larger for those predictors and about 2x
- |            larger for the within-subject time effects.  The TESTS are
- |            unaffected; only the effect sizes move, because they are
- |            conditioned on the df method.
- |       repeated Time / subject=Participant_ID type=un;  (no RANDOM)
- |         -> Between-Within.  Effects get subject-scale df, 161 with 164
- |            participants.  Correct.
+ |       repeated <time> / subject=<id> type=un;          (no RANDOM)
+ |         -> Between-Within.  A between-subject predictor gets
+ |            SUBJECT-scale df, ~ n_subjects - rank(between-X).
  |
- |     Note also that in the first project SAS reported Subjects = 1 and
- |     Max Obs per Subject = 1624 in the Dimensions table, because
- |     'random study' has no SUBJECT= option and therefore spans subjects.
- |     SAS could not block the problem; the subject count in Dimensions is
- |     then not a usable bound, which is why NSUBJECTS= exists.
+ |       repeated <time> / subject=<id> type=un;
+ |       random   <grp>;                                  (RANDOM present)
+ |         -> Containment.  If <grp> contains no fixed effect -- which is
+ |            the usual case for a grouping ABOVE subject, such as site,
+ |            study or batch -- every fixed effect falls through to the
+ |            residual df, N - rank(XZ), on the OBSERVATION scale.  A
+ |            subject-level predictor then carries far more denominator df
+ |            than there are subjects.
+ |
+ |     Same data, same covariance structure, same F values -- but partial
+ |     eta-squared computed from the second can be several times smaller
+ |     than from the first, because it is conditioned on DenDF.  Nothing
+ |     about the TEST changes.  See section 6ab for how the macro flags it.
+ |
+ |     A related trap in the same situation: a RANDOM effect with no
+ |     SUBJECT= option spans subjects, so SAS cannot block the problem and
+ |     the Dimensions table reports Subjects = 1 with Max Obs per Subject
+ |     = N.  The subject count is then NOT a usable bound, which is why
+ |     NSUBJECTS= exists and why the macro refuses to use a reported
+ |     Subjects <= 1.
  |
  |       DDFM = KR    Kenward-Roger.  Does two things: inflates the
  |                    covariance matrix of the fixed effects to allow for

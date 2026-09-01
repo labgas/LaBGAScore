@@ -320,28 +320,32 @@ more directly interpretable than any variance-explained measure.
    | `CONTAIN`<br/>(a RANDOM statement is present) | an effect takes the df of the smallest RANDOM effect that *contains* it; *"if no effects are found, the DDF for A is set equal to the residual degrees of freedom, N − rank(XZ)"* | contained by no G-side random effect unless one is nested in subject → falls through to **observation-scale** df |
    | `BETWITHIN`<br/>(REPEATED only, no RANDOM) | splits residual df into between- and within-subject, then *"checks whether a fixed effect changes within any subject. If so, it assigns within-subject degrees of freedom … otherwise … between-subject"* | gets **subject-scale** df |
 
-   Two LaBGAS projects running the same effect-size code on the same kind of
-   design landed on opposite sides of this:
+   Two repeated-measures models of the same shape, differing by one statement,
+   land on opposite sides of this:
 
    ```
-   repeated Snum / subject=ppNrs type=un;   random study;
-       -> Containment. 'study' contains nothing, so every fixed effect gets
-          N - rank(XZ) = 1606 -- including the subject-level microbiome
-          predictors. With ~203 subjects those main effects are
-          on observation-scale df. With ~203 subjects, subject-scale df
-          would be ~201, and the SAME F values would give partial
-          eta-squared ~8x larger for those predictors and ~2x larger for
-          the within-subject time effects. The tests are unaffected.
+   repeated <time> / subject=<id> type=un;          (no RANDOM)
+       -> Between-Within. A between-subject predictor gets SUBJECT-scale df,
+          ~ n_subjects - rank(between-X).
 
-   repeated Time / subject=Participant_ID type=un;   (no RANDOM)
-       -> Between-Within. Subject-scale df, 161 with 164 participants.
+   repeated <time> / subject=<id> type=un;
+   random   <grp>;                                  (RANDOM present)
+       -> Containment. If <grp> contains no fixed effect -- the usual case for
+          a grouping ABOVE subject, such as site, study or batch -- every fixed
+          effect falls through to the residual df, N - rank(XZ), on the
+          OBSERVATION scale. A subject-level predictor then carries far more
+          denominator df than there are subjects.
    ```
 
-   In the first project SAS also reported `Subjects = 1` and
-   `Max Obs per Subject = 1624`, because `random study` has no `subject=`
-   option and therefore spans subjects — SAS could not block the problem. The
-   Dimensions subject count is then not a usable bound, which is why the macro
-   takes `nsubjects=` explicitly.
+   Same data, same covariance structure, same F values — but partial
+   eta-squared from the second can be several times smaller than from the first,
+   because it is conditioned on `DenDF`. Nothing about the *test* changes.
+
+   A related trap in the same situation: a RANDOM effect with **no `subject=`
+   option** spans subjects, so SAS cannot block the problem and the Dimensions
+   table reports `Subjects = 1` with `Max Obs per Subject = N`. The subject
+   count is then not a usable bound — which is why the macro takes `nsubjects=`
+   explicitly and refuses to use a reported `Subjects ≤ 1`.
 
    #### What the macro checks
 
@@ -369,8 +373,10 @@ more directly interpretable than any variance-explained measure.
 
    **None of this makes the test wrong.** The GLS standard error already uses
    the fitted covariance structure, so the estimate, its SE and the p-value are
-   unaffected in any material way — moving the microbiome predictors to
-   subject-scale df shifts p from 0.5859 to 0.5845.
+   unaffected in any material way — at these degrees of freedom the F
+   distribution is nearly chi-squared, so moving a between-subject predictor
+   from observation-scale to subject-scale df typically shifts p in the fourth
+   decimal.
 
    What it means is that **`partial_eta2` is conditioned on the df method**. A
    mixed model has no sum-of-squares decomposition, so partial eta-squared has
