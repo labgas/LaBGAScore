@@ -154,6 +154,31 @@
  |  label      Free-text model label carried into the output.  Optional.
  |  print      Y (default) prints a formatted table; N suppresses it.
  |
+ |  --- eta-squared method (does not affect partial eta-squared) --------
+ |  eta2_method  FROM_F (default) reconstructs SS_effect from the F test,
+ |             as NumDF * FValue * (SS_error / DenDF).  Cheap, but see
+ |             ASSUMPTIONS 1-2: it is unreliable when DenDF is much
+ |             smaller than the number of observations, which is exactly
+ |             the case for a BETWEEN-subject effect in a repeated-
+ |             measures design.
+ |             DIRECT instead refits the same mean model with PROC GLM
+ |             and takes real Type III sums of squares.  Slower, but it
+ |             is an actual variance decomposition rather than one
+ |             back-solved from a Wald statistic.  Requires DATA=,
+ |             CLASS= and FIXED=.  Partial eta-squared is unchanged.
+ |  data       Input dataset for ETA2_METHOD = DIRECT.  Use the same
+ |             dataset the PROC MIXED model was fitted to.
+ |  class      CLASS variables for the DIRECT refit, space separated.
+ |  fixed      Right-hand side of the MODEL statement for the DIRECT
+ |             refit -- the fixed effects only, exactly as written in
+ |             PROC MIXED.
+ |
+ |  NOTE on DIRECT: PROC GLM ignores the repeated-measures covariance
+ |  structure entirely.  Only its SUMS OF SQUARES are used; its F values
+ |  and p values are NOT valid for these designs and are never reported
+ |  by this macro.  The F, df and partial eta-squared always come from
+ |  PROC MIXED.
+ |
  |  ---------------------------------------------------------------------
  |  WHICH ONE TO REPORT
  |  ---------------------------------------------------------------------
@@ -185,11 +210,32 @@
  |     which is the natural analogue of the fixed-effects definitions but
  |     is an approximation.  Both are labelled *_APPROX for that reason.
  |
- |  2. Under Kenward-Roger, DenDF differs between effects, so the implied
- |     MSE differs slightly between effects too.  Partial eta-squared is
- |     unaffected (the MSE cancels).  Eta-squared and omega-squared are
- |     mildly affected; the macro reports the DenDF used for each row so
- |     the dependence is visible.
+ |  2. *** ETA-SQUARED FROM F IS UNRELIABLE WHEN DenDF << N_obs. ***
+ |     MSE is formed as SS_error / DenDF, where SS_error is the USS of
+ |     the residuals over ALL observations.  In a fixed-effects ANOVA
+ |     that is exact, because the error df there IS N - rank(X).  In a
+ |     marginal or mixed model it is not: a BETWEEN-subject effect in a
+ |     repeated-measures design is tested against participant-level df,
+ |     so DenDF can be several times smaller than N_obs, and the implied
+ |     MSE -- and hence eta-squared and omega-squared -- is inflated by
+ |     roughly N_obs / DenDF.
+ |
+ |     Worked case: 166 participants x 4 timepoints = 664 observations,
+ |     group effect tested on 161 df.  Eta-squared from F is too large by
+ |     a factor of about 664/161 = 4.1.
+ |
+ |     The macro computes N_OBS / DenDF for every row, reports it as
+ |     NOBS_DENDF, and issues a WARNING for any row above 1.5.  When that
+ |     warning fires, report PARTIAL_ETA2 only, or rerun with
+ |     ETA2_METHOD = DIRECT.
+ |
+ |     PARTIAL_ETA2 IS NOT AFFECTED -- the MSE cancels out of it
+ |     algebraically.  This caveat is about eta-squared and omega-squared
+ |     alone.
+ |
+ |     Under Kenward-Roger, DenDF also differs from effect to effect, so
+ |     the implied MSE differs between rows of the same model.  The macro
+ |     reports the DenDF used for each row so the dependence is visible.
  |
  |  3. With MODEL = MIXED and RESIDTYPE = CONDITIONAL, report the variance
  |     components alongside the effect sizes.  Without them a reader cannot
@@ -201,11 +247,52 @@
  |     Kenward-Roger df that N is an approximation, so treat the interval
  |     as approximate.
  |
- |  5. Use DDFM = KR (or KR2) in the MODEL statement.  With the default
- |     containment method the denominator df can be badly wrong for these
- |     designs, and every quantity here depends on it.  The macro prints a
- |     NOTE if every DenDF is a whole number, which usually means KR or
- |     Satterthwaite was not requested.
+ |  5. Choose a denominator-df method deliberately; do not leave it at
+ |     the default for a between-within design.  Everything here depends
+ |     on DenDF, so this is the single most consequential choice upstream
+ |     of the macro.
+ |
+ |     The point is NOT that Kenward-Roger is universally best.  It is
+ |     that the default containment / between-within methods do not
+ |     account for the fact that the covariance parameters were
+ |     ESTIMATED, and can be markedly anticonservative in small,
+ |     unbalanced designs with a rich covariance structure.
+ |
+ |       DDFM = KR    Kenward-Roger.  Does two things: inflates the
+ |                    covariance matrix of the fixed effects to allow for
+ |                    estimated variance parameters, AND derives a
+ |                    Satterthwaite-type df from it.  So it changes both
+ |                    F and DenDF.  Designed for METHOD = REML.  The best
+ |                    default for small-to-moderate N with UN or other
+ |                    rich structures -- which is the LaBGAS common case.
+ |       DDFM = KR2   Kenward-Roger with the 2009 bias adjustment.
+ |       DDFM = SATTERTH   df adjustment only, without the covariance
+ |                    correction.  Acceptable; usually close to KR, and
+ |                    less prone to convergence trouble.
+ |       EMPIRICAL = MBN | MOREL   worth considering INSTEAD when the
+ |                    covariance structure itself is doubtful.  KR is
+ |                    model-based: it gives a precise df for the model
+ |                    you specified, correct or not.
+ |       CONTAIN / BETWITHIN / RESIDUAL   fine in large balanced designs,
+ |                    where all methods converge.  In an unbalanced
+ |                    between-within design, check the df before trusting
+ |                    them.
+ |
+ |     Sanity check on any Type 3 table from a repeated-measures model:
+ |     a WITHIN-subject effect should normally carry substantially MORE
+ |     denominator df than a BETWEEN-subject effect.  If every effect in
+ |     the model shows the same DenDF, something is wrong -- either the
+ |     df method is not stratifying, or the df were transcribed.
+ |
+ |     The macro prints a WARNING when every DenDF is a whole number,
+ |     which usually means neither KR nor Satterthwaite was requested.
+ |
+ |     Kenward MG, Roger JH. Small sample inference for fixed effects
+ |     from restricted maximum likelihood. Biometrics 1997;53(3):983-997.
+ |     Schaalje GB, McBride JB, Fellingham GW. Adequacy of approximations
+ |     to distributions of test statistics in complex mixed linear
+ |     models. J Agric Biol Environ Stat 2002;7(4):512-524.
+ |     (Verify page numbers before citing.)
  |
  |  ---------------------------------------------------------------------
  |  CORRESPONDENCE WITH PROC GLM
@@ -316,11 +403,17 @@
                         out       = effectsizes,
                         alpha     = 0.05,
                         label     = ,
-                        print     = Y);
+                        print     = Y,
+                        eta2_method = FROM_F,
+                        data      = ,
+                        class     = ,
+                        fixed     = );
 
     %local _abort _havess _haveprobf _cilevel _mdl _rt _src
-           _e2 _o2 _e2lab _o2lab _rtword _srcword;
+           _e2 _o2 _e2lab _o2lab _rtword _srcword _e2m _glmok;
     %let _abort     = 0;
+    %let _glmok     = 0;
+    %let _e2m       = %upcase(%superq(eta2_method));
     %let _havess    = 0;
     %let _haveprobf = 0;
     %let _cilevel   = %sysevalf((1 - &alpha) * 100);
@@ -371,6 +464,40 @@
         %let _o2      = omega2_cond_approx;
         %let _e2lab   = %str(Conditional eta-squared, proportion of WITHIN-SUBJECT variance (approximate));
         %let _o2lab   = %str(Conditional omega-squared, proportion of WITHIN-SUBJECT variance (approximate));
+    %end;
+
+    /*-- 1b. Validate ETA2_METHOD= --------------------------------------*/
+    %if &_e2m ne FROM_F and &_e2m ne DIRECT %then %do;
+        %put ERROR: (mixed_effectsize) ETA2_METHOD= must be FROM_F or DIRECT, not "&eta2_method".;
+        %let _abort = 1;
+    %end;
+
+    %if &_e2m = DIRECT %then %do;
+        %if %superq(data) = or %superq(fixed) = %then %do;
+            %put ERROR: (mixed_effectsize) ETA2_METHOD=DIRECT requires DATA= and FIXED=.;
+            %put ERROR- Supply the dataset the model was fitted to and the fixed-effects;
+            %put ERROR- right-hand side, exactly as written in the PROC MIXED MODEL statement.;
+            %let _abort = 1;
+        %end;
+        %else %if not %sysfunc(exist(&data)) %then %do;
+            %put ERROR: (mixed_effectsize) Dataset &data does not exist.;
+            %let _abort = 1;
+        %end;
+        %if %superq(dv) = %then %do;
+            %put ERROR: (mixed_effectsize) ETA2_METHOD=DIRECT requires DV=.;
+            %let _abort = 1;
+        %end;
+        %if %superq(resids) = %then %do;
+            %put ERROR: (mixed_effectsize) ETA2_METHOD=DIRECT also requires RESIDS=.;
+            %put ERROR- The residuals dataset supplies N_OBS, which the macro compares against the;
+            %put ERROR- observation count PROC GLM used and against DenDF. Pass the OUTPM= dataset.;
+            %let _abort = 1;
+        %end;
+        %if &_rt = CONDITIONAL %then %do;
+            %put ERROR: (mixed_effectsize) ETA2_METHOD=DIRECT is not defined for RESIDTYPE=CONDITIONAL.;
+            %put ERROR- PROC GLM has no random effects, so there is no within-subject decomposition to take.;
+            %let _abort = 1;
+        %end;
     %end;
 
     /*-- 2. Validate datasets -------------------------------------------*/
@@ -458,13 +585,79 @@
         %end;
     %end;
 
+    /*-- 4b. ETA2_METHOD=DIRECT: real Type III SS from PROC GLM ----------*
+     |  PROC GLM ignores the repeated-measures covariance structure.  That
+     |  is fine here and only here: we take its SUMS OF SQUARES, which are
+     |  a genuine decomposition of the observed variance, and we discard
+     |  its F and p, which are not valid for this design.  F, df and
+     |  partial eta-squared always come from PROC MIXED.
+     *-------------------------------------------------------------------*/
+    %local _glm_sstot _glm_mse _glm_n;
+    %if &_e2m = DIRECT %then %do;
+
+        %put NOTE: (mixed_effectsize) ETA2_METHOD=DIRECT -- refitting the mean model with PROC GLM for Type III SS.;
+        %put NOTE- Only the sums of squares are used. GLM F and p values are NOT valid for a repeated-measures design.;
+
+        ods graphics off;
+        ods listing close;
+        proc glm data = &data;
+            %if %superq(class) ne %then %str(class &class;);
+            model &dv = &fixed / ss3;
+            ods output ModelANOVA = _es_glm  OverallANOVA = _es_glmoa;
+        quit;
+        ods listing;
+
+        %if %sysfunc(exist(_es_glm)) and %sysfunc(exist(_es_glmoa)) %then %do;
+
+            data _es_glmss;
+                set _es_glm;
+                where HypothesisType = 3;
+                length _eskey $80;
+                _eskey  = upcase(compress(Source));
+                _ss_eff = SS;
+                _df_eff = DF;
+                keep _eskey _ss_eff _df_eff;
+            run;
+
+            proc sort data = _es_glmss; by _eskey; run;
+
+            data _null_;
+                set _es_glmoa;
+                if upcase(Source) = 'CORRECTED TOTAL' then do;
+                    call symputx('_glm_sstot', SS);
+                    call symputx('_glm_n', DF + 1);
+                end;
+                if upcase(Source) = 'ERROR' then call symputx('_glm_mse', MS);
+            run;
+
+            %if %superq(_glm_sstot) ne and %sysevalf(&_glm_sstot > 0) %then %let _glmok = 1;
+            %else %put WARNING: (mixed_effectsize) PROC GLM produced no usable corrected total SS; falling back to FROM_F.;
+
+            %if &_glmok = 1 and &_havess = 1 %then %do;
+                %if %sysevalf(&_glm_n ne &_n_obs) %then %do;
+                    %put WARNING: (mixed_effectsize) PROC GLM used &_glm_n observations, PROC MIXED used &_n_obs..;
+                    %put WARNING- The two fits do not have the same complete-case set; eta-squared and the F test;
+                    %put WARNING- then describe slightly different data. Check the missing-value pattern.;
+                %end;
+            %end;
+        %end;
+        %else %put WARNING: (mixed_effectsize) PROC GLM did not produce ODS output; falling back to FROM_F.;
+    %end;
+
+    %local _e2src;
+    %if &_glmok = 1 %then %let _e2src = GLM_TYPE3;
+    %else %let _e2src = FROM_F;
+
     /*-- 5. Effect sizes -------------------------------------------------*/
     data &out;
-        length model_label $200 model_type $8 resid_type $11;
+        length model_label $200 model_type $8 resid_type $11 eta2_source $10 _eskey $80;
         set &tests3;
         model_label = "&label";
         model_type  = "&_mdl";
         resid_type  = "&_rt";
+        eta2_source = "&_e2src";
+        _eskey      = upcase(compress(Effect));
+        _seq        = _n_;   /* preserve Type 3 order across the merge sort */
 
         /* ---- partial eta-squared: needs only NumDF, DenDF, FValue ---- */
         if NumDF > 0 and DenDF > 0 and not missing(FValue) then do;
@@ -497,6 +690,11 @@
 
                 &_e2 = ss_effect / ss_total;
                 &_o2 = (ss_effect - NumDF * mse) / (ss_total + mse);
+
+                /* How far is DenDF from the observation count?  See
+                   ASSUMPTIONS 2: eta-squared from F is inflated by
+                   roughly this factor.  Partial eta-squared is immune. */
+                nobs_dendf = n_obs / DenDF;
             end;
         %end;
 
@@ -520,14 +718,81 @@
             ss_error         = "SS error (USS of &_rtword residuals)"
             ss_total         = 'SS total (CSS of dependent variable)'
             n_obs            = 'Observations used'
+            nobs_dendf       = 'N_obs / DenDF (>1.5 : eta-squared from F unreliable)'
         %end;
+            eta2_source      = 'Source of eta-squared'
             model_label      = 'Model'
             model_type       = 'Model type'
             resid_type       = 'Residual type'
         ;
     run;
 
-    /*-- 6. Warn if the denominator df look like the containment default -*/
+    /*-- 5b. Overwrite eta-squared with the DIRECT Type III values -------*/
+    %if &_glmok = 1 %then %do;
+
+        proc sort data = &out; by _eskey; run;
+
+        data &out;
+            merge &out (in = a) _es_glmss (in = b);
+            by _eskey;
+            if a;
+            if b then do;
+                ss_effect  = _ss_eff;
+                ss_total   = &_glm_sstot;
+                mse        = &_glm_mse;
+                &_e2 = ss_effect / ss_total;
+                &_o2 = (ss_effect - _df_eff * mse) / (ss_total + mse);
+            end;
+            else do;
+                call missing(ss_effect, &_e2, &_o2);
+                eta2_source = 'UNMATCHED';
+                put "WARNING: (mixed_effectsize) No Type III SS matched effect " Effect
+                    "-- eta-squared suppressed for that row.";
+            end;
+            label mse       = 'MSE (PROC GLM Type III error)'
+                  ss_effect = 'SS effect (PROC GLM Type III)'
+                  ss_total  = 'SS total (PROC GLM corrected total)';
+            drop _ss_eff _df_eff;
+        run;
+
+        %put NOTE: (mixed_effectsize) Eta-squared and omega-squared taken from PROC GLM Type III sums of squares.;
+        %put NOTE- These are a real variance decomposition, not reconstructed from F. Partial eta-squared is unchanged.;
+    %end;
+
+    /* restore the original Type 3 ordering and drop the merge keys */
+    proc sort data = &out; by _seq; run;
+    data &out;
+        set &out;
+        drop _eskey _seq;
+    run;
+
+    /*-- 6a. Warn when eta-squared from F cannot be trusted ---------------*
+     |  DenDF much smaller than N_obs means the implied MSE (SS_error /
+     |  DenDF) is inflated, and eta-squared with it.  That is the normal
+     |  situation for a BETWEEN-subject effect in a repeated-measures
+     |  design.  Partial eta-squared is unaffected.
+     *-------------------------------------------------------------------*/
+    %local _nbad _worst;
+    %if &_havess = 1 and &_glmok = 0 %then %do;
+        %let _nbad = 0; %let _worst = .;
+        proc sql noprint;
+            select sum(nobs_dendf > 1.5), max(nobs_dendf)
+              into :_nbad trimmed, :_worst trimmed
+              from &out where nobs_dendf is not missing;
+        quit;
+        %if %superq(_nbad) ne and %superq(_nbad) ne . %then %do;
+        %if &_nbad > 0 %then %do;
+            %put WARNING: (mixed_effectsize) &_nbad effect(s) have N_obs / DenDF > 1.5 (worst: &_worst).;
+            %put WARNING- For those rows eta-squared and omega-squared are inflated by roughly that factor,;
+            %put WARNING- because MSE is formed as SS_error / DenDF over all N_obs residuals. This is the;
+            %put WARNING- expected pattern for a BETWEEN-subject effect in a repeated-measures design.;
+            %put WARNING- Report PARTIAL_ETA2 only, or rerun with ETA2_METHOD=DIRECT.;
+            %put WARNING- PARTIAL_ETA2 is NOT affected: the MSE cancels out of it.;
+        %end;
+        %end;
+    %end;
+
+    /*-- 6b. Warn if the denominator df look like a default ---------------*/
     %local _fracdf;
     %let _fracdf = .;
     proc sql noprint;
@@ -536,8 +801,27 @@
     %if %superq(_fracdf) ne and %superq(_fracdf) ne . %then %do;
         %if &_fracdf = 0 %then %do;
             %put WARNING: (mixed_effectsize) Every DenDF is a whole number.;
-            %put WARNING- That usually means DDFM=KR or DDFM=SATTERTH was not requested.;
-            %put WARNING- All effect sizes here depend on DenDF; consider refitting with DDFM=KR.;
+            %put WARNING- That usually means the denominator df were left at the default, i.e. neither;
+            %put WARNING- DDFM=KR nor DDFM=SATTERTH was requested. The default containment / between-within;
+            %put WARNING- methods do not allow for the covariance parameters having been ESTIMATED, and can;
+            %put WARNING- be anticonservative in small, unbalanced designs with a rich covariance structure.;
+            %put WARNING- Everything in this table depends on DenDF. This is not a claim that KR is always;
+            %put WARNING- best -- see ASSUMPTIONS 5 in the macro header for when it is and is not.;
+        %end;
+    %end;
+
+    /* Same DenDF on every row is a red flag in a between-within design */
+    %local _ndistinct _neff;
+    proc sql noprint;
+        select count(distinct DenDF), count(*) into :_ndistinct trimmed, :_neff trimmed from &out;
+    quit;
+    %if %superq(_ndistinct) ne and %superq(_neff) ne %then %do;
+        %if &_ndistinct = 1 and &_neff > 1 %then %do;
+            %put WARNING: (mixed_effectsize) All &_neff effects share the same DenDF.;
+            %put WARNING- In a repeated-measures model a WITHIN-subject effect should normally carry;
+            %put WARNING- substantially MORE denominator df than a BETWEEN-subject effect. One value for;
+            %put WARNING- every effect suggests the df method is not stratifying, or that the df were;
+            %put WARNING- transcribed. Check the Type 3 table before reporting anything from here.;
         %end;
     %end;
 
@@ -553,20 +837,21 @@
             var Effect NumDF DenDF FValue
                 %if &_haveprobf = 1 %then ProbF;
                 partial_eta2 partial_eta2_lcl partial_eta2_ucl cohen_f2
-                %if &_havess = 1 %then &_e2 &_o2;
+                %if &_havess = 1 %then &_e2 &_o2 nobs_dendf;
+                eta2_source
                 ;
             format FValue 8.2 NumDF 8. DenDF 8.1
                    %if &_haveprobf = 1 %then %str(ProbF pvalue6.4);
                    partial_eta2 partial_eta2_lcl partial_eta2_ucl
                    cohen_f2 8.3
-                   %if &_havess = 1 %then %str(&_e2 &_o2 8.4);
+                   %if &_havess = 1 %then %str(&_e2 &_o2 8.4 nobs_dendf 8.2);
                    ;
         run;
         title;
     %end;
 
     proc datasets library = work nolist nowarn;
-        delete _es_ss;
+        delete _es_ss _es_glm _es_glmoa _es_glmss;
     quit;
 
     %put NOTE: (mixed_effectsize) Effect sizes written to &out..;

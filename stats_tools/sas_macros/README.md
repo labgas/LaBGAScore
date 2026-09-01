@@ -88,6 +88,47 @@ Per effect: `partial_eta2` with a noncentral-F confidence interval,
 omega-squared, labelled as approximations. Every quantity has its own variable
 name and a full printed label, which is the point.
 
+Two diagnostic columns come with them:
+
+| Column | Meaning |
+|---|---|
+| `nobs_dendf` | `N_obs / DenDF`. Above ~1.5, eta-squared from F is inflated by roughly this factor and the macro warns. `partial_eta2` is unaffected. See caveat 2. |
+| `eta2_source` | `FROM_F`, `GLM_TYPE3` or `UNMATCHED` — where the eta-squared on that row came from. |
+
+### Two ways to get eta-squared
+
+`eta2_method = FROM_F | DIRECT`.
+
+`FROM_F` (default) reconstructs `SS_effect` as `NumDF x FValue x (SS_error /
+DenDF)`. Cheap, needs nothing but the Type 3 table and the residuals — and
+subject to caveat 2 below.
+
+`DIRECT` refits the same *mean* model with `PROC GLM` and takes real Type III
+sums of squares:
+
+```sas
+%mixed_effectsize(tests3      = tests3_y,
+                  resids      = outpm_y,
+                  dv          = y,
+                  eta2_method = DIRECT,
+                  data        = mydata,
+                  class       = id group time,
+                  fixed       = group|time);
+```
+
+That is an actual variance decomposition rather than one back-solved from a
+Wald statistic, so it is not subject to the `N_obs / DenDF` inflation. It also
+settles the omega-squared convention question below, because the error MSE
+comes from a real ANOVA table.
+
+**`PROC GLM` ignores the repeated-measures covariance structure entirely.**
+Only its sums of squares are used. Its F and p values are *not* valid for these
+designs and the macro never reports them — F, df and `partial_eta2` always come
+from `PROC MIXED`. The macro warns if the two fits used different numbers of
+observations.
+
+`partial_eta2` is identical under both methods.
+
 ### Marginal versus mixed models
 
 `model = MARGINAL | MIXED`.
@@ -119,7 +160,9 @@ stating which it assumed rather than guessing. Read the log.
 
 Report `partial_eta2`. It is the convention in this literature, and a reader
 can recompute it from the F and df printed in the same table — which is what
-makes a results table checkable.
+makes a results table checkable. It is also the only quantity here that is
+invariant to the two failure modes documented below: it does not depend on
+`N_obs`, and the MSE cancels out of it.
 
 Eta-squared cannot be recovered from F and df alone, so a reader cannot verify
 it. Report it only alongside partial eta-squared, never instead of it, and
@@ -138,9 +181,26 @@ more directly interpretable than any variance-explained measure.
    `SS_effect = NumDF * FValue * MSE`. That is the natural analogue of the
    fixed-effects definitions but remains an approximation, hence the
    `*_APPROX` names.
-2. Under Kenward-Roger, `DenDF` differs between effects, so the implied MSE
-   differs slightly too. Partial eta-squared is unaffected (the MSE cancels);
-   eta-squared and omega-squared are mildly affected. The macro reports the
+2. **Eta-squared from F is unreliable when `DenDF` is much smaller than the
+   number of observations.** `MSE` is formed as `SS_error / DenDF`, where
+   `SS_error` is the USS of the residuals over *all* observations. In a
+   fixed-effects ANOVA that is exact, because the error df there really is
+   `N - rank(X)`. In a marginal or mixed model it is not: a **between-subject**
+   effect in a repeated-measures design is tested against participant-level df,
+   so `DenDF` can be several times smaller than `N_obs`, and eta-squared and
+   omega-squared are inflated by roughly `N_obs / DenDF`.
+
+   With 166 participants x 4 timepoints = 664 observations and a group effect
+   on 161 df, eta-squared from F is too large by a factor of about 4.1.
+
+   The macro reports `NOBS_DENDF` for every row and warns above 1.5. When that
+   fires, report `partial_eta2` only, or rerun with `eta2_method = DIRECT`.
+
+   **`partial_eta2` is not affected** — the MSE cancels out of it
+   algebraically. This caveat is about eta-squared and omega-squared alone.
+
+   Under Kenward-Roger `DenDF` also differs from effect to effect, so the
+   implied MSE differs between rows of one model; the macro reports the
    `DenDF` used for each row so the dependence is visible.
 3. With `residtype = CONDITIONAL`, report the variance components alongside
    the effect sizes. Without them a reader cannot tell how much variance the
@@ -148,10 +208,41 @@ more directly interpretable than any variance-explained measure.
 4. The confidence interval inverts the noncentral F distribution
    (Steiger 2004) using N = `NumDF + DenDF + 1`. With Kenward-Roger df that N
    is an approximation, so the interval is approximate.
-5. **Use `DDFM = KR`** (or `KR2`). With the default containment method the
-   denominator df can be badly wrong for these designs, and every quantity
-   here depends on it. The macro warns if every `DenDF` is a whole number,
-   which usually means KR or Satterthwaite was not requested.
+5. **Choose a denominator-df method deliberately.** Everything here depends on
+   `DenDF`, so this is the most consequential choice upstream of the macro.
+
+   The point is not that Kenward-Roger is universally best. It is that the
+   default containment / between-within methods do not account for the
+   covariance parameters having been *estimated*, and can be markedly
+   anticonservative in small, unbalanced designs with a rich covariance
+   structure.
+
+   | Option | What it does | When |
+   |---|---|---|
+   | `DDFM=KR` | inflates the fixed-effect covariance matrix for estimated variance parameters **and** derives a Satterthwaite-type df — so it changes both F and `DenDF`. Designed for `METHOD=REML`. | best default for small-to-moderate N with `UN` or other rich structures — the LaBGAS common case |
+   | `DDFM=KR2` | Kenward-Roger with the 2009 bias adjustment | as above |
+   | `DDFM=SATTERTH` | df adjustment only, no covariance correction | acceptable; usually close to KR, less prone to convergence trouble |
+   | `EMPIRICAL=MBN`/`MOREL` | sandwich estimator with a small-sample correction | consider **instead** when the covariance structure itself is doubtful — KR is model-based and gives a precise df for the model you specified, right or wrong |
+   | `CONTAIN`/`BETWITHIN`/`RESIDUAL` | defaults | fine in large balanced designs, where all methods converge; check the df before trusting them in an unbalanced between-within design |
+
+   KR is also computationally heavier and can be slow or fail with large
+   unstructured matrices.
+
+   **Sanity check on any Type 3 table from a repeated-measures model:** a
+   within-subject effect should normally carry substantially *more* denominator
+   df than a between-subject effect. If every effect shows the same `DenDF`,
+   something is wrong — either the df method is not stratifying, or the df were
+   transcribed. The macro warns when it sees this, and when every `DenDF` is a
+   whole number (which usually means neither KR nor Satterthwaite was asked
+   for).
+
+   - Kenward MG, Roger JH. Small sample inference for fixed effects from
+     restricted maximum likelihood. *Biometrics* 1997;53(3):983–997.
+   - Schaalje GB, McBride JB, Fellingham GW. Adequacy of approximations to
+     distributions of test statistics in complex mixed linear models.
+     *J Agric Biol Environ Stat* 2002;7(4):512–524.
+
+   Verify page numbers before either goes into a Methods section.
 
 ### Correspondence with `PROC GLM`
 
