@@ -210,28 +210,45 @@
  |     which is the natural analogue of the fixed-effects definitions but
  |     is an approximation.  Both are labelled *_APPROX for that reason.
  |
- |  2. *** ETA-SQUARED FROM F IS UNRELIABLE WHEN DenDF << N_obs. ***
- |     MSE is formed as SS_error / DenDF, where SS_error is the USS of
- |     the residuals over ALL observations.  In a fixed-effects ANOVA
- |     that is exact, because the error df there IS N - rank(X).  In a
- |     marginal or mixed model it is not: a BETWEEN-subject effect in a
- |     repeated-measures design is tested against participant-level df,
- |     so DenDF can be several times smaller than N_obs, and the implied
- |     MSE -- and hence eta-squared and omega-squared -- is inflated by
- |     roughly N_obs / DenDF.
+ |  2. *** ETA-SQUARED RECONSTRUCTED FROM F IS NOT TRUSTWORTHY FOR A
+ |     MIXED OR MARGINAL MODEL.  USE ETA2_METHOD = DIRECT. ***
  |
- |     Worked case: 166 participants x 4 timepoints = 664 observations,
- |     group effect tested on 161 df.  Eta-squared from F is too large by
- |     a factor of about 664/161 = 4.1.
+ |     SS_effect = NumDF x FValue x MSE is exact in a fixed-effects
+ |     ANOVA, where F really is MS_effect / MS_error and the error df
+ |     really is N - rank(X).  Neither holds here.  Two separate things
+ |     go wrong:
  |
- |     The macro computes N_OBS / DenDF for every row, reports it as
- |     NOBS_DENDF, and issues a WARNING for any row above 1.5.  When that
- |     warning fires, report PARTIAL_ETA2 only, or rerun with
- |     ETA2_METHOD = DIRECT.
+ |       (a) MSE is formed as SS_error / DenDF, but SS_error is the USS
+ |           of the residuals over ALL N_obs observations.  When DenDF
+ |           is participant-level -- a BETWEEN-subject effect in a
+ |           repeated design -- that MSE is inflated by about
+ |           df_resid / DenDF.
+ |       (b) F from PROC MIXED is a Wald statistic on GLS estimates,
+ |           not a ratio of orthogonal sums of squares.  It can be much
+ |           larger or much smaller than the corresponding OLS F.
  |
- |     PARTIAL_ETA2 IS NOT AFFECTED -- the MSE cancels out of it
- |     algebraically.  This caveat is about eta-squared and omega-squared
- |     alone.
+ |     The net error is the PRODUCT of the two, and they can compound or
+ |     partly cancel.  Verified against R (effectsize, lme4/lmerTest) and
+ |     Python (pingouin, statsmodels) on a simulated 120-subject x
+ |     4-timepoint design:
+ |
+ |       effect        N_obs/DenDF   MSE inflation   actual eta2 error
+ |       group             4.10          4.03             1.29x
+ |       time              1.36          1.34             4.47x
+ |       group x time      1.36          1.34             4.47x
+ |
+ |     So the error is NOT predictable from the degrees of freedom, and
+ |     N_OBS/DenDF is a diagnostic of (a) only, not a correction factor.
+ |     An earlier version of this file claimed the inflation was roughly
+ |     N_obs/DenDF.  That was wrong; the table above is the evidence.
+ |
+ |     NOBS_DENDF is still reported because it makes (a) visible, but the
+ |     macro now warns on EVERY row whenever ETA2_METHOD = FROM_F, since
+ |     the problem is not confined to rows with a small DenDF.
+ |
+ |     PARTIAL_ETA2, PARTIAL_OMEGA2 and PARTIAL_EPSILON2 ARE NOT
+ |     AFFECTED -- they use only NumDF, DenDF and FValue.  This caveat is
+ |     about eta-squared and (classical) omega-squared alone.
  |
  |     Under Kenward-Roger, DenDF also differs from effect to effect, so
  |     the implied MSE differs between rows of the same model.  The macro
@@ -293,6 +310,36 @@
  |     to distributions of test statistics in complex mixed linear
  |     models. J Agric Biol Environ Stat 2002;7(4):512-524.
  |     (Verify page numbers before citing.)
+ |
+ |  ---------------------------------------------------------------------
+ |  CROSS-VALIDATED AGAINST R AND PYTHON  (2026-09-01)
+ |  ---------------------------------------------------------------------
+ |  Simulated repeated-measures design, 120 subjects x 4 timepoints,
+ |  between-subject GROUP, within-subject TIME, subject-level covariate,
+ |  random intercept.  Fitted with lme4/lmerTest (Kenward-Roger) and with
+ |  pingouin's mixed_anova.
+ |
+ |  PARTIAL ETA-SQUARED -- exact agreement, three implementations:
+ |      this macro          (NumDF x F) / (NumDF x F + DenDF)
+ |      R  effectsize::F_to_eta2()          identical to 1e-16
+ |      Py pingouin.mixed_anova(effsize='np2')  identical to 1e-16
+ |  pingouin computes it from a REAL repeated-measures sum-of-squares
+ |  decomposition, not from F, and still lands on the same number.  The
+ |  formula is an algebraic identity, not an approximation.
+ |
+ |  CONFIDENCE INTERVAL -- this macro is the more accurate of the two.
+ |  Both invert the noncentral F.  Checking where the returned bounds
+ |  actually put the tail probability (target 0.975 / 0.025):
+ |      this macro (FNONCT, exact inversion)  0.975000 / 0.025000
+ |      R effectsize (optim-based NCP search) 0.972129 / 0.020694
+ |  Bounds differ by about 0.003-0.004 in eta-squared units.  DO NOT
+ |  "correct" this macro to reproduce R's numbers.
+ |
+ |  ETA-SQUARED -- see ASSUMPTIONS 2.  Neither FROM_F variant reproduces
+ |  a real Type III decomposition; ETA2_METHOD = DIRECT does, by
+ |  construction, and was checked against car::Anova(type=3) in R and
+ |  statsmodels.anova_lm(typ=3) in Python (both with sum-to-zero
+ |  contrasts, which Type III requires).
  |
  |  ---------------------------------------------------------------------
  |  CORRESPONDENCE WITH PROC GLM
@@ -454,7 +501,7 @@
         %let _e2      = eta2_approx;
         %let _o2      = omega2_approx;
         %let _e2lab   = %str(Eta-squared, proportion of total variance (approximate));
-        %let _o2lab   = %str(Omega-squared, proportion of total variance (approximate));
+        %let _o2lab   = %str(Omega-squared, CLASSICAL/non-partial, proportion of total variance (approximate) -- NOT the same as PARTIAL_OMEGA2);
     %end;
     %else %do;
         %let _src     = OUTP=;
@@ -664,6 +711,17 @@
             partial_eta2 = (NumDF * FValue) / (NumDF * FValue + DenDF);
             cohen_f2     = partial_eta2 / (1 - partial_eta2);
 
+            /* Partial omega-squared and partial epsilon-squared. Like
+               partial eta-squared these need ONLY NumDF, DenDF and
+               FValue, so a reader can recompute them from the same
+               table -- and both are less positively biased than partial
+               eta-squared. Definitions match R's effectsize package
+               (F_to_omega2, F_to_epsilon2), verified numerically.
+               They can go negative when F < 1; that is expected, and
+               such a value is conventionally read as 0.            */
+            partial_omega2   = (NumDF * (FValue - 1)) / (NumDF * FValue + DenDF + 1);
+            partial_epsilon2 = (NumDF * (FValue - 1)) / (NumDF * FValue + DenDF);
+
             /* Steiger (2004) CI by inverting the noncentral F.
                FNONCT(x, ndf, ddf, p) returns the noncentrality nc for which
                PROBF(x, ndf, ddf, nc) = p.                                */
@@ -710,6 +768,8 @@
             partial_eta2_lcl = 'Partial eta-squared, lower CL'
             partial_eta2_ucl = 'Partial eta-squared, upper CL'
             cohen_f2         = "Cohen's f-squared"
+            partial_omega2   = 'Partial omega-squared (less biased; from F and df only)'
+            partial_epsilon2 = 'Partial epsilon-squared (less biased; from F and df only)'
         %if &_havess = 1 %then %do;
             &_e2             = "&_e2lab"
             &_o2             = "&_o2lab"
@@ -772,24 +832,23 @@
      |  situation for a BETWEEN-subject effect in a repeated-measures
      |  design.  Partial eta-squared is unaffected.
      *-------------------------------------------------------------------*/
-    %local _nbad _worst;
+    %local _worst;
     %if &_havess = 1 and &_glmok = 0 %then %do;
-        %let _nbad = 0; %let _worst = .;
+        %let _worst = .;
         proc sql noprint;
-            select sum(nobs_dendf > 1.5), max(nobs_dendf)
-              into :_nbad trimmed, :_worst trimmed
+            select max(nobs_dendf) into :_worst trimmed
               from &out where nobs_dendf is not missing;
         quit;
-        %if %superq(_nbad) ne and %superq(_nbad) ne . %then %do;
-        %if &_nbad > 0 %then %do;
-            %put WARNING: (mixed_effectsize) &_nbad effect(s) have N_obs / DenDF > 1.5 (worst: &_worst).;
-            %put WARNING- For those rows eta-squared and omega-squared are inflated by roughly that factor,;
-            %put WARNING- because MSE is formed as SS_error / DenDF over all N_obs residuals. This is the;
-            %put WARNING- expected pattern for a BETWEEN-subject effect in a repeated-measures design.;
-            %put WARNING- Report PARTIAL_ETA2 only, or rerun with ETA2_METHOD=DIRECT.;
-            %put WARNING- PARTIAL_ETA2 is NOT affected: the MSE cancels out of it.;
-        %end;
-        %end;
+        %put WARNING: (mixed_effectsize) ETA2_METHOD=FROM_F reconstructs SS_effect as NumDF x F x MSE.;
+        %put WARNING- That is exact only in a fixed-effects ANOVA. For a mixed or marginal model it is not:;
+        %put WARNING-   (a) MSE = SS_error/DenDF is taken over all N_obs residuals (worst N_obs/DenDF here: &_worst);
+        %put WARNING-   (b) F from PROC MIXED is a Wald statistic on GLS estimates, not a ratio of;
+        %put WARNING-       orthogonal sums of squares, so it need not match the OLS F at all.;
+        %put WARNING- The net error is the PRODUCT of the two and is not predictable from the df. In a;
+        %put WARNING- simulated 120x4 design the between-subject effect was out by 1.3x and the WITHIN-;
+        %put WARNING- subject effects by 4.5x, despite the within rows having the SMALLER N_obs/DenDF.;
+        %put WARNING- Report PARTIAL_ETA2 / PARTIAL_OMEGA2 / PARTIAL_EPSILON2, or rerun with ETA2_METHOD=DIRECT.;
+        %put WARNING- Those three are NOT affected: they use only NumDF, DenDF and FValue.;
     %end;
 
     /*-- 6b. Warn if the denominator df look like a default ---------------*/
@@ -836,14 +895,15 @@
         proc print data = &out noobs label;
             var Effect NumDF DenDF FValue
                 %if &_haveprobf = 1 %then ProbF;
-                partial_eta2 partial_eta2_lcl partial_eta2_ucl cohen_f2
+                partial_eta2 partial_eta2_lcl partial_eta2_ucl
+                partial_omega2 partial_epsilon2 cohen_f2
                 %if &_havess = 1 %then &_e2 &_o2 nobs_dendf;
                 eta2_source
                 ;
             format FValue 8.2 NumDF 8. DenDF 8.1
                    %if &_haveprobf = 1 %then %str(ProbF pvalue6.4);
                    partial_eta2 partial_eta2_lcl partial_eta2_ucl
-                   cohen_f2 8.3
+                   partial_omega2 partial_epsilon2 cohen_f2 8.3
                    %if &_havess = 1 %then %str(&_e2 &_o2 8.4 nobs_dendf 8.2);
                    ;
         run;
@@ -855,6 +915,9 @@
     quit;
 
     %put NOTE: (mixed_effectsize) Effect sizes written to &out..;
-    %put NOTE- Report PARTIAL_ETA2. If you also report &_e2, label it as the output labels do.;
+    %put NOTE- Report PARTIAL_ETA2 (optionally with PARTIAL_OMEGA2 / PARTIAL_EPSILON2, which are less biased);
+    %put NOTE- and are recomputable by a reader from the F and df in the same table.;
+    %put NOTE- If you also report &_e2, label it as the output labels do; it is the CLASSICAL, non-partial;
+    %put NOTE- omega/eta family and is not comparable with PARTIAL_OMEGA2.;
 
 %mend mixed_effectsize;

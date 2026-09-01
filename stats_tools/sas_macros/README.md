@@ -92,7 +92,9 @@ Two diagnostic columns come with them:
 
 | Column | Meaning |
 |---|---|
-| `nobs_dendf` | `N_obs / DenDF`. Above ~1.5, eta-squared from F is inflated by roughly this factor and the macro warns. `partial_eta2` is unaffected. See caveat 2. |
+| `partial_omega2` | Partial omega-squared, `NumDF(F-1)/(NumDF·F + DenDF + 1)`. Less positively biased than partial eta-squared, and computable from F and df alone. Matches R `effectsize::F_to_omega2`. Negative when F < 1; read as 0. |
+| `partial_epsilon2` | Partial epsilon-squared, `NumDF(F-1)/(NumDF·F + DenDF)`. Matches R `effectsize::F_to_epsilon2`. |
+| `nobs_dendf` | `N_obs / DenDF`. Diagnostic only — it makes the MSE substitution visible but does **not** bound the eta-squared error. See caveat 2. |
 | `eta2_source` | `FROM_F`, `GLM_TYPE3` or `UNMATCHED` — where the eta-squared on that row came from. |
 
 ### Two ways to get eta-squared
@@ -160,9 +162,18 @@ stating which it assumed rather than guessing. Read the log.
 
 Report `partial_eta2`. It is the convention in this literature, and a reader
 can recompute it from the F and df printed in the same table — which is what
-makes a results table checkable. It is also the only quantity here that is
-invariant to the two failure modes documented below: it does not depend on
-`N_obs`, and the MSE cancels out of it.
+makes a results table checkable. It is invariant to both failure modes
+documented below: it does not depend on `N_obs`, and the MSE cancels out of it.
+
+Consider adding `partial_omega2` (or `partial_epsilon2`). They share that
+property — F and df are all they need — and both are less positively biased
+than partial eta-squared, which matters most when an effect is small or the
+sample is not large. They are what R's `effectsize` reports alongside partial
+eta-squared.
+
+Note that `omega2_approx` is the **classical, non-partial** omega-squared and is
+a different quantity from `partial_omega2`. Do not report them as if they were
+alternatives to each other.
 
 Eta-squared cannot be recovered from F and df alone, so a reader cannot verify
 it. Report it only alongside partial eta-squared, never instead of it, and
@@ -181,23 +192,40 @@ more directly interpretable than any variance-explained measure.
    `SS_effect = NumDF * FValue * MSE`. That is the natural analogue of the
    fixed-effects definitions but remains an approximation, hence the
    `*_APPROX` names.
-2. **Eta-squared from F is unreliable when `DenDF` is much smaller than the
-   number of observations.** `MSE` is formed as `SS_error / DenDF`, where
-   `SS_error` is the USS of the residuals over *all* observations. In a
-   fixed-effects ANOVA that is exact, because the error df there really is
-   `N - rank(X)`. In a marginal or mixed model it is not: a **between-subject**
-   effect in a repeated-measures design is tested against participant-level df,
-   so `DenDF` can be several times smaller than `N_obs`, and eta-squared and
-   omega-squared are inflated by roughly `N_obs / DenDF`.
+2. **Eta-squared reconstructed from F is not trustworthy for a mixed or
+   marginal model. Use `eta2_method = DIRECT`.**
 
-   With 166 participants x 4 timepoints = 664 observations and a group effect
-   on 161 df, eta-squared from F is too large by a factor of about 4.1.
+   `SS_effect = NumDF x FValue x MSE` is exact in a fixed-effects ANOVA, where
+   F really is `MS_effect / MS_error` and the error df really is `N - rank(X)`.
+   Neither holds here, and two things go wrong independently:
 
-   The macro reports `NOBS_DENDF` for every row and warns above 1.5. When that
-   fires, report `partial_eta2` only, or rerun with `eta2_method = DIRECT`.
+   - **(a)** `MSE = SS_error / DenDF`, but `SS_error` is the USS of the
+     residuals over *all* `N_obs` observations. For a between-subject effect
+     tested on participant-level df, that MSE is inflated by about
+     `df_resid / DenDF`.
+   - **(b)** F from `PROC MIXED` is a Wald statistic on GLS estimates, not a
+     ratio of orthogonal sums of squares. It can be much larger or much smaller
+     than the OLS F for the same effect.
 
-   **`partial_eta2` is not affected** — the MSE cancels out of it
-   algebraically. This caveat is about eta-squared and omega-squared alone.
+   The net error is the **product** of the two, and they can compound or partly
+   cancel. Cross-checked against R (`effectsize`, `lme4`/`lmerTest`) and Python
+   (`pingouin`, `statsmodels`) on a simulated 120-subject x 4-timepoint design:
+
+   | effect | `N_obs/DenDF` | MSE inflation | actual eta² error |
+   |---|---|---|---|
+   | group (between) | 4.10 | 4.03 | **1.29×** |
+   | time (within) | 1.36 | 1.34 | **4.47×** |
+   | group × time | 1.36 | 1.34 | **4.47×** |
+
+   So the error is **not** predictable from the degrees of freedom, and
+   `NOBS_DENDF` diagnoses (a) only — it is not a correction factor, and the
+   worst row here has the *smaller* ratio. An earlier version of this README
+   said the inflation was roughly `N_obs / DenDF`. That was wrong; the table
+   above is the evidence. The macro now warns on every row under `FROM_F`.
+
+   **`partial_eta2`, `partial_omega2` and `partial_epsilon2` are not
+   affected** — they use only `NumDF`, `DenDF` and `FValue`. This caveat is
+   about eta-squared and classical omega-squared alone.
 
    Under Kenward-Roger `DenDF` also differs from effect to effect, so the
    implied MSE differs between rows of one model; the macro reports the
@@ -243,6 +271,41 @@ more directly interpretable than any variance-explained measure.
      *J Agric Biol Environ Stat* 2002;7(4):512–524.
 
    Verify page numbers before either goes into a Methods section.
+
+### Cross-validated against R and Python (2026-09-01)
+
+Simulated repeated-measures design — 120 subjects × 4 timepoints, between-subject
+`group`, within-subject `time`, subject-level covariate, random intercept —
+fitted with `lme4`/`lmerTest` (Kenward-Roger) and with `pingouin.mixed_anova`.
+
+**Partial eta-squared: exact agreement across three implementations.**
+
+| Implementation | Result |
+|---|---|
+| this macro — `(NumDF × F)/(NumDF × F + DenDF)` | reference |
+| R `effectsize::F_to_eta2()` | identical to 1e-16, 4/4 effects |
+| Python `pingouin.mixed_anova(effsize='np2')` | identical to 1e-16, 3/3 effects |
+
+pingouin arrives at it from a **real** repeated-measures sum-of-squares
+decomposition rather than from F, and still lands on the same number. That
+confirms the formula is an algebraic identity, not an approximation.
+
+**Confidence interval: this macro is the more accurate of the two.** Both invert
+the noncentral F. Checking where the returned bounds actually place the tail
+probability (target 0.975 / 0.025):
+
+| | lower | upper |
+|---|---|---|
+| this macro (`FNONCT`, exact inversion) | 0.975000 | 0.025000 |
+| R `effectsize` (optim-based NCP search) | 0.972129 | 0.020694 |
+
+Bounds differ by about 0.003–0.004 in eta-squared units. **Do not "correct" this
+macro to reproduce R's numbers** — R's are the approximate ones here.
+
+`eta2_method = DIRECT` was checked against `car::Anova(type=3)` in R and
+`statsmodels.anova_lm(typ=3)` in Python, both with sum-to-zero contrasts (which
+Type III requires — with default treatment contrasts, Type III SS for main
+effects in a model containing an interaction are not what you want).
 
 ### Correspondence with `PROC GLM`
 
