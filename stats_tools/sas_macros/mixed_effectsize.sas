@@ -294,11 +294,34 @@
  |  ---------------------------------------------------------------------
  |  KEY REFERENCES  (full list in the README)
  |  ---------------------------------------------------------------------
- |  Edwards LJ et al.  An R2 statistic for fixed effects in the linear
- |      mixed model.  Stat Med 2008;27(29):6137-6157.  Formalises the
- |      quantity this macro computes as R-squared-beta.
- |  Steiger JH.  Beyond the F test.  Psychol Methods 2004;9(2):164-182.
- |      The noncentral-F confidence interval.
+ |  Two DIFFERENT things want citing, and only the first is settled.
+ |
+ |  THE ARITHMETIC -- what partial eta-squared is and how it comes from F:
+ |    Friedman H.  Simplified determinations of statistical power, magnitude
+ |        of effect and research sample sizes.  Educ Psychol Meas
+ |        1982;42(2):521-526.  This is what R's effectsize package cites for
+ |        F_to_eta2, whose formula is identical to this macro's.  Note also
+ |        that partial eta-squared = qF/(qF+DenDF) is not a proposed method
+ |        but the DEFINITION rewritten: substitute SS_effect = q*F*MSE and
+ |        SS_error = DenDF*MSE into SS_effect/(SS_effect+SS_error) and the
+ |        MSE cancels.  Anyone can check it in a line.
+ |    Steiger JH.  Beyond the F test.  Psychol Methods 2004;9(2):164-182.
+ |        The noncentral-F confidence interval.
+ |
+ |  THE NAME, IN A MIXED MODEL -- OPEN.  A mixed or marginal model has no
+ |  unique sum-of-squares decomposition, so calling the result "partial
+ |  eta-squared" carries a name over from fixed-effects ANOVA into a Wald-F
+ |  setting.  R and Python do the same without ceremony, which is context,
+ |  not justification.  The one paper that would settle it is
+ |    Edwards LJ et al.  An R2 statistic for fixed effects in the linear
+ |        mixed model.  Stat Med 2008;27(29):6137-6157,
+ |  whose R-squared-beta is built from the Wald F and its df.  BUT IT IS AN
+ |  R-SQUARED PAPER: whether its per-effect quantity is PARTIAL (as here) or
+ |  SEMI-partial, and whether it reduces exactly to qF/(qF+DenDF), HAS NOT
+ |  BEEN VERIFIED.  Read it before citing it.  Until then, state the formula
+ |  in the Methods and cite Friedman -- a reader who can recompute the value
+ |  from the F and df in the same table needs no authority at all.
+ |
  |  Kenward MG, Roger JH.  Biometrics 1997;53:983-997, and Comput Stat
  |      Data Anal 2009;53:2583-2595.  KR and KR2.
  |  (Verify page numbers before citing.)

@@ -441,8 +441,7 @@ more directly interpretable than any variance-explained measure.
 
    What it means is that **`partial_eta2` is conditioned on the df method**. A
    mixed model has no sum-of-squares decomposition, so partial eta-squared has
-   no df-free value: it is *defined* through F and `DenDF` (Edwards et al.'s
-   R²_β, cited below). Under subject-scale df the same F gives a value roughly
+   no df-free value: it is *defined* through F and `DenDF`. Under subject-scale df the same F gives a value roughly
    `dendf_ratio` times larger. Neither is "the truth" — they answer the question
    with different denominators.
 
@@ -619,16 +618,57 @@ the fixed-effects case.
    of squares. The identity therefore runs one way only: the formula can be
    computed, but the result cannot be recovered as
    `SS_effect/(SS_effect + SS_error)` from any real decomposition. Read it as
-   *the effect size implied by the F test* — which is precisely what Edwards et
-   al. (2008) formalise as R²_β, and is worth one sentence in a Methods
-   section.
+   *the effect size implied by the F test*, and say so in one sentence in the
+   Methods — see **What to cite** below, which separates the part that is
+   settled from the part that is not.
+
+### What to cite
+
+Two different things want citing, and only the first is settled.
+
+**The arithmetic — settled.** `partial η² = df₁F/(df₁F + df₂)` is not a method
+someone proposed; it is the definition rewritten. Substitute
+`SS_effect = df₁·F·MSE` and `SS_error = df₂·MSE` into
+`SS_effect/(SS_effect + SS_error)` and the MSE cancels. It is also what R's
+`effectsize::F_to_eta2` computes — same formula, and its documentation calls the
+result *partial* η² — and it agrees with `pingouin.mixed_anova` to 1e-16, which
+gets there from a real repeated-measures sum-of-squares decomposition rather than
+from F. Cite **Friedman (1982)** below, which is what `effectsize` cites for the
+conversion.
+
+**The name, in a mixed model — open.** A mixed or marginal model has no unique
+sum-of-squares decomposition, so calling the result "partial η²" carries a name
+over from fixed-effects ANOVA into a Wald-F setting. R and Python make the same
+extension without ceremony, which is context, not justification. The one paper
+that would settle it is **Edwards et al. (2008)**, whose R²_β is built from the
+Wald F and its degrees of freedom — but it is an *R²* paper, and **whether its
+per-effect quantity is partial (as here) or semi-partial, and whether it reduces
+exactly to `df₁F/(df₁F + df₂)`, has not been verified.** Read it before citing
+it.
+
+Until someone has, the defensible Methods sentence states the formula and
+discloses the conditioning, so that a reader can recompute the value from the F
+and df in the same table and needs no authority at all:
+
+> Effect sizes are reported as partial η², computed from the Type 3 F statistic
+> and its degrees of freedom as η²p = (df₁·F)/(df₁·F + df₂) [Friedman 1982], and
+> are therefore conditioned on the denominator degrees-of-freedom method, which
+> was <name it> for these models.
+
+Add Steiger (2004) if the tables carry confidence intervals.
 
 ### References
 
+- Friedman H. Simplified determinations of statistical power, magnitude of effect
+  and research sample sizes. *Educational and Psychological Measurement*
+  1982;42(2):521–526.
+  [doi:10.1177/001316448204200214](https://doi.org/10.1177/001316448204200214)
+  — the conversion from F to partial η², as cited by R's `effectsize`.
 - Edwards LJ, Muller KE, Wolfinger RD, Qaqish BF, Schabenberger O. An R² statistic
   for fixed effects in the linear mixed model. *Statistics in Medicine*
   2008;27(29):6137–6157. [doi:10.1002/sim.3429](https://doi.org/10.1002/sim.3429)
-  (PMID 18816511)
+  (PMID 18816511) — **correspondence with this macro's quantity unverified; see
+  "What to cite" above.**
 - Steiger JH. Beyond the F test: effect size confidence intervals and tests of
   close fit in the analysis of variance and contrast analysis. *Psychological
   Methods* 2004;9(2):164–182.
