@@ -69,8 +69,9 @@
 %
 %   cell array of subjects in derivdir you want to analyze, empty cell array
 %   if you want to loop over all subjects
-%   NOTE: THIS OPTION IS NOT YET IMPLEMENTED IN THE NEXT SCRIPT, HENCE LEAVE
-%           CELL ARRAY EMPTY OR COMMENT OUT FOR NOW
+%   NOTE: as in LaBGAScore_firstlevel_s1_options_dsgn_struct.m, the subject
+%           loop in the next script is driven by this option when it is
+%           non-empty, and loops over all subjects in derivdir otherwise
 %
 %
 % SPIKE OPTIONS
@@ -208,9 +209,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m         v1.2
+% LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m         v1.3
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/02
 %
 %
 %% CREATE LABGAS_OPTIONS STRUCTURE
@@ -223,8 +224,7 @@ LaBGAS_options.mandatory.spikes_percent_threshold=0.15;
 LaBGAS_options.mandatory.vif_thresh=2;
 LaBGAS_options.movement_reg_quadratic = false; % change to false if you don't want to add quadratic terms for movement parameters and their first-order derivatives
 
-% OPTIONAL
-LaBGAS_options.subjs2analyze = {}; % enter subjects separated by comma if you only want to analyze selected subjects e.g. {'sub-01','sub-02'}; THIS IS NOT YET FULLY IMPLEMENTED HENCE LEAVE CELL ARRAY EMPTY OR COMMENT OUT OR DO NOT SPECIFY FIELD AT ALL
+LaBGAS_options.subjs2analyze = sort({}); % enter subjects separated by comma if you only want to analyze selected subjects e.g. sort({'sub-01','sub-02'}); leave cell array empty or comment out to loop over all subjects
 
 % SPIKE OPTIONS
 LaBGAS_options.spikes.dvars_threshold = 2; % REQUIRED if spike_def = 'CANlab'
@@ -295,7 +295,7 @@ githubrootdir = '/data/master_github_repos';
         elseif ~isempty(LaBGAS_options.subjs2analyze)
             [C,~,~] = intersect(derivsubjs,LaBGAS_options.subjs2analyze);
             if ~isequal(C',LaBGAS_options.subjs2analyze)
-                error('\n subject %s defined in LaBGAS_options.subjs2analyze not present in %s, please check before proceeding',LaBGAS_options.subj2analyze{~ismember(LaBGAS_options.subjs2analyze,C)},derivdir);
+                error('\n subject %s defined in LaBGAS_options.subjs2analyze not present in %s, please check before proceeding',LaBGAS_options.subjs2analyze{~ismember(LaBGAS_options.subjs2analyze,C)},derivdir);
             else
                 DSGN.subjects = cell(1,size(LaBGAS_options.subjs2analyze,2));
                     for sub = 1:size(DSGN.subjects,2)

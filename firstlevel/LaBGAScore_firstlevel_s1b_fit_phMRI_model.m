@@ -48,9 +48,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s1b_fit_phMRI_model.m         v1.1
+% LaBGAScore_firstlevel_s1b_fit_phMRI_model.m         v1.2
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/02
 %
 %
 %% INITIATE DSGN AND LABGAS_OPTIONS STRUCTURES
@@ -170,7 +170,7 @@ for sub = 1:size(derivsubjs,1)
                 if size(fmriprep_noisefile,1) > 1
                     error('\nMore than one noise file found with filter *desc-confounds_timeseries.tsv in dir %s, please check before proceeding\n', derivsubjsesdirs{sess});
                 elseif size(fmriprep_noisefile,1) < 1
-                    fprint('\nWARNING: No noise files found with filter *desc-confounds_timeseries.tsv in dir %s, missing condition - proceeding\n', derivsubjsesdirs{sess});
+                    fprintf('\nWARNING: No noise files found with filter *desc-confounds_timeseries.tsv in dir %s, missing condition - proceeding\n', derivsubjsesdirs{sess});
                     continue
                 else
                     fmriprep_noisefiles{sess} = fullfile(fmriprep_noisefile.folder,fmriprep_noisefile.name);
@@ -302,7 +302,7 @@ for sub = 1:size(derivsubjs,1)
                 % print warning if #volumes identified as spikes exceeds
                 % user-defined threshold
                     if n_spike_regs_percent > LaBGAS_options.mandatory.spikes_percent_threshold
-                        warning('\nnumber of volumes identified as spikes exceeds threshold %s in %s',LaBGAS_options.mandatory.spikes_percent_threshold,subjrunnames{run})
+                        warning('\nnumber of volumes identified as spikes exceeds threshold %1.2f in %s',LaBGAS_options.mandatory.spikes_percent_threshold,subjrunnames{run})
                     end
 
                 % save confound regressors as matrix named R for use in

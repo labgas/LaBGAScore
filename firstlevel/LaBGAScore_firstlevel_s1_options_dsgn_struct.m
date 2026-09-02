@@ -188,9 +188,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.6
+% LaBGAScore_firstlevel_s1_options_dsgn_struct.m         v1.7
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/02
 %
 %
 %% CREATE LABGAS_OPTIONS STRUCTURE
@@ -262,7 +262,7 @@ githubrootdir = '/data/master_github_repos';
         elseif ~isempty(LaBGAS_options.subjs2analyze)
             [C,~,~] = intersect(derivsubjs,LaBGAS_options.subjs2analyze);
             if ~isequal(C',LaBGAS_options.subjs2analyze)
-                error('\n subject %s defined in LaBGAS_options.subjs2analyze not present in %s, please check before proceeding',LaBGAS_options.subj2analyze{~ismember(LaBGAS_options.subjs2analyze,C)},derivdir);
+                error('\n subject %s defined in LaBGAS_options.subjs2analyze not present in %s, please check before proceeding',LaBGAS_options.subjs2analyze{~ismember(LaBGAS_options.subjs2analyze,C)},derivdir);
             else
                 DSGN.subjects = cell(1,size(LaBGAS_options.subjs2analyze,2));
                     for sub = 1:size(DSGN.subjects,2)

@@ -52,9 +52,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s3c_phMRI_neurotransmitter_maps.m         v1.1
+% LaBGAScore_firstlevel_s3c_phMRI_neurotransmitter_maps.m         v1.2
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/02
 %
 %
 %% SET STUDY, MODEL AND SESSION INFO
@@ -115,8 +115,8 @@ firstlevelsubjs = {firstlevelsubjdirs(:).name}';
 
 secondleveldir = fullfile(rootdir, 'secondlevel');
 
-    if ~exist (firstleveldir,'dir')
-        error('\nfirstlevel subdataset %s does not exist, please create using datalad commands prior to proceeding\n',firstleveldir);
+    if ~exist (secondleveldir,'dir')
+        error('\nsecondlevel subdataset %s does not exist, please create using datalad commands prior to proceeding\n',secondleveldir);
     else
         secondlevelmodeldir = fullfile(secondleveldir,modelingfilesdir);
         if ~exist (secondlevelmodeldir,'dir')
@@ -125,7 +125,7 @@ secondleveldir = fullfile(rootdir, 'secondlevel');
     end
 
 num_sess = size(sessions,2);
-num_subs = size(derivsubjdirs,1);
+num_subs = size(firstlevelsubjs,1); % loop below indexes firstlevelsubjs, which need not cover every subject in derivdir
 
 
 %% CALCULATE SIGNATURE RESPONSE FOR BETAS AND CREATE RESULTS TABLE
@@ -174,11 +174,17 @@ for sub = 1:num_subs
     % PUT RESULTS IN TABLE
     %---------------------
     
+    names = cell(1,height(nt_maps_target.metadata_table)); % preallocate, and drop any names left over from the previous subject
     for n = 1:height(nt_maps_target.metadata_table)
         names{n} = [nt_maps_target.metadata_table.target{n} ' ' nt_maps_target.metadata_table.primary_reference{n}];
     end
     
-    subj_table = table('Size',[size(betas_oi_fp,1) 10],'VariableNames',[{'PPID','beta_number','beta_descrip','condition','timebin'},names],'VariableTypes',{'cellstr','cellstr','cellstr','categorical','double','double','double','double','double','double'});
+    % the first five columns are fixed; the remaining ones are one per selected
+    % neurotransmitter map, whose number is study-specific, hence derive the
+    % table width and variable types from it rather than hardcoding them
+    varnames_table = [{'PPID','beta_number','beta_descrip','condition','timebin'},names];
+    vartypes_table = [{'cellstr','cellstr','cellstr','categorical','double'},repmat({'double'},1,numel(names))];
+    subj_table = table('Size',[size(betas_oi_fp,1) numel(varnames_table)],'VariableNames',varnames_table,'VariableTypes',vartypes_table);
     subj_table.(subj_table.Properties.VariableNames{1}) = repmat(firstlevelsubjs{sub},height(subj_table),1);
     subj_table.(subj_table.Properties.VariableNames{2}) = {betas_oi(:).fname}';
     subj_table.(subj_table.Properties.VariableNames{3}) = {betas_oi(:).descrip}';
@@ -204,7 +210,7 @@ for sub = 1:num_subs
     
         if add_covars
             
-            sub_nr = phDSGN.subjects{sub}(end-2:end);
+            sub_nr = firstlevelsubjs{sub}(end-2:end); % take the subject actually being processed, not an index into phDSGN.subjects loaded from this subject's DSGN.mat
     
             covars_table_sub = covars_table(contains(covars_table.ID,sub_nr),:);
             covars_table_sub = covars_table_sub(covars_table_sub.Scan_included,:);

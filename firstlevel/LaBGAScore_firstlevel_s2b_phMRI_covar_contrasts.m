@@ -24,13 +24,6 @@
 % * nr_noise_reg      number of noise regressors already in the first-level model (e.g. 24 head motion params + csf, no spikes for phMRI)
 % * covars_filename   name of the .csv file with covariate values, located in BIDSdir
 %
-% *NOTES*
-%
-% The final contrast-batch loop (`for sub = 3:num_subs_included`) starts
-% at subject index 3, i.e. it silently skips the first two subjects in
-% subs2include - this is the script's current behavior, not necessarily
-% intentional; check before relying on it for a new study.
-%
 % *DEPENDENCIES*
 %
 % MATLAB Report Generator toolbox (mlreportgen.utils.capitalizeFirstChar)
@@ -56,9 +49,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s2b_phMRI_covar_contrasts.m         v1.1
+% LaBGAScore_firstlevel_s2b_phMRI_covar_contrasts.m         v1.2
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/02
 %
 %
 %% INITIATE DSGN STRUCTURE
@@ -190,7 +183,7 @@ end
 
 clear sub c s
 
-for sub = 3:num_subs_included
+for sub = 1:num_subs_included
     
     subfirstlevelmodeldir = fullfile(firstlevelmodeldir,subs2include(sub,:));
     load(fullfile(subfirstlevelmodeldir,'SPM.mat'));

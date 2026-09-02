@@ -14,8 +14,9 @@
 % file discovery is additionally filtered by `taskname` (one task per
 % run of this script; see LaBGAScore_firstlevel_s1a_..._multitask.m's
 % `tasknames`/`taskname` options) rather than assuming a single task.
-% The subject loop itself iterates over `LaBGAS_options.subjs2analyze`
-% (not over all of `derivsubjs` as in s2_fit_model.m).
+% The subject loop follows s2_fit_model.m: it loops over `derivsubjs`,
+% which is replaced by `LaBGAS_options.subjs2analyze` when that option is
+% non-empty.
 %
 % Step by step, this script:
 %
@@ -63,6 +64,11 @@
 %   LaBGAScore_firstlevel_s3_diagnose_model script
 %   NOTE: CANlab function called by this script
 %       https://github.com/canlab/CanlabCore/blob/master/CanlabCore/diagnostics/scn_spm_design_check.m
+%   NOTE: published with LaBGAScore_prov_publish (clean/) rather than a bare
+%       publish(), so every report carries a Provenance section recording the
+%       commit of each dependency the run reached, with a .tsv/.mat copy under
+%       <DSGN.modeldir>/provenance/<subject>/ - one snapshot per subject per
+%       model. See clean/README_provenance.md
 %
 % LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask.m should always
 % be run prior to this script, which will check whether this is the case,
@@ -70,8 +76,8 @@
 % This script is generic, i.e. it should not need any study-specific
 % modifcations in principle, except for changing the names of generic
 % scripts into study-specific ones on
-% - line 116-
-% - line 1792-
+% - line 141-
+% - line 1814-
 %   NOTE: LaBGAScore first level scripts have been tested on Ubuntu 20.04.3
 %           and Windows 10 (thanks to Anne Willems), NOT (yet) on Mac OS X
 %
@@ -84,6 +90,9 @@
 %   https://github.com/canlab/CanlabCore
 %   https://github.com/canlab/CanlabPrivate 
 %   NOTE: dependencies are checked and cloned/added by the script if needed
+% 3. LaBGAScore Github repo on Matlab path WITH subfolders, for
+%   clean/LaBGAScore_prov_publish (and the functions it calls) used in step 8
+%   https://github.com/labgas/LaBGAScore
 %
 %
 % *INPUTS*
@@ -121,9 +130,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s2a_fit_model_multisess_multitask.m         v2.1
+% LaBGAScore_firstlevel_s2a_fit_model_multisess_multitask.m         v2.2
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/02
 %
 %
 %% MAKE SURE DEPENDENCIES ARE ON MATLAB PATH, AND PREVIOUS SCRIPT IS RUN
@@ -249,27 +258,30 @@ firstsubjs = cellstr(char(firstlist(:).name));
 %% LOOP OVER SUBJECTS
 %--------------------------------------------------------------------------
 
-sub_counter = 0;
+% restrict to user-selected subjects if requested, exactly as in
+% LaBGAScore_firstlevel_s2_fit_model.m; derivsubjs then drives the loop, and
+% all subject-level dirs below are built from the subject NAME rather than
+% from an index into the full-length dir lists, so both cases stay aligned
 
-for sub = LaBGAS_options.subjs2analyze
-    sub_idx = 1 + sub_counter;
-    
+if isfield(LaBGAS_options,'subjs2analyze')
+
+    if ~isempty(LaBGAS_options.subjs2analyze)
+
+        derivsubjs = LaBGAS_options.subjs2analyze';
+
+    end
+
+end
+
+for sub = 1:size(derivsubjs,1)
+
     if nr_sess == 1 || ~exist('nr_sess','var')
-        
+
         %% DEFINE SUBJECT LEVEL DIRS & FILENAMES
-            if isempty(LaBGAS_options.subjs2analyze)
-                subjderivdir = fullfile(derivsubjdirs{sub},'func');
-                subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
-                subjfirstdir = firstsubjdirs{sub};
-            
-            else
-                subjderivdir = fullfile(derivdir, sub{sub_idx}, 'func');
-                subjBIDSdir = fullfile(BIDSdir, sub{sub_idx}, 'func');
-                subjfirstdir = fullfile(DSGN.modeldir, sub{sub_idx});
+        subjderivdir = fullfile(derivdir, derivsubjs{sub}, 'func');
+        subjBIDSdir = fullfile(BIDSdir, derivsubjs{sub}, 'func');
+        subjfirstdir = fullfile(DSGN.modeldir, derivsubjs{sub});
 
-            end
-
-        
         BIDSimgs = dir(fullfile(subjBIDSdir,['*' taskname '*bold.nii.gz']));
         BIDSimgs = {BIDSimgs(:).name}';
         BIDSidx = ~contains(BIDSimgs,'rest'); % omit resting state scan if it exists
@@ -278,7 +290,6 @@ for sub = LaBGAS_options.subjs2analyze
         derivimgs = dir(fullfile(subjderivdir,['s6*' taskname '*.nii.gz']));
 
         derivimgs = {derivimgs(:).name}';
-        subjBIDSdir = fullfile(BIDSsubjdirs{sub},'func');
 
         derividx = ~contains(derivimgs,'rest'); % omit resting state scan if it exists
         derivimgs = {derivimgs{derividx}}';
@@ -533,7 +544,7 @@ for sub = LaBGAS_options.subjs2analyze
             % print warning if #volumes identified as spikes exceeds
             % user-defined threshold
                 if n_spike_regs_percent > LaBGAS_options.mandatory.spikes_percent_threshold
-                    warning('\nnumber of volumes identified as spikes exceeds threshold %s in %s',LaBGAS_options.mandatory.spikes_percent_threshold,subjrunnames{run})
+                    warning('\nnumber of volumes identified as spikes exceeds threshold %1.2f in %s',LaBGAS_options.mandatory.spikes_percent_threshold,subjrunnames{run})
                 end
 
             % save confound regressors as matrix named R for use in
@@ -759,7 +770,7 @@ for sub = LaBGAS_options.subjs2analyze
                     for trial = 1:size(O.trial_type,1)
                         pmod = 1;
                         while pmod < size(DSGN.pmods{run},2) + 1
-                            if contains(DSGN.conditions{run}{cond},char(O.trial_type(trial))) % changed from original script to allow different condition names in different runs, to be tested
+                            if contains(DSGN.conditions{run}{pmod},char(O.trial_type(trial))) % changed from original script to allow different condition names in different runs, to be tested
                                    cond_struct{pmod}.pmod.param{1} = [cond_struct{pmod}.pmod.param{1},O.pmod(trial)];
                                    pmod_demean_run_struct{pmod}.pmod.param{1} = [pmod_demean_run_struct{pmod}.pmod.param{1},O.pmod_demean_run(trial)];
                                    pmod_demean_cond_struct{pmod}.pmod.param{1} = [pmod_demean_cond_struct{pmod}.pmod.param{1},O.pmod_demean_cond(trial)];
@@ -960,19 +971,11 @@ for sub = LaBGAS_options.subjs2analyze
         for ses = 1:nr_sess
             
             %% DEFINE SUBJECT LEVEL DIRS & FILENAMES
-            
-                if isempty(LaBGAS_options.subjs2analyze)
-                    subjderivdir = fullfile(derivsubjdirs{sub},['ses-0' num2str(ses)],'func');
-                    subjBIDSdir = fullfile(BIDSsubjdirs{sub},['ses-0' num2str(ses)],'func');
-                    subjfirstdir = firstsubjdirs{sub};
-                
-                else
-                    subjderivdir = fullfile(derivdir, sub{sub_idx},['ses-0' num2str(ses)],'func');
-                    subjBIDSdir = fullfile(BIDSdir, sub{sub_idx},['ses-0' num2str(ses)],'func');
-                    subjfirstdir = fullfile(DSGN.modeldir, sub{sub_idx});
 
-                end
-            
+            subjderivdir = fullfile(derivdir, derivsubjs{sub},['ses-0' num2str(ses)],'func');
+            subjBIDSdir = fullfile(BIDSdir, derivsubjs{sub},['ses-0' num2str(ses)],'func');
+            subjfirstdir = fullfile(DSGN.modeldir, derivsubjs{sub});
+
             BIDSimgs = dir(fullfile(subjBIDSdir,['*' taskname '*bold.nii.gz']));
             BIDSimgs = {BIDSimgs(:).name}';
             BIDSidx = ~contains(BIDSimgs,'rest'); % omit resting state scan if it exists
@@ -1234,7 +1237,7 @@ for sub = LaBGAS_options.subjs2analyze
                 % print warning if #volumes identified as spikes exceeds
                 % user-defined threshold
                     if n_spike_regs_percent > LaBGAS_options.mandatory.spikes_percent_threshold
-                        warning('\nnumber of volumes identified as spikes exceeds threshold %s in %s',LaBGAS_options.mandatory.spikes_percent_threshold,subjrunnames{run})
+                        warning('\nnumber of volumes identified as spikes exceeds threshold %1.2f in %s',LaBGAS_options.mandatory.spikes_percent_threshold,subjrunnames{run})
                     end
 
                 % save confound regressors as matrix named R for use in
@@ -1754,7 +1757,7 @@ for sub = LaBGAS_options.subjs2analyze
     fprintf('\nRunning on subject directory %s\n',DSGN.subjects{1});
     canlab_glm_subject_levels_old(DSGN,'subjects',DSGN.subjects(1),'overwrite','nolinks','noreview');
     
-            if isfield(DSGN,'singletrials')
+            if isfield(DSGN,'singletrials') && ~isempty(DSGN.singletrials) % same guard as LaBGAScore_firstlevel_s3_diagnose_model.m: an empty DSGN.singletrials must not enter this block
             
             load(fullfile(subjfirstdir,'SPM.mat'));
             betas = SPM.xX.name;
@@ -1801,19 +1804,28 @@ for sub = LaBGAS_options.subjs2analyze
 
         cd(subjfirstdiagnosedir);
 
-        diagnose_struct = struct('useNewFigure',false,'maxHeight',800,'maxWidth',1600,...
-            'format','html','outputDir',subjfirstdiagnosedir,...
-            'showCode',true);
+        % where the machine-readable provenance record goes; follows the layout
+        % LaBGAScore_prov_resolve_retrospective uses at first level, i.e.
+        % <modeldir>/provenance rather than the results/notes tree it uses at
+        % second level, with a per-subject subdir because this script runs once
+        % per subject and the record filename carries only the script name
+        subjfirstprovdir = fullfile(DSGN.modeldir,'provenance',derivsubjs{sub});
 
         % STUDY-SPECIFIC: replace LaBGAScore with name of study-specific script in code below
-        publish('LaBGAScore_firstlevel_s3_diagnose_model.m',diagnose_struct)
+        % NOTE: LaBGAScore_prov_publish (clean/) replaces the bare publish() call,
+        %       adding a Provenance section to the html report recording the commit
+        %       of every dependency this run reached, plus a .tsv/.mat copy in
+        %       subjfirstprovdir - see clean/README_provenance.md
+        %       maxHeight/maxWidth are passed explicitly to keep report figures the
+        %       size they have always been here; drop them for full-resolution
+        %       montages at the cost of larger files
+        LaBGAScore_prov_publish('LaBGAScore_firstlevel_s3_diagnose_model.m',subjfirstdiagnosedir, ...
+            'savedir',subjfirstprovdir,'maxHeight',800,'maxWidth',1600);
         delete('High_pass_filter_analysis.png','Variance_Inflation.png','LaBGAScore_firstlevel_s3_diagnose_model.png'); % getting rid of some redundant output images due to the use of publish()
         
     end
     
     cd(rootdir);
-    
-    sub_counter = sub_counter + 1;
     
     
 end % for loop subjects 
