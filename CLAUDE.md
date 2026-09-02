@@ -14,7 +14,7 @@ Most workflows require **CANlabCore** and **SPM12** on the MATLAB path. Some dom
 
 ## Repository structure
 
-Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlevel/`, `secondlevel/`, `stats_tools/`, `atlas_mask_tools/`, `pet/`, `mrs/`, `decoding_toolbox/`, `cosmomvpa/`, `graphvar/`, `juspace/`, `power/`, `figures/`, `clean/`, `qr_code/` (Python, not MATLAB). Most domains split into `<domain>/scripts/` + `<domain>/functions/`; `stats_tools/` splits into `functions/` (MATLAB) + `sas_macros/` (SAS). One class in the whole repo: `secondlevel/classes/ProgressTracker.m`. `secondlevel/` also has seven standalone usage guides (`README_ENet_*.md`, `README_PLSDA_*.md`, `README_PLSR_*.md`), and `stats_tools/sas_macros/` has its own — all authoritative for their subject; don't duplicate their content.
+Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlevel/`, `secondlevel/`, `stats_tools/`, `atlas_mask_tools/`, `pet/`, `mrs/`, `decoding_toolbox/`, `cosmomvpa/`, `graphvar/`, `juspace/`, `power/`, `figures/`, `clean/`, `qr_code/` (Python, not MATLAB). Most domains split into `<domain>/scripts/` + `<domain>/functions/`; `stats_tools/` splits into `functions/` (MATLAB) + `sas_macros/` (SAS). One class in the whole repo: `secondlevel/classes/ProgressTracker.m`. `secondlevel/` also has seven standalone usage guides (`README_ENet_*.md`, `README_PLSDA_*.md`, `README_PLSR_*.md`), `firstlevel/` has two (`README.md` for the task-fMRI chain, `README_phMRI.md` for the pharmacological-challenge chain), and `stats_tools/sas_macros/` and `clean/` have one each — all authoritative for their subject; don't duplicate their content.
 
 ## Script conventions
 

@@ -362,10 +362,11 @@ and the TFCE group function. The plotters call SPM directly (`spm_vol`, `spm_rea
 
 ## Checks
 
-No build system, test suite, or CI. Static analysis over this subtree only:
+No build system, test suite, or CI. Static analysis over this subtree only, run from the
+MATLAB prompt (LaBGAS runs its scripts from the MATLAB command line, not the shell):
 
-```bash
-matlab -batch "addpath(genpath('..')); LaBGAScore_check_all_scripts(pwd)"
+```
+addpath(genpath('..')); LaBGAScore_check_all_scripts(pwd)
 ```
 
 `checkcode` catches parse errors but not undefined variables, missing functions, or wrong indexing —
