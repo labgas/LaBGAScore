@@ -519,7 +519,7 @@ for sub = 1:size(derivsubjs,1)
             Rmotionderiv = [Rmotion,Rmotionderiv];
             regsmotion2 = Rmotionderiv.Properties.VariableNames;
             zscore = @(x) zscore(x);
-            Rmotionzscore = varfun(deriv,Rmotionderiv);
+            Rmotionzscore = varfun(zscore,Rmotionderiv);
                 for regz = 1:size(Rmotionzscore.Properties.VariableNames,2)
                     Rmotionzscore.Properties.VariableNames{regz} = regsmotion2{regz};
                 end
@@ -1212,7 +1212,7 @@ for sub = 1:size(derivsubjs,1)
                 Rmotionderiv = [Rmotion,Rmotionderiv];
                 regsmotion2 = Rmotionderiv.Properties.VariableNames;
                 zscore = @(x) zscore(x);
-                Rmotionzscore = varfun(deriv,Rmotionderiv);
+                Rmotionzscore = varfun(zscore,Rmotionderiv);
                     for regz = 1:size(Rmotionzscore.Properties.VariableNames,2)
                         Rmotionzscore.Properties.VariableNames{regz} = regsmotion2{regz};
                     end
