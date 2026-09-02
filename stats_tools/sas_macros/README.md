@@ -322,6 +322,12 @@ more directly interpretable than any variance-explained measure.
    > `kr2` → `kr` (SAS/STAT older than 12.1 has no KR2) → `satterth` (KR will
    > not converge, or is far too slow).
    >
+   > **Decide it before you look at the p values.** Kenward-Roger moves p in
+   > both directions and can cross 0.05 — measured on real models, an
+   > interaction went 0.0470 → 0.0596 while another went 0.0312 → 0.0411.
+   > Switching method after seeing the result is a post-hoc choice, which is the
+   > strongest argument there is for a blanket rule rather than a per-model one.
+   >
    > This is a decision about consistency, not a claim that Kenward-Roger is
    > universally best. SAS otherwise picks one of two defaults for you depending
    > on whether a `RANDOM` statement happens to be present, and those two are on
@@ -334,9 +340,10 @@ more directly interpretable than any variance-explained measure.
    > apply, so do not mix the two in one table. **If a variance component is
    > estimated at the boundary** (`0` in Covariance Parameter Estimates) the
    > adjustment is built on a Hessian at that boundary; check before trusting the
-   > df. And KR **can be slow or fail on a large unstructured V** — if a `RANDOM`
-   > effect has no `subject=`, SAS cannot block the problem, so fix the blocking
-   > first.
+   > df. And KR **can be slow or fail on a large unstructured V** — SAS can only
+   > block the problem when the `RANDOM` and `REPEATED` subject effects nest, so
+   > fix the blocking first (see below: adding a `subject=` to the random effect
+   > does *not* fix it if that grouping is not the repeated-measures subject).
 
    The point is not that Kenward-Roger is universally best. It is that the
    default containment / between-within methods do not account for the
@@ -382,11 +389,23 @@ more directly interpretable than any variance-explained measure.
    eta-squared from the second can be several times smaller than from the first,
    because it is conditioned on `DenDF`. Nothing about the *test* changes.
 
-   A related trap in the same situation: a RANDOM effect with **no `subject=`
-   option** spans subjects, so SAS cannot block the problem and the Dimensions
-   table reports `Subjects = 1` with `Max Obs per Subject = N`. The subject
-   count is then not a usable bound — which is why the macro takes `nsubjects=`
-   explicitly and refuses to use a reported `Subjects ≤ 1`.
+   A related trap in the same situation. SAS can only process the problem by
+   subject when the `RANDOM` and `REPEATED` subject effects **nest**; when they
+   do not, the Dimensions table reports `Subjects = 1` with `Max Obs per
+   Subject = N`, and the subject count is not a usable bound. Two cases, not
+   one:
+
+   - a `RANDOM` effect with **no `subject=` option** at all, which spans
+     subjects; and
+   - a `RANDOM` effect whose `subject=` names a **different grouping** from the
+     `REPEATED` statement. Verified on real models: `random intercept /
+     subject=<grouping>` beside `repeated <time> / subject=<id>` still reports
+     `Subjects = 1`, `Max Obs per Subject = N`.
+
+   So **adding a `subject=` to the random effect does not by itself fix the
+   blocking** — the grouping has to be the repeated-measures subject, or nest
+   within it. This is why the macro takes `nsubjects=` explicitly and refuses to
+   use a reported `Subjects ≤ 1`.
 
    #### What the macro checks
 
@@ -410,7 +429,8 @@ more directly interpretable than any variance-explained measure.
    |---|---|
    | **Between-subject df bound** | any effect (or any named in `between=`) has `DenDF` > the subject count. Such an effect has at most one independent unit per subject, so its `DenDF` is on the observation scale rather than the subject scale. New `dendf_ratio` column. |
    | **Containment fall-through** | `Degrees of Freedom Method` is Containment — explains that a subject-level predictor lands on observation-scale df, and reports `Columns in Z`. |
-   | **Unusable subject count** | Dimensions reports `Subjects = 1`, i.e. SAS could not block; asks for `nsubjects=`. |
+   | **Unusable subject count** | Dimensions reports `Subjects = 1`, i.e. the `RANDOM` and `REPEATED` subject effects do not nest so SAS could not block; asks for `nsubjects=`. |
+   | **Default df method** | every `DenDF` is a whole number *and* `modelinfo=` did not report Kenward-Roger or Satterthwaite. Suppressed when the method is known, because KR can also return whole-number df. |
 
    **None of this makes the test wrong.** The GLS standard error already uses
    the fitted covariance structure, so the estimate, its SE and the p-value are
@@ -509,7 +529,11 @@ more directly interpretable than any variance-explained measure.
    than a between-subject one. If every effect shows the same `DenDF` and the
    structure is not unstructured, the df method is not stratifying. The macro
    emits a NOTE covering both cases, and another when every `DenDF` is a whole
-   number (which usually means neither KR nor Satterthwaite was asked for).
+   number — which *usually* means neither KR nor Satterthwaite was asked for,
+   but is not proof: Kenward-Roger can return whole-number df (measured: `kr2`
+   giving exactly 195 and 199 on real models). Pass `modelinfo=` and the macro
+   reads the df method from Model Information instead of guessing, and stays
+   quiet when the method is already Kenward-Roger or Satterthwaite.
 
    - Kenward MG, Roger JH. Small sample inference for fixed effects from
      restricted maximum likelihood. *Biometrics* 1997;53(3):983–997.

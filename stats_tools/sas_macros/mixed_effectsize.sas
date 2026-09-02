@@ -123,10 +123,13 @@
  |             count -- but see NSUBJECTS=.
  |  nsubjects  Number of subjects.  Give it explicitly whenever you want
  |             the between-subject df check.  It is needed because the
- |             Dimensions subject count is not always usable: a RANDOM
- |             effect with no SUBJECT= option spans subjects, so SAS
- |             reports Subjects = 1 and Max Obs per Subject = N.  The
- |             macro detects that and asks for this parameter.
+ |             Dimensions subject count is not always usable: whenever the
+ |             RANDOM and REPEATED subject effects do not nest, SAS cannot
+ |             block the problem and reports Subjects = 1 with Max Obs per
+ |             Subject = N.  That covers a RANDOM effect with no SUBJECT=
+ |             AND one whose SUBJECT= names a different grouping from the
+ |             REPEATED statement.  The macro detects it and asks for this
+ |             parameter.
  |  between    Space-separated effect names that are BETWEEN-subject,
  |             exactly as they appear in TESTS3.  With NSUBJECTS= this
  |             turns the df check from a hint into a statement: a
@@ -187,6 +190,12 @@
  |     *     kr2  ->  kr        (SAS/STAT older than 12.1 has no KR2)  *
  |     *          ->  satterth  (KR will not converge, or is far too   *
  |     *                         slow)                                *
+ |     *                                                              *
+ |     *  DECIDE IT BEFORE YOU LOOK AT THE p VALUES.  KR moves p in    *
+ |     *  BOTH directions and can cross 0.05 -- measured on real       *
+ |     *  models, an interaction went 0.0470 -> 0.0596.  Switching     *
+ |     *  method after seeing the result is a post-hoc choice.  That   *
+ |     *  is the strongest argument for a blanket rule.                *
  |     ****************************************************************
  |
  |    ddfm = kr2   Kenward-Roger with the Kenward & Roger (2009)
@@ -218,8 +227,12 @@
  |    * if a variance component is estimated at the boundary (0 in
  |      Covariance Parameter Estimates), the adjustment rests on a
  |      Hessian at that boundary.  Check before trusting the df.
- |    * a RANDOM effect with no SUBJECT= spans subjects, so SAS cannot
- |      block the problem.  Fix the blocking before reaching for KR.
+ |    * SAS can only block the problem when the RANDOM and REPEATED
+ |      subject effects nest.  A RANDOM effect with no SUBJECT=, or one
+ |      whose SUBJECT= names a different grouping, leaves Dimensions
+ |      reporting Subjects = 1.  Fix the blocking before reaching for KR --
+ |      and note that adding SUBJECT= to the random effect does NOT fix it
+ |      if that grouping is not the repeated-measures subject.
  |
  |  UNDER type = UN, DO NOT "FIX" THE DEFAULT.  BETWITHIN prints the same
  |  DenDF for every effect there and that is very nearly right -- two df
@@ -504,14 +517,20 @@
     %end;
 
     /* Dimensions "Subjects" is only meaningful when SAS could actually block
-       the problem by subject.  A RANDOM effect with no SUBJECT= option spans
-       subjects, so SAS reports Subjects=1 and Max Obs per Subject = N -- the
-       count is then useless and must not be used as a bound.               */
+       the problem by subject.  It cannot whenever the RANDOM and REPEATED
+       subject effects do not nest -- a RANDOM effect with no SUBJECT= at all,
+       and equally a RANDOM effect whose SUBJECT= names a DIFFERENT grouping
+       from the REPEATED one (verified: random intercept/subject=cohort beside
+       repeated/subject=id still reports Subjects=1).  SAS then reports
+       Subjects=1 and Max Obs per Subject = N, and the count must not be used
+       as a bound.                                                          */
     %if %superq(nsubjects) ne %then %let _nsub = &nsubjects;   /* explicit always wins */
     %else %if %superq(_nsub) ne %then %do;
         %if %sysevalf(&_nsub <= 1) %then %do;
             %put NOTE: (mixed_effectsize) Dimensions reports Subjects=&_nsub, so SAS could not block;
-            %put NOTE- the problem by subject -- usually a RANDOM effect with no SUBJECT= option.;
+            %put NOTE- the problem by subject. That happens whenever the RANDOM and REPEATED subject;
+            %put NOTE- effects do not nest -- a RANDOM effect with no SUBJECT=, and equally one whose;
+            %put NOTE- SUBJECT= names a different grouping than the REPEATED statement uses.;
             %put NOTE- The subject count is not usable as a bound. Pass NSUBJECTS= to enable the;
             %put NOTE- between-subject degrees-of-freedom check.;
             %let _nsub = ;
@@ -877,13 +896,25 @@
     proc sql noprint;
         select sum(DenDF ne int(DenDF)) into :_fracdf trimmed from &out;
     quit;
+    /* Whole-number DenDF USUALLY means a default df method, but not always:
+       Kenward-Roger can return integer df -- verified on real models where
+       ddfm=kr2 gave 195 and 199 exactly.  So if MODELINFO= told us the method,
+       trust that and stay quiet.  Only guess when we were not told.        */
+    %local _ddfmadj;
+    %let _ddfmadj = 0;
+    %if %superq(_ddfm) ne %then %do;
+        %if %index(%upcase(&_ddfm), KENWARD) > 0
+         or %index(%upcase(&_ddfm), SATTERTH) > 0 %then %let _ddfmadj = 1;
+    %end;
     %if %superq(_fracdf) ne and %superq(_fracdf) ne . %then %do;
-        %if &_fracdf = 0 %then %do;
-            %put NOTE: (mixed_effectsize) Every DenDF is a whole number, so the df were probably left;
-            %put NOTE- at the SAS default -- neither KR/KR2 nor SATTERTH was requested. The LaBGAS;
-            %put NOTE- standard is DDFM=KR2 on every mixed or marginal model. If it was deliberately;
-            %put NOTE- not used, record why. Under type=UN the default df are close to exact and need;
-            %put NOTE- no correction -- see README.md, "Choose a denominator-df method".;
+        %if &_fracdf = 0 and &_ddfmadj = 0 %then %do;
+            %put NOTE: (mixed_effectsize) Every DenDF is a whole number, which USUALLY means the df;
+            %put NOTE- were left at the SAS default -- neither KR/KR2 nor SATTERTH requested. It is;
+            %put NOTE- not proof: Kenward-Roger can return whole-number df. Pass MODELINFO= and the;
+            %put NOTE- macro will read the method instead of guessing. The LaBGAS standard is;
+            %put NOTE- DDFM=KR2 on every mixed or marginal model -- if it was deliberately not used,;
+            %put NOTE- record why. Under type=UN the default df are close to exact and need no;
+            %put NOTE- correction -- see README.md, "Choose a denominator-df method".;
         %end;
     %end;
 
