@@ -47,26 +47,39 @@
  |      partial_eta_2 = qF / (qF + _freq_ - q)
  |
  |  against the correct qF / (qF + DenDF).  The two AGREE if and only if
- |  _freq_ - q = DenDF.  That is an accident of design:
+ |  _freq_ - q = DenDF, and that needs TWO independent things to hold:
+ |  the residuals dataset must contain only the rows the model fitted,
+ |  and DenDF must be the observation-scale residual df.
  |
- |    * No between-subject factor -- e.g. a within-subject time factor
- |      crossed with a covariate.  DenDF is observation-driven, lands
- |      within a few units of _freq_ - q, and the error disappears into
- |      the third decimal.  Such analyses validate cleanly against this
- |      macro, which is why the bug survived so long.
- |    * A BETWEEN-subject factor in a repeated design.  DenDF is
- |      participant-driven while _freq_ counts observations, and the two
- |      diverge by the number of repeats per participant.
+ |  The second is decided by the DF METHOD in force -- NOT by whether the
+ |  effect crosses subjects:
  |
- |  The published paper's own worked example shows this.  Its Case 1
- |  (fev1: 72 patients x 8 hours = 576 observations) reports partial
- |  eta-squared .029 / .082 / .057 for Drug / Hour / Drug*Hour.  Recomputed
- |  against the design's real denominator df: the two WITHIN-subject
- |  effects move by 1.2x, the BETWEEN-subject Drug effect by 6.9x
- |  (.029 -> .199).
+ |    CONTAINMENT, falling through -- a RANDOM statement is present and
+ |      no random effect contains the fixed effect
+ |        -> N - rank(XZ) for EVERY effect.  AGREES.
+ |    BETWEEN-WITHIN with a residual variance term (CS, VC, AR(1))
+ |        -> stratifies.  Agrees for within-subject effects, FAILS for
+ |           between-subject ones.
+ |    BETWEEN-WITHIN under type = UN
+ |        -> participant scale for EVERY effect, because a saturated
+ |           R-side leaves no within-subject stratum.  FAILS for all,
+ |           within-subject effects included.
+ |    KR / KR2 / SATTERTH
+ |        -> fractional, in general neither scale.  FAILS.
  |
- |  So when auditing an old table, the question is not "was this script
- |  used" but "does the effect being reported cross subjects".
+ |  The published paper's worked example is the SECOND case, which is why
+ |  the between/within distinction looks like the governing one.  Its
+ |  Case 1 (fev1: 72 patients x 8 hours = 576 observations) reports
+ |  partial eta-squared .029 / .082 / .057 for Drug / Hour / Drug*Hour;
+ |  recomputed against the design's real denominator df, the two
+ |  WITHIN-subject effects move by 1.2x and the BETWEEN-subject Drug
+ |  effect by 6.9x (.029 -> .199).  Do not generalise from it: a project
+ |  whose models all carry a RANDOM statement lands in the FIRST case and
+ |  agrees to 1-2% even for between-subject factors.
+ |
+ |  So when auditing an old table the question is not "was this script
+ |  used", nor "does the effect cross subjects", but "which DF METHOD was
+ |  in force, and did the residuals dataset hold only fitted rows".
  |
  |  ---------------------------------------------------------------------
  |  OBSERVATIONS READ versus OBSERVATIONS USED

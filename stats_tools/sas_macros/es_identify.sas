@@ -108,26 +108,34 @@
  |
  |      f - q  =  DenDF
  |
- |  which is a property of the DESIGN, not of the code:
+ |  which needs TWO independent things to hold: f must count only the
+ |  rows the model FITTED, and DenDF must be the observation-scale
+ |  residual df.
  |
- |    * NO between-subject factor -- a within-subject time factor crossed
- |      with a covariate, say.  DenDF is observation-driven, so f - q
- |      lands close to it and the error disappears into the third
- |      decimal.  Such tables audit clean.  This is why the bug survived:
- |      whole projects can validate perfectly.
- |    * A BETWEEN-subject factor in a repeated design.  DenDF is
- |      participant-driven while f counts observations; they diverge by
- |      the number of repeats per participant, and by more still if f
- |      counts rows READ rather than rows USED.
+ |  The second is decided by the DF METHOD in force, NOT by whether the
+ |  effect crosses subjects:
+ |
+ |    CONTAINMENT, falling through -- a RANDOM statement is present and
+ |      no random effect contains the fixed effect
+ |        -> N - rank(XZ) for EVERY effect.  AGREES.  Whole projects can
+ |           validate perfectly, which is why the bug survived.
+ |    BETWEEN-WITHIN with a residual variance term (CS, VC, AR(1))
+ |        -> stratifies.  Agrees for within-subject effects, FAILS for
+ |           between-subject ones.
+ |    BETWEEN-WITHIN under type = UN
+ |        -> participant scale for EVERY effect.  FAILS for all.
+ |    KR / KR2 / SATTERTH
+ |        -> fractional.  FAILS.
  |
  |  The published paper's own Case 1 (fev1, 72 patients x 8 hours = 576
- |  observations) demonstrates it: recomputed against the design's real
- |  denominator df, the two WITHIN-subject effects move by 1.2x and the
- |  BETWEEN-subject Drug effect by 6.9x (.029 -> .199).
+ |  observations) is the SECOND case: recomputed against the design's
+ |  real denominator df, the two WITHIN-subject effects move by 1.2x and
+ |  the BETWEEN-subject Drug effect by 6.9x (.029 -> .199).  Do not
+ |  generalise from it.
  |
  |  SO: when auditing an old table, the question is not "was this script
- |  used" but "does the effect being reported cross subjects".  Audit
- |  between-subject rows first.
+ |  used", nor "does the effect cross subjects", but "which DF METHOD was
+ |  in force, and did f count only fitted rows".
  |
  |  ---------------------------------------------------------------------
  |  USAGE

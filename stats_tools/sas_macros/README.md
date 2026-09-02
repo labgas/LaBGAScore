@@ -53,19 +53,25 @@ numdf*F / (numdf*F + N_obs - numdf)
 ```
 
 against the correct `numdf*F / (numdf*F + DenDF)`. **The two agree if and only if
-`N_obs - numdf = DenDF`** — an accident of design, not a property of the method:
+`N_obs - numdf = DenDF`**, and that needs two independent things to hold: the
+residuals dataset must contain only the rows the model fitted, and `DenDF` must
+be the observation-scale residual df.
 
-| Design | `DenDF` driven by | Result |
+The second is decided by the **df method in force** — not by whether the effect
+crosses subjects:
+
+| Df method | Where `DenDF` lands | The old formula |
 |---|---|---|
-| No between-subject factor (e.g. within-subject time × a covariate) | observations | `N_obs - q` lands within a few units of `DenDF`; the error vanishes into the third decimal |
-| **Between-subject factor in a repeated design** | participants | `N_obs` and `DenDF` diverge by the number of repeats per participant |
+| **Containment**, falling through — a `RANDOM` statement is present and no random effect contains the fixed effect | observation scale, `N − rank(XZ)`, for *every* effect | **agrees**, between- and within-subject alike |
+| **Between-Within** with a residual variance term (`CS`, `VC`, `AR(1)`) | stratifies: within ≈ observation scale, between = participant scale | agrees for within-subject effects, **fails** for between-subject ones |
+| **Between-Within** under `type=UN` | participant scale for *every* effect — a saturated R-side leaves no within-subject stratum | **fails for all**, within-subject effects included |
+| `kr` / `kr2` / `satterth` | fractional, in general neither scale | **fails** |
 
-That is why analyses of the first kind validate cleanly against this macro, and
-why the bug survived so long.
-
-The published paper's own worked example shows it. Case 1 (fev1: 72 patients ×
-8 hours = 576 observations) reports partial eta-squared .029 / .082 / .057 for
-Drug / Hour / Drug×Hour. Recomputed against the design's real denominator df:
+The published paper's worked example is the **second** case, which is why the
+between/within distinction looks like the governing one. Case 1 (fev1: 72
+patients × 8 hours = 576 observations) reports partial eta-squared .029 / .082 /
+.057 for Drug / Hour / Drug×Hour. Recomputed against the design's real
+denominator df:
 
 | Effect | published | correct | error |
 |---|---|---|---|
@@ -73,8 +79,12 @@ Drug / Hour / Drug×Hour. Recomputed against the design's real denominator df:
 | Hour (within) | 0.082 | 0.095 | 1.2× |
 | Drug×Hour (within) | 0.057 | 0.066 | 1.2× |
 
-When auditing an old results table, the question is therefore not *"was this
-script used"* but *"does the effect being reported cross subjects"*.
+Do not generalise from it. A project whose models all carry a `RANDOM` statement
+lands in the *first* row and agrees to within 1–2% even for between-subject
+factors — which is why the bug survived so long. When auditing an old results
+table the question is not *"was this script used"*, nor *"does the effect cross
+subjects"*, but ***"which df method was in force, and did the residuals dataset
+hold only the rows that were fitted"***.
 
 ### `_freq_` is observations READ, not observations USED
 
