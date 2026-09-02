@@ -339,7 +339,7 @@
     /*-- 0. Resolve the deprecated OUTPM= alias --------------------------*/
     %if %superq(resids) = and %superq(outpm) ne %then %do;
         %let resids = &outpm;
-        %put NOTE: (mixed_effectsize) OUTPM= is a deprecated alias for RESIDS=; using RESIDS=&resids..;
+        %put NOTE: (mixed_effectsize) OUTPM= is a deprecated alias for RESIDS= -- using RESIDS=&resids..;
     %end;
 
     /*-- 1. Validate MODEL= and RESIDTYPE= -------------------------------*/
@@ -430,7 +430,7 @@
             %sysfunc(varnum(&dsid, DenDF)) = 0 or
             %sysfunc(varnum(&dsid, FValue)) = 0 %then %do;
             %put ERROR: (mixed_effectsize) &tests3 must contain NumDF, DenDF and FValue.;
-            %put ERROR- Did you write ODS OUTPUT TESTS3=&tests3; in the PROC MIXED step?;
+            %put ERROR- Did the PROC MIXED step include  ods output tests3 = &tests3  ?;
             %let _abort = 1;
         %end;
         /* ProbF is optional; note whether it is there so PROC PRINT can adapt */
@@ -451,7 +451,7 @@
     %end;
 
     %if &_abort = 1 %then %do;
-        %put ERROR: (mixed_effectsize) Aborting; no output produced.;
+        %put ERROR: (mixed_effectsize) Aborting -- no output produced.;
         %return;
     %end;
 
@@ -569,14 +569,14 @@
         run;
 
         %if %superq(_n_rows) ne and %sysevalf(&_n_rows > &_n_obs) %then %do;
-            %put NOTE: (mixed_effectsize) &resids holds &_n_rows rows; &_n_obs have a residual.;
+            %put NOTE: (mixed_effectsize) &resids holds &_n_rows rows, of which &_n_obs have a residual.;
             %put NOTE- Sums of squares and N_OBS are taken over the &_n_obs rows the model actually;
-            %put NOTE- used. The other rows were read but not fitted (missing response or covariate,;
-            %put NOTE- or timepoint slots belonging to a different outcome in a long file).;
+            %put NOTE- used. The other rows were read but not fitted -- missing response or;
+            %put NOTE- covariate, or timepoint slots belonging to a different outcome in a long file.;
         %end;
 
         %if %sysevalf(&_ss_total <= 0) %then %do;
-            %put WARNING: (mixed_effectsize) SS_total is not positive; eta-squared suppressed.;
+            %put WARNING: (mixed_effectsize) SS_total is not positive -- eta-squared suppressed.;
             %let _havess = 0;
         %end;
     %end;
@@ -632,7 +632,7 @@
             %if &_glmok = 1 and &_havess = 1 %then %do;
                 %if %sysevalf(&_glm_n ne &_n_obs) %then %do;
                     %put WARNING: (mixed_effectsize) PROC GLM used &_glm_n observations, PROC MIXED used &_n_obs..;
-                    %put WARNING- The two fits do not have the same complete-case set; eta-squared and the F test;
+                    %put WARNING- The two fits do not have the same complete-case set -- eta-squared and the F test;
                     %put WARNING- then describe slightly different data. Check the missing-value pattern.;
                 %end;
             %end;
