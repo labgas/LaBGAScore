@@ -27,7 +27,6 @@ is not repeated here.
 - [Parametric modulators](#parametric-modulators)
 - [Single-trial models](#single-trial-models)
 - [What lands on disk](#what-lands-on-disk)
-- [Provenance](#provenance)
 - [The multisession/multitask variant](#the-multisessionmultitask-variant)
 - [`functions/`](#functions)
 - [Dependencies](#dependencies)
@@ -80,7 +79,7 @@ an `exist` guard:
 
 - `s2` checks `if ~exist('DSGN','var')` and runs `s1` itself when the design structure is
   not already in the workspace
-  ([`s2:132`](LaBGAScore_firstlevel_s2_fit_model.m#L132)).
+  ([`s2:124`](LaBGAScore_firstlevel_s2_fit_model.m#L124)).
 - `s1` (and `s1a`, `s1b`) call
   [`prep/LaBGAScore_prep_s0_define_directories.m`](../prep/LaBGAScore_prep_s0_define_directories.m),
   which derives `rootdir`, `BIDSdir`, `derivdir`, `codedir`, `spmrootdir` and the subject
@@ -291,18 +290,13 @@ derivatives/fmriprep/sub-xx/func/
 In the **firstlevel** subdataset, per subject:
 
 ```
-firstlevel/<model>/
-├── sub-xx/
-│   ├── SPM.mat
-│   ├── beta_*.nii, con_*.nii, spmT_*.nii     con_000N order = DSGN.contrasts order
-│   ├── vifs.mat                              variance inflation factors, saved by s3
-│   └── diagnostics/
-│       ├── LaBGAScore_firstlevel_s3_diagnose_model.html   the published report
-│       └── *.png
-└── provenance/
-    └── sub-xx/                               one snapshot per subject, see below
-        ├── *_provenance_<timestamp>.tsv
-        └── *_provenance_<timestamp>.mat
+firstlevel/<model>/sub-xx/
+├── SPM.mat
+├── beta_*.nii, con_*.nii, spmT_*.nii     con_000N order = DSGN.contrasts order
+├── vifs.mat                              variance inflation factors, saved by s3
+└── diagnostics/
+    ├── LaBGAScore_firstlevel_s3_diagnose_model.html   the published report
+    └── *.png
 ```
 
 `s2` creates all of these directories with `mkdir` if they do not exist — including
@@ -310,41 +304,6 @@ firstlevel/<model>/
 workflow document describes: a plain `mkdir` gives you an ordinary directory inside the
 superdataset rather than a subdataset, and the imaging output then lands in the wrong place
 in the DataLad hierarchy.
-
-## Provenance
-
-Scripts are frozen per study in the `code` subdataset, but their dependencies are not:
-CanlabCore, CanlabPrivate and SPM12 are shared clones that keep moving. Which commit of
-each produced a given first-level model is therefore not recoverable from the model itself.
-
-`s2`/`s2a` close that gap by publishing the diagnostic report through
-[`clean/LaBGAScore_prov_publish.m`](../clean/LaBGAScore_prov_publish.m) rather than a bare
-`publish()`. You get the same report, plus:
-
-- a **Provenance section in the HTML**, listing the commit of every dependency the run
-  reached, which of them carried uncommitted local changes relevant to this script, and the
-  MATLAB and SPM versions in play;
-- a machine-readable `.tsv`/`.mat` copy under
-  `firstlevel/<model>/provenance/<subject>/`;
-- the **screen geometry, DPI and resulting figure dimensions**, with a flag on any figure
-  whose size was set by the display rather than by the script.
-
-**One snapshot per subject per model.** Unlike second level, where a script runs once per
-analysis, `s3` runs once per subject — hence the per-subject subdirectory. The location
-mirrors what
-[`clean/LaBGAScore_prov_resolve_retrospective.m`](../clean/LaBGAScore_prov_resolve_retrospective.m)
-already uses at first level: `<modeldir>/provenance/`, not the `results/notes` tree it uses
-at second level, because first-level models have no `results/` directory.
-
-`s2`/`s2a` pass `maxHeight 800` / `maxWidth 1600`, keeping report figures the size they have
-always been here. `LaBGAScore_prov_publish` does not set them by default, because `publish()`
-applies them by resizing the PNG on disk — detail is lost, not merely displayed smaller.
-Drop those two arguments at the call site for full-resolution montages at the cost of larger
-files.
-
-This requires **LaBGAScore itself on the MATLAB path with subfolders**, since
-`prov_publish` lives in `clean/`. Full detail in
-[`clean/README_provenance.md`](../clean/README_provenance.md).
 
 ## The multisession/multitask variant
 
@@ -372,7 +331,7 @@ Two vendored copies of older CANlab functions:
 `s2`/`s2a` call the `_old` version deliberately. The current
 [`canlab_glm_subject_levels.m`](https://github.com/canlab/CanlabCore/blob/master/CanlabCore/GLM_Batch_tools/canlab_glm_subject_levels.m)
 changed how missing onset and duration files are handled, and errors out on the way these
-scripts write them ([`s2:942`](LaBGAScore_firstlevel_s2_fit_model.m#L942)). Keep the call
+scripts write them ([`s2:934`](LaBGAScore_firstlevel_s2_fit_model.m#L934)). Keep the call
 pointed at the vendored copy unless you have re-tested against the current upstream one.
 
 ## Dependencies
@@ -382,7 +341,7 @@ pointed at the vendored copy unless you have re-tested against the current upstr
 | [SPM12](https://www.fil.ion.ucl.ac.uk/spm/software/spm12/) | everything | On the MATLAB path **without** subdirectories |
 | [CanlabCore](https://github.com/canlab/CanlabCore) | `canlab_glm_*`, `onsets2fmridesign`, `scn_spm_design_check`, `scn_session_spike_id`, `statistic_image`, `fmri_mask_image`, `canlab_results_fmridisplay` | `s2` clones it into `githubrootdir` if absent |
 | [CanlabPrivate](https://github.com/canlab/CanlabPrivate) | `canlab_spm_contrast_job_luka`, `canlab_spm_contrast_job_single_trials_lukasvo` | Access-restricted. `s2` clones it if absent, which fails without access — needed for contrast generation |
-| [LaBGAScore](https://github.com/labgas/LaBGAScore) itself, **with subfolders** | `prep/LaBGAScore_prep_s0_define_directories.m`, and `clean/LaBGAScore_prov_publish.m` for the diagnostic report | Not auto-added; `addpath(genpath(...))` it yourself |
+| [LaBGAScore](https://github.com/labgas/LaBGAScore) itself, **with subfolders** | `prep/LaBGAScore_prep_s0_define_directories.m` | Not auto-added; `addpath(genpath(...))` it yourself |
 | fMRIPrep output | confounds, preprocessed BOLD | Produced upstream of this repo |
 | `events.tsv` files | onsets, durations, modulators | Written by `prep/LaBGAScore_prep_s1_write_events_tsv*.m` |
 
@@ -399,15 +358,19 @@ side-effect-free script.
   `clean/LaBGAScore_check_display.m` tells you whether the current X2go session can produce
   a full-size figure, and the recommended settings per screen are under *Set up your X2go
   display for publishing figures* in
-  [`LaBGAS_fMRI_analysis_workflow.md`](../LaBGAS_fMRI_analysis_workflow.md). Every report
-  records the screen geometry, DPI and resulting figure dimensions — see
-  [Provenance](#provenance).
+  [`LaBGAS_fMRI_analysis_workflow.md`](../LaBGAS_fMRI_analysis_workflow.md).
 - **No tests.** Static analysis over this folder only, from the MATLAB prompt:
   ```
   addpath(genpath('..')); LaBGAScore_check_all_scripts(pwd)
   ```
   `checkcode` catches parse errors but not undefined variables, missing functions, or wrong
   indexing — the defect classes that actually occur here. Read the code path.
-- **Two defects were fixed on 2026/09/02** that affected whether a model ran at all:
-  designs with parametric modulators errored in the single-session path, and under
-  `LaBGAS_options.subjs2analyze` the `s2a` subject loop either fit nothing or errored.
+- **Which dependency versions produced a given model is not recorded.** Scripts are frozen
+  per study in the `code` subdataset, but CanlabCore, CanlabPrivate and SPM12 are shared
+  clones that keep moving. [`clean/README_provenance.md`](../clean/README_provenance.md)
+  documents the tooling that closes this gap.
+- **Two known open defects stop a model running.** Designs with parametric modulators error
+  in the single-session path of `s2`/`s2a`, because the modulator loop is indexed with a
+  variable cleared earlier. And `s2a` loops over `LaBGAS_options.subjs2analyze` directly, so
+  it fits nothing when that cell array is empty — which is what `s1a` tells you to leave it
+  as. Fixes for both are on the `firstlevel-fixes` branch, pending review.

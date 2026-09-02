@@ -248,15 +248,12 @@ hand.
 - **Silent skipping.** Missing sessions, missing covariate values, and condition-name
   mismatches all produce warnings or nothing at all rather than errors. Check the number of
   contrasts written per subject, and the `NaN` count in the results table.
-- **Not verified against a live SPM run.** The 2026/09/02 revision fixed several defects in
-  this chain (below) by reading and by targeted MATLAB tests, not by running the pipeline
-  end to end on real data. Confirm on the LaBGAS server against a real phMRI model before
-  relying on it.
-- **Results predating 2026/09/02 differ.** That revision fixed: `s2b`'s contrast loop,
-  which started at subject index 3 and so silently skipped the first two included
-  subjects; `s3c`'s results table,
-  which errored outright unless exactly five neurotransmitter maps were selected; a
-  `secondlevel` directory check that tested the `firstlevel` directory instead, so `mkdir`
-  created `secondlevel/` outside DataLad; a subject count taken from the derivatives list
-  rather than the first-level list; and an `fprintf` typo that turned a "no noise files"
-  warning into an error.
+- **Known open defects.** `s2b`'s contrast loop starts at subject index 3, silently
+  skipping the first two included subjects. `s3c`'s results table is built with a hardcoded
+  width of ten columns, so it errors unless exactly five neurotransmitter maps are
+  selected — including on its own shipped default of three. The `secondlevel` directory
+  check tests the `firstlevel` directory instead, so `mkdir` creates `secondlevel/` outside
+  DataLad. The subject count comes from the derivatives list while the loop indexes the
+  first-level list. And `s1b` calls `fprint` rather than `fprintf`, turning a "no noise
+  files" warning into an error. Fixes for all of these are on the `firstlevel-fixes`
+  branch, pending review.
