@@ -28,7 +28,8 @@ Size for Mixed Models*, Texas A&M University — by way of an in-house adaptatio
 B. Dalile, 3 December 2021).
 
 It computes three statistics — `eta_2`, `omega_2` and `partial_eta_2` — into one
-dataset, so it is easy to report one of them under the name of another. In the
+dataset, so it is easy to report one of them under the name of another. (The
+replacement macro drops omega-squared altogether; LaBGAS does not report it.) In the
 ME/CFS analysis that is *not* what happened: the reported quantity was
 `partial_eta_2` itself. **The name was right and the arithmetic was wrong**,
 which is the harder failure to spot. It forms the error sum of squares as
@@ -102,10 +103,9 @@ observations that model actually fitted, while the denominator df it was
 standing in for ranged from 124 to 161. Published partial eta-squared values
 came out between 3× and 9× too small.
 
-**This macro is immune by construction.** `partial_eta2`, `partial_omega2`,
-`partial_epsilon2` and the confidence interval read only the Type 3 table, where
-`DenDF` already reflects the observations the model fitted. `eta2` and `omega2`
-filter the residuals dataset to rows with a non-missing residual before taking
+**This macro is immune by construction.** `partial_eta2`, `partial_epsilon2`
+and the confidence interval read only the Type 3 table, where `DenDF` already
+reflects the observations the model fitted. `eta2` filters the residuals dataset to rows with a non-missing residual before taking
 any sum of squares, so `SS_total`, `SS_error` and `N_OBS` all describe the same
 set of rows — the fitted ones — and the macro prints a NOTE giving both counts
 whenever they differ.
@@ -147,21 +147,20 @@ run;
 ```
 
 Partial eta-squared and its confidence interval need only `tests3`. Supply
-`resids=` and `dv=` as well if eta-squared and omega-squared are also wanted.
+`resids=` and `dv=` as well if eta-squared is also wanted.
 
 ### Output
 
 Per effect: `partial_eta2` with a noncentral-F confidence interval,
-`cohen_f2`, and — only when a residuals dataset is supplied — eta-squared and
-omega-squared, labelled as approximations. Every quantity has its own variable
+`cohen_f2`, `partial_epsilon2`, and — only when a residuals dataset is supplied
+— eta-squared, labelled as an approximation. Every quantity has its own variable
 name and a full printed label, which is the point.
 
 Two diagnostic columns come with them:
 
 | Column | Meaning |
 |---|---|
-| `partial_omega2` | Partial omega-squared, `NumDF(F-1)/(NumDF·F + DenDF + 1)`. Less positively biased than partial eta-squared, and computable from F and df alone. Matches R `effectsize::F_to_omega2`. Negative when F < 1; read as 0. |
-| `partial_epsilon2` | Partial epsilon-squared, `NumDF(F-1)/(NumDF·F + DenDF)`. Matches R `effectsize::F_to_epsilon2`. |
+| `partial_epsilon2` | Partial epsilon-squared, `NumDF(F-1)/(NumDF·F + DenDF)`. Less positively biased than partial eta-squared, and computable from F and df alone. Matches R `effectsize::F_to_epsilon2`. Negative when F < 1; read as 0. |
 | `nobs_dendf` | `N_obs / DenDF`. Diagnostic only — it makes the MSE substitution visible but does **not** bound the eta-squared error. See caveat 2. |
 | `eta2_source` | `FROM_F`, `GLM_TYPE3` or `UNMATCHED` — where the eta-squared on that row came from. |
 
@@ -187,9 +186,7 @@ sums of squares:
 ```
 
 That is an actual variance decomposition rather than one back-solved from a
-Wald statistic, so it is not subject to the `N_obs / DenDF` inflation. It also
-settles the omega-squared convention question below, because the error MSE
-comes from a real ANOVA table.
+Wald statistic, so it is not subject to the `N_obs / DenDF` inflation.
 
 **`PROC GLM` ignores the repeated-measures covariance structure entirely.**
 Only its sums of squares are used. Its F and p values are *not* valid for these
@@ -233,15 +230,13 @@ can recompute it from the F and df printed in the same table — which is what
 makes a results table checkable. It is invariant to both failure modes
 documented below: it does not depend on `N_obs`, and the MSE cancels out of it.
 
-Consider adding `partial_omega2` (or `partial_epsilon2`). They share that
-property — F and df are all they need — and both are less positively biased
-than partial eta-squared, which matters most when an effect is small or the
-sample is not large. They are what R's `effectsize` reports alongside partial
-eta-squared.
+Consider adding `partial_epsilon2`. It shares that property — F and df are all
+it needs — and it is less positively biased than partial eta-squared, which
+matters most when an effect is small or the sample is not large. It is one of
+what R's `effectsize` reports alongside partial eta-squared.
 
-Note that `omega2_approx` is the **classical, non-partial** omega-squared and is
-a different quantity from `partial_omega2`. Do not report them as if they were
-alternatives to each other.
+**Omega-squared is deliberately not computed.** LaBGAS does not report it, so
+neither the partial nor the classical form appears in the output.
 
 Eta-squared cannot be recovered from F and df alone, so a reader cannot verify
 it. Report it only alongside partial eta-squared, never instead of it, and
@@ -253,9 +248,9 @@ more directly interpretable than any variance-explained measure.
 
 ### Caveats to state in a Methods section
 
-1. Eta-squared and omega-squared are **not uniquely defined** for a mixed or
-   marginal model — there is no single residual variance and no single error
-   df. They are formed here as `SS_error = USS(residuals)`,
+1. Eta-squared is **not uniquely defined** for a mixed or marginal model —
+   there is no single residual variance and no single error df. It is formed
+   here as `SS_error = USS(residuals)`,
    `SS_total = CSS(dv)`, `MSE = SS_error / DenDF`,
    `SS_effect = NumDF * FValue * MSE`. That is the natural analogue of the
    fixed-effects definitions but remains an approximation, hence the
@@ -291,9 +286,9 @@ more directly interpretable than any variance-explained measure.
    said the inflation was roughly `N_obs / DenDF`. That was wrong; the table
    above is the evidence. The macro now warns on every row under `FROM_F`.
 
-   **`partial_eta2`, `partial_omega2` and `partial_epsilon2` are not
+   **`partial_eta2` and `partial_epsilon2` are not
    affected** — they use only `NumDF`, `DenDF` and `FValue`. This caveat is
-   about eta-squared and classical omega-squared alone.
+   about eta-squared alone.
 
    Under Kenward-Roger `DenDF` also differs from effect to effect, so the
    implied MSE differs between rows of one model; the macro reports the
@@ -597,44 +592,12 @@ the fixed-effects case.
    al. (2008) formalise as R²_β, and is worth one sentence in a Methods
    section.
 
-### Open question: which omega-squared convention
-
-The omega-squared computed here uses
-
-```
-(SS_effect − NumDF·MSE) / (SS_total + MSE)
-```
-
-inherited from the 2021 script. That is the classic Hays/Keppel convention, and
-is what Olejnik & Algina (2003) use.
-
-The SAS documentation for `EFFECTSIZE` renders semipartial omega-squared with
-`SS_total` alone in the denominator in one place, and describes it as "the total
-sum of squares adjusted by MSE terms" in another. **The formulas on those pages
-are published as images rather than text, so this has not been verified against
-SAS's actual output.**
-
-The difference is small — about 0.8% in a test case — and partial eta-squared is
-unaffected either way. To settle it, run `PROC GLM` with `EFFECTSIZE` on any
-small dataset and compare the printed semipartial omega-squared against both
-
-```
-(SS_effect − df_effect·MSE) / SS_total
-(SS_effect − df_effect·MSE) / (SS_total + MSE)
-```
-
-then update this README and the macro header with what you find.
-
 ### References
 
 - Edwards LJ, Muller KE, Wolfinger RD, Qaqish BF, Schabenberger O. An R² statistic
   for fixed effects in the linear mixed model. *Statistics in Medicine*
   2008;27(29):6137–6157. [doi:10.1002/sim.3429](https://doi.org/10.1002/sim.3429)
   (PMID 18816511)
-- Olejnik S, Algina J. Generalized eta and omega squared statistics: measures of
-  effect size for some common research designs. *Psychological Methods*
-  2003;8(4):434–447.
-  [doi:10.1037/1082-989X.8.4.434](https://doi.org/10.1037/1082-989X.8.4.434)
 - Steiger JH. Beyond the F test: effect size confidence intervals and tests of
   close fit in the analysis of variance and contrast analysis. *Psychological
   Methods* 2004;9(2):164–182.

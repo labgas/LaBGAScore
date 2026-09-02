@@ -8,8 +8,8 @@
  |  Produces, for every effect in the Type 3 tests table:
  |      partial_eta2   partial eta-squared, with a confidence interval
  |      cohen_f2       Cohen's f-squared (a monotone function of the above)
+ |      partial_epsilon2  partial epsilon-squared (less biased)
  |      eta2_*         eta-squared     (optional; needs a residuals dataset)
- |      omega2_*       omega-squared   (optional; needs a residuals dataset)
  |
  |  Every quantity is written to the output dataset under its own name and
  |  printed with a full label, so that nothing can be reported under the
@@ -29,7 +29,8 @@
  |
  |  Its macro computes three statistics -- eta_2, omega_2 and
  |  partial_eta_2 -- into one dataset, so it is easy to report one of them
- |  under the name of another.  In the ME/CFS analysis the reported
+ |  under the name of another.  (This macro drops omega-squared entirely:
+ |  LaBGAS does not report it.)  In the ME/CFS analysis the reported
  |  quantity turned out to be partial_eta_2 itself: the NAME was right and
  |  the arithmetic was wrong, which is the harder failure to spot.  It
  |  forms the error sum of squares as
@@ -93,11 +94,11 @@
  |  the old code's _FREQ_ took the value 1384 in all of them.
  |
  |  This macro is immune to that by construction:
- |    * PARTIAL_ETA2, PARTIAL_OMEGA2, PARTIAL_EPSILON2 and the confidence
- |      interval read ONLY the Type 3 table.  DenDF already reflects the
+ |    * PARTIAL_ETA2, PARTIAL_EPSILON2 and the confidence interval read
+ |      ONLY the Type 3 table.  DenDF already reflects the
  |      observations the model actually fitted.  Nothing to get wrong.
- |    * ETA2 and OMEGA2 filter the residuals dataset to rows with a
- |      non-missing residual before taking any sum of squares, so
+ |    * ETA2 filters the residuals dataset to rows with a non-missing
+ |      residual before taking any sum of squares, so
  |      SS_total, SS_error and N_OBS all describe the same set of rows --
  |      the fitted ones.  N_OBS is therefore observations USED.
  |  The macro prints a NOTE giving both counts whenever they differ, so
@@ -123,8 +124,8 @@
  |  only on NumDF, DenDF and F, and the denominator df already reflects
  |  whatever covariance structure was fitted.  Nothing to choose.
  |
- |  ETA-SQUARED AND OMEGA-SQUARED DO CHANGE, because "the residual" means
- |  two different things:
+ |  ETA-SQUARED DOES CHANGE, because "the residual" means two different
+ |  things:
  |
  |    MARGINAL residuals   y - Xb          from the OUTPM= dataset.
  |                         Variation around the population-average fit.
@@ -197,7 +198,7 @@
  |                        dv        = y);
  |
  |  Partial eta-squared and its CI need only TESTS3.  RESIDS= and DV= are
- |  needed only for eta-squared and omega-squared.
+ |  needed only for eta-squared.
  |
  |  ---------------------------------------------------------------------
  |  PARAMETERS
@@ -289,9 +290,9 @@
  |  ---------------------------------------------------------------------
  |  ASSUMPTIONS AND LIMITS  (state these in a Methods section)
  |  ---------------------------------------------------------------------
- |  1. Eta-squared and omega-squared are NOT uniquely defined for a mixed
- |     or marginal model -- there is no single residual variance and no
- |     single error df.  Here they are formed as
+ |  1. Eta-squared is NOT uniquely defined for a mixed or marginal model
+ |     -- there is no single residual variance and no single error df.
+ |     Here it is formed as
  |
  |         SS_error  = USS(residuals)                from RESIDS=
  |         SS_total  = CSS(dependent variable)       from RESIDS=
@@ -337,9 +338,9 @@
  |     macro now warns on EVERY row whenever ETA2_METHOD = FROM_F, since
  |     the problem is not confined to rows with a small DenDF.
  |
- |     PARTIAL_ETA2, PARTIAL_OMEGA2 and PARTIAL_EPSILON2 ARE NOT
- |     AFFECTED -- they use only NumDF, DenDF and FValue.  This caveat is
- |     about eta-squared and (classical) omega-squared alone.
+ |     PARTIAL_ETA2 AND PARTIAL_EPSILON2 ARE NOT AFFECTED -- they use
+ |     only NumDF, DenDF and FValue.  This caveat is about eta-squared
+ |     alone.
  |
  |     Under Kenward-Roger, DenDF also differs from effect to effect, so
  |     the implied MSE differs between rows of the same model.  The macro
@@ -532,43 +533,12 @@
  |       Worth one sentence in a Methods section.
  |
  |  ---------------------------------------------------------------------
- |  OPEN QUESTION: WHICH OMEGA-SQUARED CONVENTION
- |  ---------------------------------------------------------------------
- |  The omega-squared computed here uses
- |
- |      (SS_effect - NumDF*MSE) / (SS_total + MSE)
- |
- |  inherited from the 2021 script.  That is the classic Hays / Keppel
- |  convention, and is also what Olejnik & Algina (2003) use.
- |
- |  The SAS documentation for the EFFECTSIZE option renders semipartial
- |  omega-squared with SS_total alone in the denominator in one place, and
- |  describes it as "the total sum of squares adjusted by MSE terms" in
- |  another.  The formulas on those pages are published as images rather
- |  than text, so THIS HAS NOT BEEN VERIFIED against SAS's actual output.
- |
- |  The difference is small -- about 0.8 per cent in a test case -- and partial
- |  eta-squared is unaffected either way.  To settle it, run PROC GLM with
- |  the EFFECTSIZE option on any small dataset and compare the printed
- |  semipartial omega-squared against both:
- |
- |      (SS_effect - df_effect*MSE) / SS_total
- |      (SS_effect - df_effect*MSE) / (SS_total + MSE)
- |
- |  then update this header and the README with what you find.
- |
- |  ---------------------------------------------------------------------
  |  REFERENCES
  |  ---------------------------------------------------------------------
  |  Edwards LJ, Muller KE, Wolfinger RD, Qaqish BF, Schabenberger O.
  |      An R2 statistic for fixed effects in the linear mixed model.
  |      Statistics in Medicine 2008;27(29):6137-6157.
  |      doi:10.1002/sim.3429   (PMID 18816511)
- |
- |  Olejnik S, Algina J.  Generalized eta and omega squared statistics:
- |      measures of effect size for some common research designs.
- |      Psychological Methods 2003;8(4):434-447.
- |      doi:10.1037/1082-989X.8.4.434
  |
  |  Steiger JH.  Beyond the F test: effect size confidence intervals and
  |      tests of close fit in the analysis of variance and contrast
@@ -610,7 +580,7 @@
                         between   = );
 
     %local _abort _havess _haveprobf _cilevel _mdl _rt _src
-           _e2 _o2 _e2lab _o2lab _rtword _srcword _e2m _glmok
+           _e2 _e2lab _rtword _srcword _e2m _glmok
            _covstruct _ddfm _resvar _subjeff _colz _nsub _havesub _bi;
     %let _abort     = 0;
     %let _glmok     = 0;
@@ -656,18 +626,14 @@
         %let _rtword  = marginal;
         %let _srcword = population-average;
         %let _e2      = eta2_approx;
-        %let _o2      = omega2_approx;
         %let _e2lab   = %str(Eta-squared, proportion of total variance (approximate));
-        %let _o2lab   = %str(Omega-squared, CLASSICAL/non-partial, proportion of total variance (approximate) -- NOT the same as PARTIAL_OMEGA2);
     %end;
     %else %do;
         %let _src     = OUTP=;
         %let _rtword  = conditional;
         %let _srcword = subject-specific;
         %let _e2      = eta2_cond_approx;
-        %let _o2      = omega2_cond_approx;
         %let _e2lab   = %str(Conditional eta-squared, proportion of WITHIN-SUBJECT variance (approximate));
-        %let _o2lab   = %str(Conditional omega-squared, proportion of WITHIN-SUBJECT variance (approximate));
     %end;
 
     /*-- 1b. Validate ETA2_METHOD= --------------------------------------*/
@@ -970,15 +936,13 @@
             partial_eta2 = (NumDF * FValue) / (NumDF * FValue + DenDF);
             cohen_f2     = partial_eta2 / (1 - partial_eta2);
 
-            /* Partial omega-squared and partial epsilon-squared. Like
-               partial eta-squared these need ONLY NumDF, DenDF and
-               FValue, so a reader can recompute them from the same
-               table -- and both are less positively biased than partial
-               eta-squared. Definitions match R's effectsize package
-               (F_to_omega2, F_to_epsilon2), verified numerically.
-               They can go negative when F < 1; that is expected, and
-               such a value is conventionally read as 0.            */
-            partial_omega2   = (NumDF * (FValue - 1)) / (NumDF * FValue + DenDF + 1);
+            /* Partial epsilon-squared. Like partial eta-squared it
+               needs ONLY NumDF, DenDF and FValue, so a reader can
+               recompute it from the same table, and it is less
+               positively biased. Definition matches R's effectsize
+               package (F_to_epsilon2), verified numerically. It can go
+               negative when F < 1; that is expected, and such a value
+               is conventionally read as 0.                         */
             partial_epsilon2 = (NumDF * (FValue - 1)) / (NumDF * FValue + DenDF);
 
             /* Steiger (2004) CI by inverting the noncentral F.
@@ -995,7 +959,7 @@
             partial_eta2_ucl = _nc_hi / (_nc_hi + _n_eff);
         end;
 
-        /* ---- eta-squared and omega-squared: need the residuals ------- */
+        /* ---- eta-squared: needs the residuals ------------------------ */
         %if &_havess = 1 %then %do;
             ss_total = &_ss_total;
             ss_error = &_ss_error;
@@ -1006,7 +970,6 @@
                 ss_effect = NumDF * FValue * mse;
 
                 &_e2 = ss_effect / ss_total;
-                &_o2 = (ss_effect - NumDF * mse) / (ss_total + mse);
 
                 /* How far is DenDF from the observation count?  See
                    ASSUMPTIONS 2: eta-squared from F is inflated by
@@ -1027,11 +990,9 @@
             partial_eta2_lcl = 'Partial eta-squared, lower CL'
             partial_eta2_ucl = 'Partial eta-squared, upper CL'
             cohen_f2         = "Cohen's f-squared"
-            partial_omega2   = 'Partial omega-squared (less biased; from F and df only)'
             partial_epsilon2 = 'Partial epsilon-squared (less biased; from F and df only)'
         %if &_havess = 1 %then %do;
             &_e2             = "&_e2lab"
-            &_o2             = "&_o2lab"
             mse              = 'Implied MSE (SS_error / DenDF)'
             ss_effect        = 'SS effect (approximate)'
             ss_error         = "SS error (USS of &_rtword residuals)"
@@ -1067,10 +1028,9 @@
                 ss_total   = &_glm_sstot;
                 mse        = &_glm_mse;
                 &_e2 = ss_effect / ss_total;
-                &_o2 = (ss_effect - _df_eff * mse) / (ss_total + mse);
             end;
             else do;
-                call missing(ss_effect, &_e2, &_o2);
+                call missing(ss_effect, &_e2);
                 eta2_source = 'UNMATCHED';
                 put "WARNING: (mixed_effectsize) No Type III SS matched effect " Effect
                     "-- eta-squared suppressed for that row.";
@@ -1081,7 +1041,7 @@
             drop _ss_eff _df_eff;
         run;
 
-        %put NOTE: (mixed_effectsize) Eta-squared and omega-squared taken from PROC GLM Type III sums of squares.;
+        %put NOTE: (mixed_effectsize) Eta-squared taken from PROC GLM Type III sums of squares.;
         %put NOTE- These are a real variance decomposition, not reconstructed from F. Partial eta-squared is unchanged.;
     %end;
 
@@ -1108,8 +1068,8 @@
         %put WARNING: (mixed_effectsize) ETA2_METHOD=FROM_F reconstructs SS_effect as NumDF x F x MSE,;
         %put WARNING- which is exact only in a fixed-effects ANOVA. Here it can be out by several fold;
         %put WARNING- in EITHER direction -- worst N_obs/DenDF on this table: &_worst -- and the error;
-        %put WARNING- is NOT predictable from the df. Report PARTIAL_ETA2 / PARTIAL_OMEGA2 /;
-        %put WARNING- PARTIAL_EPSILON2, which are unaffected, or rerun with ETA2_METHOD=DIRECT.;
+        %put WARNING- is NOT predictable from the df. Report PARTIAL_ETA2 or PARTIAL_EPSILON2,;
+        %put WARNING- which are unaffected, or rerun with ETA2_METHOD=DIRECT.;
         %put WARNING- The measured errors: README.md, "Caveats to state in a Methods section", item 2.;
     %end;
 
@@ -1212,8 +1172,8 @@
             var Effect NumDF DenDF FValue
                 %if &_haveprobf = 1 %then ProbF;
                 partial_eta2 partial_eta2_lcl partial_eta2_ucl
-                partial_omega2 partial_epsilon2 cohen_f2
-                %if &_havess = 1 %then &_e2 &_o2 nobs_dendf;
+                partial_epsilon2 cohen_f2
+                %if &_havess = 1 %then &_e2 nobs_dendf;
                 %if &_havesub = 1 %then dendf_ratio;
                 %if %superq(between) ne %then is_between;
                 eta2_source
@@ -1221,8 +1181,8 @@
             format FValue 8.2 NumDF 8. DenDF 8.1
                    %if &_haveprobf = 1 %then %str(ProbF pvalue6.4);
                    partial_eta2 partial_eta2_lcl partial_eta2_ucl
-                   partial_omega2 partial_epsilon2 cohen_f2 8.3
-                   %if &_havess = 1 %then %str(&_e2 &_o2 8.4 nobs_dendf 8.2);
+                   partial_epsilon2 cohen_f2 8.3
+                   %if &_havess = 1 %then %str(&_e2 8.4 nobs_dendf 8.2);
                    %if &_havesub = 1 %then %str(dendf_ratio 8.2);
                    ;
         run;
@@ -1234,9 +1194,9 @@
     quit;
 
     %put NOTE: (mixed_effectsize) Effect sizes written to &out..;
-    %put NOTE- Report PARTIAL_ETA2 (optionally with PARTIAL_OMEGA2 / PARTIAL_EPSILON2, which are less biased);
-    %put NOTE- and are recomputable by a reader from the F and df in the same table.;
-    %put NOTE- If you also report &_e2, label it as the output labels do; it is the CLASSICAL, non-partial;
-    %put NOTE- omega/eta family and is not comparable with PARTIAL_OMEGA2.;
+    %put NOTE- Report PARTIAL_ETA2, optionally with PARTIAL_EPSILON2, which is less biased and is;
+    %put NOTE- recomputable by a reader from the F and df in the same table.;
+    %put NOTE- If you also report &_e2, label it as the output labels do -- it is the CLASSICAL,;
+    %put NOTE- non-partial quantity and is not comparable with PARTIAL_ETA2.;
 
 %mend mixed_effectsize;
