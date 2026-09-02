@@ -11,11 +11,18 @@ Currently: effect sizes for fixed effects in models fitted with `PROC MIXED`.
 Both files are self-contained. `%include` the one you need; there are no
 cross-dependencies.
 
-> **Status: not yet run in SAS.** The arithmetic has been verified
-> independently and the macro syntax statically checked, but neither file has
-> been executed against a real model. Run them against a model with known
-> output and confirm the results before using them in a manuscript, then
-> delete this notice.
+> **Status: partly exercised in SAS.** The default `eta2_method=FROM_F` path of
+> `%mixed_effectsize` has been run against real models and agrees with the
+> arithmetic, which has also been cross-validated against R and Python.
+> **Still unexercised:** `eta2_method=DIRECT`, `model=MIXED`,
+> `residtype=CONDITIONAL`, the degrees-of-freedom diagnostics, and
+> `es_identify.sas` in full. Confirm the output before any of those goes into
+> a manuscript, and narrow this notice as they are covered.
+
+The macro headers are the reference for **usage, parameters and output**; this
+README carries everything else — why the macros exist, the defect in the
+published method they replace, the choices to make before calling them, and the
+caveats to state in a Methods section.
 
 ---
 

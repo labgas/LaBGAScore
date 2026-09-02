@@ -2,159 +2,20 @@
  |  mixed_effectsize.sas
  |
  |  Effect sizes for fixed effects in models fitted with PROC MIXED --
- |  both MARGINAL models (REPEATED statement, population-average) and true
- |  MIXED models (RANDOM statement, subject-specific).
+ |  MARGINAL models (REPEATED statement, population-average) and true
+ |  MIXED models (RANDOM statement, subject-specific) alike.
  |
- |  Produces, for every effect in the Type 3 tests table:
- |      partial_eta2   partial eta-squared, with a confidence interval
- |      cohen_f2       Cohen's f-squared (a monotone function of the above)
- |      partial_epsilon2  partial epsilon-squared (less biased)
- |      eta2_*         eta-squared     (optional; needs a residuals dataset)
+ |  THE FULL DOCUMENTATION IS IN  sas_macros/README.md.  This header is
+ |  the working reference -- usage, parameters, output, and the choices
+ |  you have to make before calling the macro.  The README carries the
+ |  rest: why this macro exists and what defect in the published method
+ |  it replaces, the observations-read-versus-used problem, the
+ |  cross-validation against R and Python, the correspondence with
+ |  PROC GLM, the caveats to state in a Methods section, and the
+ |  references.
  |
- |  Every quantity is written to the output dataset under its own name and
- |  printed with a full label, so that nothing can be reported under the
- |  wrong heading.
- |
- |  Companion file:  es_identify.sas  -- forensic helper for auditing effect
- |  sizes in tables that were produced by other code.
- |
- |  ---------------------------------------------------------------------
- |  WHY THIS EXISTS
- |  ---------------------------------------------------------------------
- |  The method previously used in this lab comes from a published SAS
- |  Users Group paper:
- |
- |      Tippey KG, Longnecker MT.  An Ad Hoc Method for Computing
- |      Pseudo-Effect Size for Mixed Models.  Texas A&M University.
- |
- |  Its macro computes three statistics -- eta_2, omega_2 and
- |  partial_eta_2 -- into one dataset, so it is easy to report one of them
- |  under the name of another.  (This macro drops omega-squared entirely:
- |  LaBGAS does not report it.)  In the ME/CFS analysis the reported
- |  quantity turned out to be partial_eta_2 itself: the NAME was right and
- |  the arithmetic was wrong, which is the harder failure to spot.  It
- |  forms the error sum of squares as
- |
- |      ss_error = mse * (_freq_ - numdf);
- |
- |  which uses the NUMBER OF OBSERVATIONS minus the effect's NUMERATOR
- |  degrees of freedom, where the model's DENOMINATOR degrees of freedom
- |  belong.  That line is verbatim in the published macro's appendix, so
- |  this is a defect in the method as published, not a local slip -- and
- |  any analysis built on that paper inherits it.
- |
- |  WHEN IT BITES, AND WHEN IT DOES NOT.  The mse cancels, leaving
- |
- |      partial_eta_2 = qF / (qF + _freq_ - q)
- |
- |  against the correct qF / (qF + DenDF).  The two AGREE if and only if
- |  _freq_ - q = DenDF, and that needs TWO independent things to hold:
- |  the residuals dataset must contain only the rows the model fitted,
- |  and DenDF must be the observation-scale residual df.
- |
- |  The second is decided by the DF METHOD in force -- NOT by whether the
- |  effect crosses subjects:
- |
- |    CONTAINMENT, falling through -- a RANDOM statement is present and
- |      no random effect contains the fixed effect
- |        -> N - rank(XZ) for EVERY effect.  AGREES.
- |    BETWEEN-WITHIN with a residual variance term (CS, VC, AR(1))
- |        -> stratifies.  Agrees for within-subject effects, FAILS for
- |           between-subject ones.
- |    BETWEEN-WITHIN under type = UN
- |        -> participant scale for EVERY effect, because a saturated
- |           R-side leaves no within-subject stratum.  FAILS for all,
- |           within-subject effects included.
- |    KR / KR2 / SATTERTH
- |        -> fractional, in general neither scale.  FAILS.
- |
- |  The published paper's worked example is the SECOND case, which is why
- |  the between/within distinction looks like the governing one.  Its
- |  Case 1 (fev1: 72 patients x 8 hours = 576 observations) reports
- |  partial eta-squared .029 / .082 / .057 for Drug / Hour / Drug*Hour;
- |  recomputed against the design's real denominator df, the two
- |  WITHIN-subject effects move by 1.2x and the BETWEEN-subject Drug
- |  effect by 6.9x (.029 -> .199).  Do not generalise from it: a project
- |  whose models all carry a RANDOM statement lands in the FIRST case and
- |  agrees to 1-2% even for between-subject factors.
- |
- |  So when auditing an old table the question is not "was this script
- |  used", nor "does the effect cross subjects", but "which DF METHOD was
- |  in force, and did the residuals dataset hold only fitted rows".
- |
- |  ---------------------------------------------------------------------
- |  OBSERVATIONS READ versus OBSERVATIONS USED
- |  ---------------------------------------------------------------------
- |  An OUTPM= dataset has one row per observation the procedure READ, not
- |  per observation it USED.  Rows dropped for a missing response or
- |  covariate are still there, carrying a missing residual.  In a long
- |  file laid out on the longest outcome's timepoint grid the gap can be
- |  enormous: in the analysis this macro replaces, PROC MIXED read 1384
- |  rows for every model while using between 483 and 1312 of them, and
- |  the old code's _FREQ_ took the value 1384 in all of them.
- |
- |  This macro is immune to that by construction:
- |    * PARTIAL_ETA2, PARTIAL_EPSILON2 and the confidence interval read
- |      ONLY the Type 3 table.  DenDF already reflects the
- |      observations the model actually fitted.  Nothing to get wrong.
- |    * ETA2 filters the residuals dataset to rows with a non-missing
- |      residual before taking any sum of squares, so
- |      SS_total, SS_error and N_OBS all describe the same set of rows --
- |      the fitted ones.  N_OBS is therefore observations USED.
- |  The macro prints a NOTE giving both counts whenever they differ, so
- |  the size of the gap is visible rather than silently absorbed.
- |
- |  ---------------------------------------------------------------------
- |  This macro never touches _FREQ_.  Partial eta-squared needs nothing but
- |  the Type 3 table, because PROC MIXED already reports the Kenward-Roger
- |  or Satterthwaite denominator df there:
- |
- |      partial_eta2 = (NumDF * FValue) / (NumDF * FValue + DenDF)
- |
- |  This is the standard partial eta-squared identity.  It is also the
- |  quantity Edwards, Muller, Wolfinger, Qaqish & Schabenberger (2008)
- |  propose as R-squared-beta for fixed effects in the linear mixed model
- |  (Stat Med 27:6137-6157, doi:10.1002/sim.3429).  Check the exact
- |  correspondence in that paper before citing it in a Methods section.
- |
- |  ---------------------------------------------------------------------
- |  MARGINAL versus MIXED -- what actually changes
- |  ---------------------------------------------------------------------
- |  PARTIAL ETA-SQUARED IS THE SAME IN BOTH CASES.  The formula depends
- |  only on NumDF, DenDF and F, and the denominator df already reflects
- |  whatever covariance structure was fitted.  Nothing to choose.
- |
- |  ETA-SQUARED DOES CHANGE, because "the residual" means two different
- |  things:
- |
- |    MARGINAL residuals   y - Xb          from the OUTPM= dataset.
- |                         Variation around the population-average fit.
- |                         SS_error still CONTAINS between-subject
- |                         variance.  Eta-squared is then the proportion
- |                         of TOTAL observed variance, which is the honest
- |                         analogue of classical eta-squared and is
- |                         comparable with fixed-effects studies.
- |
- |    CONDITIONAL residuals  y - Xb - Zu   from the OUTP= dataset.
- |                         Variation around the subject-specific fit.
- |                         The random effects have already absorbed the
- |                         between-subject variance, so SS_error is much
- |                         smaller and the resulting quantity is a
- |                         WITHIN-SUBJECT proportion of variance.  It is
- |                         systematically larger and is NOT comparable
- |                         with eta-squared from other studies.
- |
- |  The macro names the outputs differently in the two cases
- |  (ETA2_APPROX versus ETA2_COND_APPROX) precisely so that the two cannot
- |  be confused in a results table.
- |
- |  DEFAULT: marginal residuals, for both model types.  That is the
- |  comparable quantity.  Ask for conditional residuals only when the
- |  within-subject proportion is what you actually want to report, and say
- |  so explicitly in the Methods.
- |
- |  For a marginal model there are no random effects, so OUTP= and OUTPM=
- |  are identical and RESIDTYPE=CONDITIONAL is refused as meaningless.
+ |  Companion file:  es_identify.sas -- forensic helper for auditing
+ |  effect sizes in tables produced by other code.
  |
  |  ---------------------------------------------------------------------
  |  USAGE
@@ -186,7 +47,7 @@
  |
  |      %mixed_effectsize(tests3 = tests3_y,
  |                        model  = MIXED,
- |                        resids = outpm_y,        /* note: OUTPM, not OUTP */
+ |                        resids = outpm_y,        <-- OUTPM, not OUTP
  |                        dv     = y);
  |
  |  True mixed model, within-subject (conditional) eta-squared:
@@ -194,8 +55,19 @@
  |      %mixed_effectsize(tests3    = tests3_y,
  |                        model     = MIXED,
  |                        residtype = CONDITIONAL,
- |                        resids    = outp_y,      /* note: OUTP */
+ |                        resids    = outp_y,      <-- OUTP
  |                        dv        = y);
+ |
+ |  With the degrees-of-freedom diagnostics switched on:
+ |
+ |      proc mixed data = mydata;
+ |          ...
+ |          ods output tests3 = t3  modelinfo = mi  dimensions = dm;
+ |      run;
+ |
+ |      %mixed_effectsize(tests3 = t3, resids = outpm_y, dv = y,
+ |                        modelinfo = mi, dimensions = dm,
+ |                        nsubjects = 164, between = Group Centered_BMI);
  |
  |  Partial eta-squared and its CI need only TESTS3.  RESIDS= and DV= are
  |  needed only for eta-squared.
@@ -203,43 +75,39 @@
  |  ---------------------------------------------------------------------
  |  PARAMETERS
  |  ---------------------------------------------------------------------
- |  tests3     Dataset from ODS OUTPUT TESTS3=.  Required.
- |             Must contain Effect, NumDF, DenDF, FValue (ProbF optional).
+ |  tests3     Dataset from ODS OUTPUT TESTS3=.  REQUIRED.  Must contain
+ |             Effect, NumDF, DenDF, FValue (ProbF optional).
  |  model      MARGINAL (default) for a REPEATED-only model, MIXED for a
  |             model with a RANDOM statement.  Controls validation and the
- |             wording of the output; the partial eta-squared arithmetic is
- |             identical either way.
- |  residtype  MARGINAL (default) or CONDITIONAL.  Determines which
- |             residuals the supplied dataset is assumed to contain, and
- |             hence how eta-squared is named and interpreted.
- |             CONDITIONAL is refused when MODEL = MARGINAL.
- |  resids     Residuals dataset: the OUTPM= dataset when
- |             RESIDTYPE = MARGINAL, the OUTP= dataset when CONDITIONAL.
- |             Optional; omit if only partial eta-squared is wanted.
+ |             wording of the output; the partial eta-squared arithmetic
+ |             is identical either way.
+ |  residtype  MARGINAL (default) or CONDITIONAL.  Says which residuals
+ |             the supplied dataset holds, and hence how eta-squared is
+ |             named and interpreted.  Refused when MODEL = MARGINAL,
+ |             where OUTP= and OUTPM= are the same thing.
+ |  resids     Residuals dataset: OUTPM= when RESIDTYPE = MARGINAL, OUTP=
+ |             when CONDITIONAL.  Optional; omit if only partial
+ |             eta-squared is wanted.
  |  outpm      Deprecated alias for RESIDS=, kept so older calls still run.
- |  dv         Name of the dependent variable in the residuals dataset.
- |             Required if RESIDS= is supplied.
- |  resid      Name of the residual variable.  Default Resid (correct for
- |             both OUTPM= and OUTP=).
+ |  dv         Dependent variable in the residuals dataset.  Required if
+ |             RESIDS= is supplied.
+ |  resid      Residual variable.  Default Resid, correct for both OUTPM=
+ |             and OUTP=.
  |  out        Output dataset.  Default EFFECTSIZES.
- |  alpha      Two-sided alpha for the partial eta-squared CI.  Default 0.05.
+ |  alpha      Two-sided alpha for the partial eta-squared CI.  Default
+ |             0.05.
  |  label      Free-text model label carried into the output.  Optional.
  |  print      Y (default) prints a formatted table; N suppresses it.
  |
- |  --- eta-squared method (does not affect partial eta-squared) --------
- |  eta2_method  FROM_F (default) reconstructs SS_effect from the F test,
- |             as NumDF * FValue * (SS_error / DenDF).  Cheap, but see
- |             ASSUMPTIONS 1-2: it is unreliable when DenDF is much
- |             smaller than the number of observations, which is exactly
- |             the case for a BETWEEN-subject effect in a repeated-
- |             measures design.
- |             DIRECT instead refits the same mean model with PROC GLM
- |             and takes real Type III sums of squares.  Slower, but it
- |             is an actual variance decomposition rather than one
- |             back-solved from a Wald statistic.  Requires DATA=,
- |             CLASS= and FIXED=.  Partial eta-squared is unchanged.
- |  data       Input dataset for ETA2_METHOD = DIRECT.  Use the same
- |             dataset the PROC MIXED model was fitted to.
+ |  --- eta-squared method (does NOT affect partial eta-squared) --------
+ |  eta2_method  FROM_F (default) reconstructs SS_effect from the F test
+ |             as NumDF * FValue * (SS_error / DenDF).  Cheap, but only
+ |             exact in a fixed-effects ANOVA -- see CHOICE 3 below.
+ |             DIRECT refits the same mean model with PROC GLM and takes
+ |             real Type III sums of squares.  Slower, but a genuine
+ |             variance decomposition.  Requires DATA=, CLASS= and FIXED=.
+ |  data       Input dataset for ETA2_METHOD = DIRECT.  Use the dataset
+ |             the PROC MIXED model was fitted to.
  |  class      CLASS variables for the DIRECT refit, space separated.
  |  fixed      Right-hand side of the MODEL statement for the DIRECT
  |             refit -- the fixed effects only, exactly as written in
@@ -249,116 +117,63 @@
  |  modelinfo  Dataset from ODS OUTPUT MODELINFO=.  Supplies the
  |             covariance structure, the df method actually used, the
  |             residual variance method and the subject effect, so the
- |             macro can tailor its df checks instead of guessing.
+ |             macro tailors its df checks instead of guessing.
  |  dimensions Dataset from ODS OUTPUT DIMENSIONS=.  Supplies Columns in
  |             Z (whether a RANDOM statement is active) and the subject
  |             count -- but see NSUBJECTS=.
- |  nsubjects  Number of subjects.  Give this explicitly whenever you
- |             want the between-subject df check.  It is needed because
- |             the Dimensions subject count is NOT always usable: a
- |             RANDOM effect with no SUBJECT= option spans subjects, so
- |             SAS reports Subjects=1 and Max Obs per Subject = N.  The
- |             macro detects that case and asks for this parameter.
- |  between    Space-separated list of effect names that are
- |             BETWEEN-subject, exactly as they appear in TESTS3.  With
- |             NSUBJECTS= this turns the df check from a hint into a
- |             statement: a between-subject effect cannot have more
- |             denominator df than there are subjects.
- |
- |  NOTE on DIRECT: PROC GLM ignores the repeated-measures covariance
- |  structure entirely.  Only its SUMS OF SQUARES are used; its F values
- |  and p values are NOT valid for these designs and are never reported
- |  by this macro.  The F, df and partial eta-squared always come from
- |  PROC MIXED.
+ |  nsubjects  Number of subjects.  Give it explicitly whenever you want
+ |             the between-subject df check.  It is needed because the
+ |             Dimensions subject count is not always usable: a RANDOM
+ |             effect with no SUBJECT= option spans subjects, so SAS
+ |             reports Subjects = 1 and Max Obs per Subject = N.  The
+ |             macro detects that and asks for this parameter.
+ |  between    Space-separated effect names that are BETWEEN-subject,
+ |             exactly as they appear in TESTS3.  With NSUBJECTS= this
+ |             turns the df check from a hint into a statement: a
+ |             between-subject effect cannot have more denominator df
+ |             than there are subjects.
  |
  |  ---------------------------------------------------------------------
- |  WHICH ONE TO REPORT
+ |  OUTPUT
  |  ---------------------------------------------------------------------
- |  Report PARTIAL_ETA2.  It is the convention in this literature, and a
- |  reader can recompute it from the F and df printed in the same table,
- |  which is exactly what makes a results table checkable.
+ |  One row per effect in TESTS3.  Every variable carries a full label,
+ |  so nothing can be reported under the wrong heading.
  |
- |  Eta-squared cannot be recovered from F and df alone, so a reader cannot
- |  verify it.  Report it only alongside partial eta-squared, never instead
- |  of it, and name it correctly.
+ |    partial_eta2              (NumDF*F) / (NumDF*F + DenDF)
+ |    partial_eta2_lcl/_ucl     CI by inverting the noncentral F
+ |    partial_epsilon2          NumDF(F-1) / (NumDF*F + DenDF), less
+ |                              positively biased, same inputs
+ |    cohen_f2                  partial_eta2 / (1 - partial_eta2)
+ |    eta2_approx               with RESIDS= and DV=; named
+ |      or eta2_cond_approx     eta2_cond_approx under RESIDTYPE=CONDITIONAL
+ |    ss_effect ss_error        with RESIDS=
+ |      ss_total mse n_obs
+ |      nobs_dendf
+ |    n_subjects dendf_ratio    with NSUBJECTS=
+ |    is_between                with BETWEEN=
+ |    eta2_source               FROM_F | GLM_TYPE3 | UNMATCHED
+ |    model_label model_type resid_type
  |
- |  Consider also reporting a standardised mean difference with a CI for
- |  the group contrasts specifically -- ESTIMATE or LSMESTIMATE with a
- |  sensible divisor.  For a two-group comparison that is more directly
- |  interpretable than any variance-explained measure.
+ |  OMEGA-SQUARED IS DELIBERATELY NOT COMPUTED -- LaBGAS does not report
+ |  it, in either its partial or its classical form.
+ |
+ |  WHAT TO REPORT: partial_eta2, because a reader can recompute it from
+ |  the F and df printed in the same table, which is what makes a results
+ |  table checkable.  Optionally partial_epsilon2 beside it.  Eta-squared
+ |  cannot be recovered from F and df, so report it only ALONGSIDE
+ |  partial eta-squared, never instead, and name it correctly.  For a
+ |  two-group contrast a standardised mean difference with a CI (ESTIMATE
+ |  or LSMESTIMATE with a sensible divisor) is more interpretable than any
+ |  variance-explained measure.
  |
  |  ---------------------------------------------------------------------
- |  ASSUMPTIONS AND LIMITS  (state these in a Methods section)
+ |  CHOICE 1 -- THE DENOMINATOR-DF METHOD  (the most consequential one)
  |  ---------------------------------------------------------------------
- |  1. Eta-squared is NOT uniquely defined for a mixed or marginal model
- |     -- there is no single residual variance and no single error df.
- |     Here it is formed as
- |
- |         SS_error  = USS(residuals)                from RESIDS=
- |         SS_total  = CSS(dependent variable)       from RESIDS=
- |         MSE       = SS_error / DenDF
- |         SS_effect = NumDF * FValue * MSE
- |
- |     which is the natural analogue of the fixed-effects definitions but
- |     is an approximation.  Both are labelled *_APPROX for that reason.
- |
- |  2. *** ETA-SQUARED RECONSTRUCTED FROM F IS NOT TRUSTWORTHY FOR A
- |     MIXED OR MARGINAL MODEL.  USE ETA2_METHOD = DIRECT. ***
- |
- |     SS_effect = NumDF x FValue x MSE is exact in a fixed-effects
- |     ANOVA, where F really is MS_effect / MS_error and the error df
- |     really is N - rank(X).  Neither holds here.  Two separate things
- |     go wrong:
- |
- |       (a) MSE is formed as SS_error / DenDF, but SS_error is the USS
- |           of the residuals over ALL N_obs observations.  When DenDF
- |           is participant-level -- a BETWEEN-subject effect in a
- |           repeated design -- that MSE is inflated by about
- |           df_resid / DenDF.
- |       (b) F from PROC MIXED is a Wald statistic on GLS estimates,
- |           not a ratio of orthogonal sums of squares.  It can be much
- |           larger or much smaller than the corresponding OLS F.
- |
- |     The net error is the PRODUCT of the two, and they can compound or
- |     partly cancel.  Verified against R (effectsize, lme4/lmerTest) and
- |     Python (pingouin, statsmodels) on a simulated 120-subject x
- |     4-timepoint design:
- |
- |       effect        N_obs/DenDF   MSE inflation   actual eta2 error
- |       group             4.10          4.03             1.29x
- |       time              1.36          1.34             4.47x
- |       group x time      1.36          1.34             4.47x
- |
- |     So the error is NOT predictable from the degrees of freedom, and
- |     N_OBS/DenDF is a diagnostic of (a) only, not a correction factor.
- |     An earlier version of this file claimed the inflation was roughly
- |     N_obs/DenDF.  That was wrong; the table above is the evidence.
- |
- |     NOBS_DENDF is still reported because it makes (a) visible, but the
- |     macro now warns on EVERY row whenever ETA2_METHOD = FROM_F, since
- |     the problem is not confined to rows with a small DenDF.
- |
- |     PARTIAL_ETA2 AND PARTIAL_EPSILON2 ARE NOT AFFECTED -- they use
- |     only NumDF, DenDF and FValue.  This caveat is about eta-squared
- |     alone.
- |
- |     Under Kenward-Roger, DenDF also differs from effect to effect, so
- |     the implied MSE differs between rows of the same model.  The macro
- |     reports the DenDF used for each row so the dependence is visible.
- |
- |  3. With MODEL = MIXED and RESIDTYPE = CONDITIONAL, report the variance
- |     components alongside the effect sizes.  Without them a reader cannot
- |     tell how much variance the random effects absorbed, and the
- |     within-subject proportion is uninterpretable on its own.
- |
- |  4. The CI for partial eta-squared inverts the noncentral F
- |     distribution (Steiger 2004) and uses N = NumDF + DenDF + 1.  With
- |     Kenward-Roger df that N is an approximation, so treat the interval
- |     as approximate.
- |
- |  5. Choose the denominator-df method deliberately.  Everything here
- |     depends on DenDF, so this is the single most consequential choice
- |     upstream of the macro.
+ |  Everything here depends on DenDF, and SAS picks one of two defaults
+ |  FOR you unless you name a method: CONTAIN when a RANDOM statement is
+ |  present, BETWITHIN for REPEATED-only.  Those two are on different
+ |  SCALES, so the same data and the same F can give a partial
+ |  eta-squared several times smaller in one model than in the other.
  |
  |     ****************************************************************
  |     *  LaBGAS STANDARD:  ddfm = kr2                                 *
@@ -374,189 +189,117 @@
  |     *                         slow)                                *
  |     ****************************************************************
  |
- |     Why a fixed standard: otherwise SAS picks one of two defaults FOR
- |     you, decided by whether a RANDOM statement happens to be present,
- |     and the two are on different SCALES --
+ |    ddfm = kr2   Kenward-Roger with the Kenward & Roger (2009)
+ |                 precision estimator.  THE STANDARD.  Inflates the
+ |                 covariance matrix of the fixed effects to allow for
+ |                 the covariance parameters having been ESTIMATED, and
+ |                 derives a Satterthwaite-type df from it, so it changes
+ |                 both F and DenDF.
+ |    ddfm = kr    Kenward & Roger (1997).  IDENTICAL to kr2 for a
+ |                 covariance structure linear in its parameters -- UN,
+ |                 CS, VC, TOEP, the LaBGAS common case.  They differ
+ |                 only for NONLINEAR structures (AR(1), ARH(1), CSH,
+ |                 TOEPH, SP()).  Use only where kr2 is unavailable.
+ |    ddfm = kr(firstorder)   subsumed by kr2; no reason to choose it.
+ |    ddfm = satterth   df adjustment only, no covariance correction.
+ |                 Acceptable fallback.
+ |    ddfm = contain | betwithin | residual   the SAS defaults.  Fine in
+ |                 large balanced designs and fine under type=UN, but
+ |                 they do not allow for the covariance parameters having
+ |                 been estimated, and they leave the choice to SAS.
+ |    empirical = mbn | morel   goes on the PROC MIXED statement, not
+ |                 MODEL.  Consider it INSTEAD of KR when the covariance
+ |                 STRUCTURE itself is doubtful.
  |
- |       RANDOM present  -> CONTAIN    falls through to N - rank(XZ),
- |                                     i.e. OBSERVATION-scale df
- |       REPEATED only   -> BETWITHIN  SUBJECT-scale df for a
- |                                     between-subject predictor
+ |  Three conditions on KR / KR2:
+ |    * defined for METHOD = REML (the PROC MIXED default).  A
+ |      likelihood-ratio test on FIXED effects needs ML, where KR does
+ |      not apply -- do not mix the two in one table.
+ |    * if a variance component is estimated at the boundary (0 in
+ |      Covariance Parameter Estimates), the adjustment rests on a
+ |      Hessian at that boundary.  Check before trusting the df.
+ |    * a RANDOM effect with no SUBJECT= spans subjects, so SAS cannot
+ |      block the problem.  Fix the blocking before reaching for KR.
  |
- |     so the same data and the same F can give a partial eta-squared
- |     several times smaller in one model than in the other.  Naming the
- |     method removes that accident and buys the small-sample covariance
- |     correction as well.  Full reasoning, the SAS quotes and a worked
- |     contrast: README.md, "Choose a denominator-df method".
+ |  UNDER type = UN, DO NOT "FIX" THE DEFAULT.  BETWITHIN prints the same
+ |  DenDF for every effect there and that is very nearly right -- two df
+ |  out of 160 against the exact multivariate values, at most 0.006 on
+ |  partial eta-squared.  KR2 still earns its place, for the covariance
+ |  correction rather than the df.
  |
- |     THE OPTIONS, AND HOW TO WRITE THEM
- |     ................................................................
- |     ddfm = kr2   Kenward-Roger with the Kenward & Roger (2009)
- |                  precision estimator.  THE STANDARD.  Does two
- |                  things: inflates the covariance matrix of the fixed
- |                  effects to allow for the covariance parameters
- |                  having been ESTIMATED, and derives a Satterthwaite-
- |                  type df from it.  So it changes both F and DenDF.
- |     ddfm = kr    Kenward & Roger (1997).  IDENTICAL to kr2 for a
- |                  covariance structure that is linear in its
- |                  parameters -- UN, CS, VC, TOEP, the LaBGAS common
- |                  case.  The two differ only for NONLINEAR structures
- |                  (AR(1), ARH(1), CSH, TOEPH, SP()), where the KR
- |                  second-order term can SHRINK standard errors and is
- |                  not invariant to reparameterisation.  Use kr only
- |                  where kr2 is unavailable.
- |     ddfm = kr(firstorder)   drops the second-derivative term.
- |                  Subsumed by kr2; no reason to choose it.
- |     ddfm = satterth   df adjustment only, no covariance correction.
- |                  Acceptable fallback: usually close to KR, and less
- |                  prone to convergence trouble.
- |     ddfm = contain | betwithin | residual   the defaults.  Fine in
- |                  large balanced designs, and fine under type=UN (see
- |                  below).  Not wrong -- but they do not allow for the
- |                  covariance parameters having been estimated, and
- |                  they leave the choice to SAS.
- |     empirical = mbn | morel   goes on the PROC MIXED statement, not
- |                  the MODEL statement.  Consider it INSTEAD of KR when
- |                  the covariance STRUCTURE itself is doubtful: KR is
- |                  model-based, and gives a precise df for the model
- |                  you specified, right or wrong.
+ |  THE MACRO RUNS FINE ON ANY OF THESE, defaults included.  Nothing about
+ |  the df method can stop it -- the df diagnostics are NOTE and WARNING
+ |  text only.  What changes is the INTERPRETATION: partial eta-squared is
+ |  conditioned on DenDF and has no df-free value, so report the df method
+ |  beside the effect size.
  |
- |     Three conditions on KR / KR2:
- |       * they are defined for METHOD = REML (the PROC MIXED default).
- |         A likelihood-ratio test on FIXED effects needs ML, where KR
- |         does not apply -- do not mix the two in one table.
- |       * if a variance component is estimated at the boundary (0 in
- |         Covariance Parameter Estimates), the adjustment is built on a
- |         Hessian at that boundary.  Check before trusting the df.
- |       * a RANDOM effect with no SUBJECT= spans subjects, so SAS
- |         cannot block the problem and Dimensions reports Subjects = 1.
- |         Fix the blocking before reaching for KR -- and note the macro
- |         cannot use that subject count, which is why NSUBJECTS=
- |         exists.
- |
- |     UNDER type = UN, DO NOT "FIX" THE DEFAULT.  BETWITHIN prints the
- |     same DenDF for every effect there, and that is very nearly right:
- |     the exact multivariate df are n - rank for between-subject
- |     effects and n - rank - q + 1 for within-subject ones, so SAS is
- |     out by a couple of df (161 against 159 in a verified 164 x 4
- |     design; at most 0.006 on partial eta-squared).  KR2 still earns
- |     its place there -- for the covariance correction, not the df --
- |     and will move F, and so the effect sizes, slightly DOWNWARD.
- |     Do NOT expect a within-subject df of n*t - n - rank; that is the
- |     compound-symmetry answer and does not apply under UN.
- |
- |     THE MACRO RUNS FINE ON ANY OF THESE, defaults included.  Nothing
- |     about the df method can stop it -- the df diagnostics are NOTE
- |     and WARNING text only.  What changes is the INTERPRETATION:
- |     partial eta-squared is conditioned on DenDF and has no df-free
- |     value, so report the df method beside the effect size.
- |
- |     Kenward MG, Roger JH. Small sample inference for fixed effects
- |     from restricted maximum likelihood. Biometrics 1997;53:983-997.
- |     Kenward MG, Roger JH. An improved approximation to the precision
- |     of fixed effects from restricted maximum likelihood.
- |     Comput Stat Data Anal 2009;53:2583-2595.
- |     Schaalje GB, McBride JB, Fellingham GW. Adequacy of
- |     approximations to distributions of test statistics in complex
- |     mixed linear models. J Agric Biol Environ Stat 2002;7:512-524.
- |     (Verify page numbers before citing.)
+ |  Why, in full, and the four regimes in which the old published formula
+ |  does and does not fail: README.md, "Choose a denominator-df method".
  |
  |  ---------------------------------------------------------------------
- |  CROSS-VALIDATED AGAINST R AND PYTHON  (2026-09-01)
+ |  CHOICE 2 -- WHICH RESIDUALS  (only affects eta-squared)
  |  ---------------------------------------------------------------------
- |  Simulated repeated-measures design, 120 subjects x 4 timepoints,
- |  between-subject GROUP, within-subject TIME, subject-level covariate,
- |  random intercept.  Fitted with lme4/lmerTest (Kenward-Roger) and with
- |  pingouin's mixed_anova.
+ |  PARTIAL eta-squared is the same either way: it depends only on NumDF,
+ |  DenDF and F, and DenDF already reflects the covariance structure that
+ |  was fitted.  ETA-SQUARED changes, because "the residual" differs:
  |
- |  PARTIAL ETA-SQUARED -- exact agreement, three implementations:
- |      this macro          (NumDF x F) / (NumDF x F + DenDF)
- |      R  effectsize::F_to_eta2()          identical to 1e-16
- |      Py pingouin.mixed_anova(effsize='np2')  identical to 1e-16
- |  pingouin computes it from a REAL repeated-measures sum-of-squares
- |  decomposition, not from F, and still lands on the same number.  The
- |  formula is an algebraic identity, not an approximation.
+ |    RESIDTYPE = MARGINAL     y - Xb,     from OUTPM=.  SS_error still
+ |      (the default)          contains between-subject variance, so
+ |                             eta-squared is a proportion of TOTAL
+ |                             observed variance -- the honest analogue of
+ |                             classical eta-squared, comparable with
+ |                             fixed-effects studies.
+ |    RESIDTYPE = CONDITIONAL  y - Xb - Zu, from OUTP=.  The random
+ |                             effects have absorbed the between-subject
+ |                             variance, so the result is a WITHIN-SUBJECT
+ |                             proportion.  Systematically larger, and NOT
+ |                             comparable with eta-squared elsewhere.
  |
- |  CONFIDENCE INTERVAL -- this macro is the more accurate of the two.
- |  Both invert the noncentral F.  Checking where the returned bounds
- |  actually put the tail probability (target 0.975 / 0.025):
- |      this macro (FNONCT, exact inversion)  0.975000 / 0.025000
- |      R effectsize (optim-based NCP search) 0.972129 / 0.020694
- |  Bounds differ by about 0.003-0.004 in eta-squared units.  DO NOT
- |  "correct" this macro to reproduce R's numbers.
- |
- |  ETA-SQUARED -- see ASSUMPTIONS 2.  Neither FROM_F variant reproduces
- |  a real Type III decomposition; ETA2_METHOD = DIRECT does, by
- |  construction, and was checked against car::Anova(type=3) in R and
- |  statsmodels.anova_lm(typ=3) in Python (both with sum-to-zero
- |  contrasts, which Type III requires).
+ |  The outputs are named differently (ETA2_APPROX versus
+ |  ETA2_COND_APPROX) so the two cannot be confused in a results table.
+ |  Ask for CONDITIONAL only when the within-subject proportion is what
+ |  you mean to report, say so in the Methods, and report the variance
+ |  components beside it.
  |
  |  ---------------------------------------------------------------------
- |  CORRESPONDENCE WITH PROC GLM
+ |  CHOICE 3 -- HOW ETA-SQUARED IS FORMED  (ETA2_METHOD)
  |  ---------------------------------------------------------------------
- |  PROC GLM's EFFECTSIZE option defines the partial correlation ratio as
+ |  FROM_F reconstructs SS_effect as NumDF * F * MSE.  That is exact only
+ |  in a fixed-effects ANOVA.  Here it can be out by several fold in
+ |  EITHER direction, and the error is NOT predictable from the degrees of
+ |  freedom -- the macro warns on every row and NOBS_DENDF diagnoses only
+ |  half of the problem.  Use DIRECT when eta-squared matters, or report
+ |  partial eta-squared and partial epsilon-squared, which are unaffected.
+ |  Measured errors and the reasoning: README.md, "Caveats to state in a
+ |  Methods section", item 2.
  |
- |      partial eta-squared = SS_effect / (SS_effect + SS_error)
- |
- |  The formula used here is algebraically identical to it.  In GLM,
- |  F = (SS_effect/df_effect) / MSE with MSE = SS_error/df_error, so
- |  SS_effect = df_effect*F*MSE and SS_error = df_error*MSE.  Substituting,
- |  the MSE cancels:
- |
- |      SS_effect/(SS_effect + SS_error)
- |          = (df_effect*F*MSE) / (df_effect*F*MSE + df_error*MSE)
- |          = (NumDF*F) / (NumDF*F + DenDF)
- |
- |  Verified numerically on an unbalanced 2x3 factorial with Type III sums
- |  of squares: the two expressions agree to machine precision (largest
- |  discrepancy 5.6e-17 across three effects).  The semipartial (plain)
- |  eta-squared, SS_effect/SS_total, likewise agrees exactly, which
- |  confirms that reconstructing SS_effect as NumDF*FValue*MSE is exact in
- |  the fixed-effects case.
- |
- |  TWO THINGS THAT "IDENTICAL FORMULA" DOES NOT MEAN:
- |
- |    1. In GLM, DenDF is the single residual df, the same for every
- |       effect.  Under Kenward-Roger in MIXED it is effect-specific and
- |       usually fractional.  That is correct -- it is the right df for
- |       that effect's test -- but the values are not slices of one sum-of-
- |       squares decomposition the way GLM's are.
- |
- |    2. In a mixed or marginal model there is NO exact sum-of-squares
- |       decomposition at all.  With correlated errors the F test is a
- |       Wald-type test on generalised least squares estimates, not a ratio
- |       of orthogonal sums of squares.  So the identity runs one way only:
- |       the formula can be computed, but the result cannot be recovered as
- |       SS_effect/(SS_effect + SS_error) from any real decomposition.
- |       Read it as the effect size implied by the F test -- which is
- |       precisely what Edwards et al. (2008) formalise as R-squared-beta.
- |       Worth one sentence in a Methods section.
+ |  PROC GLM under DIRECT ignores the repeated-measures covariance
+ |  structure entirely.  Only its SUMS OF SQUARES are used; its F and p
+ |  values are NOT valid for these designs and are never reported.  F, df
+ |  and partial eta-squared always come from PROC MIXED.
  |
  |  ---------------------------------------------------------------------
- |  REFERENCES
+ |  KEY REFERENCES  (full list in the README)
  |  ---------------------------------------------------------------------
- |  Edwards LJ, Muller KE, Wolfinger RD, Qaqish BF, Schabenberger O.
- |      An R2 statistic for fixed effects in the linear mixed model.
- |      Statistics in Medicine 2008;27(29):6137-6157.
- |      doi:10.1002/sim.3429   (PMID 18816511)
- |
- |  Steiger JH.  Beyond the F test: effect size confidence intervals and
- |      tests of close fit in the analysis of variance and contrast
- |      analysis.  Psychological Methods 2004;9(2):164-182.
- |      doi:10.1037/1082-989X.9.2.164   (PMID 15137887)
- |
- |  SAS Institute.  Effect Size Measures for F Tests in GLM.
- |      SAS/STAT User's Guide.
- |      https://support.sas.com/documentation/cdl/en/statug/63962/HTML/default/statug_glm_sect032.htm
+ |  Edwards LJ et al.  An R2 statistic for fixed effects in the linear
+ |      mixed model.  Stat Med 2008;27(29):6137-6157.  Formalises the
+ |      quantity this macro computes as R-squared-beta.
+ |  Steiger JH.  Beyond the F test.  Psychol Methods 2004;9(2):164-182.
+ |      The noncentral-F confidence interval.
+ |  Kenward MG, Roger JH.  Biometrics 1997;53:983-997, and Comput Stat
+ |      Data Anal 2009;53:2583-2595.  KR and KR2.
+ |  (Verify page numbers before citing.)
  |
  |  ---------------------------------------------------------------------
  |  Written for the Laboratory for Brain-Gut Axis Studies (LaBGAS),
  |  KU Leuven.  Supersedes "Calculation of effect size following marginal
  |  linear mixed models" (B. Dalile, 3 December 2021).
  |
- |  NOT YET RUN IN SAS -- the arithmetic has been verified independently,
- |  but please run it against a known model and confirm the output before
- |  using it in a manuscript.
+ |  RUN IN SAS: the default FROM_F path has been exercised against real
+ |  models and agrees with the arithmetic.  STILL UNEXERCISED:
+ |  ETA2_METHOD = DIRECT, MODEL = MIXED, RESIDTYPE = CONDITIONAL and the
+ |  degrees-of-freedom diagnostics.  Confirm the output before any of
+ |  those goes into a manuscript.
  *===========================================================================*/
 
 %macro mixed_effectsize(tests3    = ,
@@ -972,8 +715,9 @@
                 &_e2 = ss_effect / ss_total;
 
                 /* How far is DenDF from the observation count?  See
-                   ASSUMPTIONS 2: eta-squared from F is inflated by
-                   roughly this factor.  Partial eta-squared is immune. */
+                   CHOICE 3 in the header: it makes the MSE substitution
+                   visible but does NOT bound the eta-squared error.
+                   Partial eta-squared is immune either way.          */
                 nobs_dendf = n_obs / DenDF;
             end;
         %end;
@@ -1165,7 +909,7 @@
         title  "Effect sizes for fixed effects%if %superq(label) ne %then %str( -- &label);";
         title2 "&_mdl model; partial eta-squared = (NumDF x F) / (NumDF x F + DenDF), with &_cilevel%str(%%) CI by noncentral F";
         %if &_havess = 1 %then %do;
-        title3 "&_e2 computed from &_rtword residuals -- an approximation for a mixed model; see the macro header";
+        title3 "&_e2 computed from &_rtword residuals -- an approximation for a mixed model; see README.md";
         %end;
 
         proc print data = &out noobs label;
