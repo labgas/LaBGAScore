@@ -8,18 +8,23 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %
 % Measures what the motion-regressor parameterisation actually does to a
 % study's contrast estimates, which no amount of design-level reasoning can
-% settle. For each subject it fits the SAME model three times, changing only
-% the motion block:
+% settle. For each subject it fits the SAME model twice, changing only the
+% motion block:
 %
 %   variant A   the motion block exactly as it sits in the existing SPM.mat
 %   variant B   rebuilt as z-scored [parameters, first derivatives], plus
 %               quadratics when nmotion is 24, i.e. the Friston-style expansion
 %               the script headers describe
-%   variant C   variant B without the quadratic terms, 12 columns. Those terms
-%               carry variance inflation factors in the hundreds in both A and
-%               B while plausibly earning little, so C asks whether the
-%               correction survives dropping them. Skipped when nmotion is 12,
-%               where it would be identical to B
+%
+% That pair answers the question this exists for: does the model as fitted need
+% rerunning. A third variant is available but off by default:
+%
+%   variant C   variant B without the quadratic terms, 12 columns. Those carry
+%               variance inflation factors in the hundreds in both A and B while
+%               plausibly earning little, so C asks which corrected model to
+%               rerun WITH - a question that only arises once the first is
+%               answered yes. Request it with 'variants', {'C'}; skipped when
+%               nmotion is 12, where it would be identical to B
 %
 % Everything else - the task regressors, the high-pass filter, the AR model,
 % the spike and CSF regressors, the masking threshold, the contrasts - is
@@ -51,9 +56,9 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %        variants: A and B are built to that same width, and C is always 12
 %        because dropping the quadratics is the whole point of it. So this
 %        stays at whatever the study used, and does not change now that there
-%        are three variants. The value is verified against the design before
-%        anything is estimated (see Notes), so a wrong setting is refused
-%        rather than producing a misleading comparison
+%        are two by default and optionally three. The value is verified against the
+%        design before anything is estimated (see Notes), so a wrong setting is
+%        refused rather than producing a misleading comparison
 %
 %   **'contrasts':**
 %        indices into SPM.xCon to compare. Default: all
@@ -69,6 +74,14 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %   **'keepunzipped':**
 %        keep any functional images this function had to unzip. Default false,
 %        so the derivatives subdataset is left exactly as it was found
+%
+%   **'variants':**
+%        extra variants to estimate beyond A and B, which always run. Only
+%        {'C'} is defined. Default {}, i.e. the two-variant comparison that
+%        answers "does the existing model need rerunning". Variant C answers a
+%        different question - "if it does, which corrected model" - which only
+%        arises once the first is settled, and it costs another full estimation
+%        per subject, so it is opt-in
 %
 % :Outputs:
 %
@@ -90,7 +103,8 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %          under one variant but not the other
 %        - vif_A, vif_B, vif_C - largest variance inflation factor among the
 %          regressors each contrast loads on, so the efficiency cost of a
-%          variant is visible without running scn_spm_design_check three times
+%          variant is visible without running scn_spm_design_check per variant.
+%          NaN in the C columns simply means C was not requested
 %
 %        The question C answers: if r_B_vs_C is high while vif_C is well below
 %        vif_B, the quadratics were costing precision without changing the
@@ -100,7 +114,7 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %   **OUT.outdir:**
 %        where everything was written:
 %
-%        <outdir>/<subject>/A/, /B/, /C/           the three fits
+%        <outdir>/<subject>/A/, /B/ and /C/       the fits that were run
 %        <outdir>/<subject>/diff_AB_con_XXXX.nii   A minus B, numbered as in
 %                                                  the model directory
 %        <outdir>/<subject>/diff_AC_con_XXXX.nii   A minus C
@@ -140,8 +154,9 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 % the LaBGAScore pipeline, and in both cases variants B and C would not be the
 % controlled comparison it claims to be.
 %
-% Estimating three variants for one subject costs roughly three times a normal
-% first-level fit. Three subjects is a sensible first pass.
+% Estimating A and B for one subject costs roughly twice a normal first-level
+% fit, and adding C makes it three times. Three subjects is a sensible first
+% pass.
 %
 % :See also: LaBGAScore_firstlevel_task_motion_diagnostics,
 % LaBGAScore_firstlevel_s2_fit_model
@@ -154,7 +169,7 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.4
+% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.5
 %
 % last modified: 2026/09/03
 
@@ -170,6 +185,7 @@ p.addParameter('contrasts', [], @isnumeric);
 p.addParameter('mask', '', @(x) ischar(x) || isstring(x));
 p.addParameter('keepbetas', false, @islogical);
 p.addParameter('keepunzipped', false, @islogical);
+p.addParameter('variants', {}, @iscell);
 p.parse(varargin{:});
 opt = p.Results;
 
@@ -266,10 +282,10 @@ for s = 1:numel(subs)
     end
     if ~ok, continue, end
 
-    % with 12 motion columns there are no quadratics to drop, so C is B
-    variants = {'A','B','C'};
-    if opt.nmotion == 12
-        variants = {'A','B'};
+    variants = [{'A','B'}, opt.variants(:)'];
+    variants = unique(variants, 'stable');
+    if ismember('C', variants) && opt.nmotion == 12
+        variants = setdiff(variants, {'C'}, 'stable');
         fprintf('  nmotion is 12, so variant C would equal variant B; skipping it\n');
     end
 
@@ -434,7 +450,7 @@ fprintf(['\nA  the model as it stands          B  corrected motion block, with q
          'the quadratic terms were costing precision without changing the answer, and C\n' ...
          'is the better model. If r_B_vs_C is low, they were doing real work.\n' ...
          '\nWritten to %s\n' ...
-         '  <subject>/A/, /B/, /C/               the three fits\n' ...
+         '  <subject>/A/, /B/ and /C/           the fits that were run\n' ...
          '  <subject>/diff_AB_con_XXXX.nii       A minus B, numbered as in the model dir\n' ...
          '  <subject>/diff_AC_con_XXXX.nii       A minus C\n'], outdir);
 if ~opt.keepbetas
@@ -649,22 +665,46 @@ end
 function v = local_task_vifs(vd, S, ci)
 % Max variance inflation factor across the regressors each contrast actually
 % loads on, per contrast, so the efficiency cost of a variant is visible
-% without running scn_spm_design_check three times.
+% without running scn_spm_design_check once per variant.
+%
+% Computed by projection rather than by inverting the correlation matrix. These
+% designs are routinely rank-deficient - 24 motion columns and a set of single
+% volume spike regressors is enough - and inv() then both warns and returns
+% numbers that cannot be trusted. orth() handles the deficiency silently, and a
+% column that really is a linear combination of the others comes back Inf,
+% which is the honest answer rather than a large arbitrary one.
     if isempty(ci), ci = 1:numel(S.xCon); end
     Lnew = load(fullfile(vd, 'SPM.mat')); Snew = Lnew.SPM;
     X = Snew.xX.X;
     keep = std(X) > eps;                    % drop session constants
-    v = nan(numel(ci), 1);
-    try
-        iv = diag(inv(corrcoef(X(:, keep))));
-    catch
-        return
-    end
     idx = find(keep);
+    Xk = X(:, keep); Xk = Xk - mean(Xk);
+    v = nan(numel(ci), 1);
+
+    % only the columns some contrast loads on are worth the work
+    W = cell(numel(ci), 1); need = false(1, size(Xk, 2));
     for k = 1:numel(ci)
         w = local_map_contrast(S, Snew, ci(k));
-        cols = find(abs(w) > 0);
-        [tf, loc] = ismember(cols, idx);
-        if any(tf), v(k) = max(iv(loc(tf))); end
+        [tf, loc] = ismember(find(abs(w) > 0), idx);
+        W{k} = loc(tf); need(W{k}) = true;
+    end
+
+    vifcol = nan(1, size(Xk, 2));
+    for j = find(need)
+        x = Xk(:, j);
+        ss = x' * x;
+        if ss < eps, continue, end
+        Q = orth(Xk(:, [1:j-1, j+1:end]));
+        r = x - Q * (Q' * x);
+        r2 = 1 - (r' * r) / ss;
+        if 1 - r2 < 1e-12
+            vifcol(j) = Inf;               % a linear combination of the others
+        else
+            vifcol(j) = 1 / (1 - r2);
+        end
+    end
+
+    for k = 1:numel(ci)
+        if ~isempty(W{k}), v(k) = max(vifcol(W{k})); end
     end
 end
