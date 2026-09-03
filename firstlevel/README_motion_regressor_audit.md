@@ -101,7 +101,13 @@ its own `SPM.mat`, changing only the motion block:
 
 ```matlab
 OUT = LaBGAScore_firstlevel_refit_motion_comparison(DSGN.modeldir, 'nmotion', 24)
+OUT = LaBGAScore_firstlevel_refit_motion_comparison(DSGN.modeldir, 'nmotion', 24, 'variants', {'C'})
 ```
+
+A and B run by default, because the question the tool exists for is whether an
+already-fitted model needs re-running. C is opt-in, and answers the separate
+question of which corrected model to re-run *with*; it is ignored when the
+existing model has 12 motion columns, where B and C coincide.
 
 `nmotion` describes the **existing** model, not the variants. Datasets are left
 clean: unzipped images are removed on exit, the output tree self-ignores, and
@@ -142,11 +148,43 @@ Refit on four subjects, `r_A_vs_original = 1` and `maxdiff = 0` throughout:
 | CFS0036 | 0.690 | 1.78 SE | 29% |
 
 Implied artifact-to-noise ratio 2.9–4.8, stable across contrasts, so the bound
-and the refit agree. VIFs on the task regressors: A 2.09–2.29, B 7.22–8.76 — but
-the *nuisance* VIFs are comparable in both (maxima 144 in A, 129 in B), so B is
-not globally worse conditioned. The extra collinearity is confined to the task
-regressors, which is the signature of the confound being modelled rather than of
-a broken design.
+and the refit agree. The extra collinearity B introduces is confined to the task
+regressors — the *nuisance* VIF maxima are comparable in both (144 in A, 129 in
+B) — which is the signature of the confound being modelled rather than of a
+broken design.
+
+**Two VIF definitions are in play, and their levels are not comparable.**
+`scn_spm_design_check` with `'events_only'` scores the task regressors in a
+reduced design and gives A 2.09–2.29 against B 7.22–8.76. The refit tool scores
+them in the full unfiltered design and gives A 5.2–6.7 against B 13.2–20.6. The
+*ratios* agree at about 3× in both. Compare ratios across the two sources, never
+absolute levels.
+
+#### Variant C — dropping the quadratics
+
+Three subjects, `stress vs control`:
+
+| Subject | r(B,C) | medabs AB → AC | flip AB → AC | vif_B → vif_C |
+|---|---|---|---|---|
+| CFS0001 | 0.944 | 1.81 → 1.80 | 0.266 → 0.265 | 17.6 → 13.7 |
+| CFS0031 | 0.948 | 2.97 → 2.86 | 0.468 → 0.431 | 19.5 → 12.0 |
+| CFS0036 | 0.969 | 1.78 → 1.71 | 0.290 → 0.285 | 13.2 → 11.2 |
+
+C keeps essentially all of the correction — `r_B_vs_C` 0.94–0.97, with
+displacement and flip fraction within a few percent of B's — at about
+three-quarters of B's task VIF, and with 12 fewer nuisance columns per session,
+so ~48 more residual degrees of freedom over four runs. It does **not** return to
+A's conditioning: C sits at roughly 2× `vif_A`, because the collinearity is
+carried by the linear position terms, which are the whole point of the
+correction. The quadratics cost precision without changing the answer.
+
+**C is the model to use for the re-analysis**, and it is what erythritol already
+uses (`12hmp`).
+
+Both VIF columns in that table predate the projection-based VIF fix, so the
+within-row comparison is internally consistent but the levels are provisional;
+`r`, `medabs` and `flip` do not depend on it. The A/B run was repeated afterwards
+with the fixed code and gives the values quoted above.
 
 ### proj_thc — 13 subjects, 26 runs, two sessions, food images
 
@@ -186,21 +224,22 @@ that band, and 24 motion columns make the missing subspace larger.
 **Settled.** The defect is real and its mechanism is understood. The diagnostic
 and the refit agree on discoverie. The refit rebuild is faithful
 (`r_A_vs_original = 1` in every subject and contrast tested). erythritol and
-proj_thc do not need re-analysis.
+proj_thc do not need re-analysis. **Variant C is the corrected model to use**:
+it reproduces B (`r_B_vs_C` 0.94–0.97) at ~75% of B's task VIF and 12 fewer
+nuisance columns per session.
 
 **Not settled.**
 
 - **discoverie's group maps have not been recomputed.** Single-subject con
   images move a great deal; whether the group conclusions change is unknown, and
   should not be guessed either way.
-- **Variant C has not been run anywhere.** Both A and B carry VIFs above 100 on
-  the quadratic terms while the task VIFs are 3–4× worse in B. If C keeps a high
-  `r_B_vs_C` with a much lower `vif_C`, it is the better model for the
-  re-analysis, and it is what erythritol already uses (`12hmp`).
 - **The A-versus-B difference conflates bias with variance.** B's stress SE is
   ~1.9× A's, so part of that median 2.4 SE displacement is added noise rather
-  than removed bias. The two separate only at the group level: bias moves the
-  mean, variance inflates the SE.
+  than removed bias. C narrows but does not close that gap. The two separate only
+  at the group level: bias moves the mean, variance inflates the SE.
+- **`vif_C` was measured before the VIF fix** and should be re-read on the next
+  run. It changes how much better C is, not whether C wins — that rests on
+  `r_B_vs_C`, which does not depend on the VIF computation.
 - **Whether the `sub-CFS*` subjects are a discoverie cohort or a separate
   `proj_cfs`** was never confirmed. It changes whether the refit covers one
   study or two.
@@ -218,15 +257,19 @@ proj_thc do not need re-analysis.
 The branch is deliberately minimal so it can be reviewed as a single decision.
 Merging it changes the noise model for everything fitted afterwards.
 
+Note that merging `firstlevel-fixes` gives model **B**, not C: the fix restores
+the parameters alongside their derivatives, and the quadratics are a separate
+switch (`LaBGAS_options.movement_reg_quadratic`). Studies following the C verdict
+should turn that switch off as well.
+
 ## Next steps
 
-1. **Run variant C on discoverie**, three subjects. Decides which corrected model
-   the re-analysis should use.
-2. **Refit discoverie fully** with whichever of B or C wins, and rerun the group
-   analysis. Compare group maps, not single-subject con images.
-3. **Decide on `firstlevel-fixes`.** Four subjects agreeing removes the reason to
+1. **Refit discoverie fully** with variant C, and rerun the group analysis.
+   Compare group maps, not single-subject con images — that is the only level at
+   which bias and added variance separate.
+2. **Decide on `firstlevel-fixes`.** Four subjects agreeing removes the reason to
    keep it pending; at minimum it should apply to anything fitted from here on.
-4. **Confirm the CFS cohort question**, and run the diagnostic on `proj_cfs` if
+3. **Confirm the CFS cohort question**, and run the diagnostic on `proj_cfs` if
    it is a separate study.
-5. Only then consider what, if anything, needs communicating externally about
+4. Only then consider what, if anything, needs communicating externally about
    discoverie.
