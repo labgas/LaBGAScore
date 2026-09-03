@@ -162,29 +162,48 @@ absolute levels.
 
 #### Variant C — dropping the quadratics
 
-Three subjects, `stress vs control`:
+Three subjects, all VIFs from the projection-based computation:
 
-| Subject | r(B,C) | medabs AB → AC | flip AB → AC | vif_B → vif_C |
-|---|---|---|---|---|
-| CFS0001 | 0.944 | 1.81 → 1.80 | 0.266 → 0.265 | 17.6 → 13.7 |
-| CFS0031 | 0.948 | 2.97 → 2.86 | 0.468 → 0.431 | 19.5 → 12.0 |
-| CFS0036 | 0.969 | 1.78 → 1.71 | 0.290 → 0.285 | 13.2 → 11.2 |
+| Subject | contrast | r(A,B) | r(A,C) | r(B,C) | medabs AB → AC | vif_A | vif_B | vif_C |
+|---|---|---|---|---|---|---|---|---|
+| CFS0001 | stress vs control | 0.653 | 0.655 | 0.944 | 1.81 → 1.80 | 5.32 | 17.66 | 13.35 |
+| CFS0031 | stress vs control | 0.644 | 0.696 | 0.948 | 2.97 → 2.86 | 6.72 | 20.62 | 11.92 |
+| CFS0036 | stress vs control | 0.690 | 0.713 | 0.969 | 1.78 → 1.71 | 5.20 | 13.20 | 11.19 |
 
-C keeps essentially all of the correction — `r_B_vs_C` 0.94–0.97, with
-displacement and flip fraction within a few percent of B's — at about
-three-quarters of B's task VIF, and with 12 fewer nuisance columns per session,
-so ~48 more residual degrees of freedom over four runs. It does **not** return to
-A's conditioning: C sits at roughly 2× `vif_A`, because the collinearity is
-carried by the linear position terms, which are the whole point of the
-correction. The quadratics cost precision without changing the answer.
+C keeps essentially all of the correction — `r_B_vs_C` 0.86–0.98 across all nine
+rows — at about three-quarters of B's task VIF, and with 12 fewer nuisance
+columns per session, so ~48 more residual degrees of freedom over four runs. It
+does not return to A's conditioning on `stress` (~2× `vif_A`), because the
+collinearity is carried by the linear position terms, which are the whole point
+of the correction; on `control` it comes close (1.1–1.6× `vif_A`).
 
 **C is the model to use for the re-analysis**, and it is what erythritol already
 uses (`12hmp`).
 
-Both VIF columns in that table predate the projection-based VIF fix, so the
-within-row comparison is internally consistent but the levels are provisional;
-`r`, `medabs` and `flip` do not depend on it. The A/B run was repeated afterwards
-with the fixed code and gives the values quoted above.
+#### The primary contrast's displacement is bias, not added variance
+
+The A→C displacement is smaller than A→B throughout, which is what dropping 12
+collinear columns should do. But *how much* smaller answers the question this
+audit has so far been unable to settle — how much of the A-to-B displacement is
+removed bias and how much is added noise:
+
+| Contrast | medabs A→B | medabs A→C | shrinkage |
+|---|---|---|---|
+| `stress` | 1.62 / 3.46 / 2.00 | 1.59 / 3.12 / 1.76 | 2–12% |
+| `control` | 1.04 / 1.85 / 1.33 | 0.91 / 1.62 / 1.05 | 12–21% |
+| **`stress vs control`** | 1.81 / 2.97 / 1.78 | 1.80 / 2.86 / 1.71 | **0.5–4%** |
+
+C carries a third less collinearity than B, so any part of the A→B displacement
+that was inflated noise should shrink with it. On the simple effects it does, by
+10–20%. On the **primary differential contrast it does not** — 0.5–4%, and
+`r_A_vs_C` (0.655/0.696/0.713) is no higher than `r_A_vs_B` (0.653/0.644/0.690).
+
+The quadratics' added noise is largely common to the two conditions and cancels
+in the difference, while the artifact has opposite sign in stress and control and
+therefore adds. So for `stress vs control` the con images move because the
+artifact is being removed, not because the corrected model is noisier. That is
+the contrast the study's conclusions rest on, and it is the one where the
+displacement is real.
 
 ### proj_thc — 13 subjects, 26 runs, two sessions, food images
 
@@ -225,21 +244,21 @@ that band, and 24 motion columns make the missing subspace larger.
 and the refit agree on discoverie. The refit rebuild is faithful
 (`r_A_vs_original = 1` in every subject and contrast tested). erythritol and
 proj_thc do not need re-analysis. **Variant C is the corrected model to use**:
-it reproduces B (`r_B_vs_C` 0.94–0.97) at ~75% of B's task VIF and 12 fewer
-nuisance columns per session.
+it reproduces B (`r_B_vs_C` 0.86–0.98) at ~75% of B's task VIF and 12 fewer
+nuisance columns per session. And for the **primary contrast the displacement is
+bias rather than added variance** — it survives the drop in collinearity from B
+to C essentially unchanged (0.5–4%), where the simple effects shrink 10–20%.
 
 **Not settled.**
 
 - **discoverie's group maps have not been recomputed.** Single-subject con
   images move a great deal; whether the group conclusions change is unknown, and
   should not be guessed either way.
-- **The A-versus-B difference conflates bias with variance.** B's stress SE is
-  ~1.9× A's, so part of that median 2.4 SE displacement is added noise rather
-  than removed bias. C narrows but does not close that gap. The two separate only
-  at the group level: bias moves the mean, variance inflates the SE.
-- **`vif_C` was measured before the VIF fix** and should be re-read on the next
-  run. It changes how much better C is, not whether C wins — that rests on
-  `r_B_vs_C`, which does not depend on the VIF computation.
+- **The bias/variance split is resolved for `stress vs control` only.** On the
+  simple effects a tenth to a fifth of the A→B displacement is inflated noise,
+  and the residue is bounded from one direction only: B's stress SE is ~1.9× A's,
+  C's is lower but still above A's. Only the group level separates them fully —
+  bias moves the mean, variance inflates the SE.
 - **Whether the `sub-CFS*` subjects are a discoverie cohort or a separate
   `proj_cfs`** was never confirmed. It changes whether the refit covers one
   study or two.
