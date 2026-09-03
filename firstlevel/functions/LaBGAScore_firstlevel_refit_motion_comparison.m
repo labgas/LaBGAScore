@@ -8,19 +8,25 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %
 % Measures what the motion-regressor parameterisation actually does to a
 % study's contrast estimates, which no amount of design-level reasoning can
-% settle. For each subject it fits the SAME model twice, changing one thing:
+% settle. For each subject it fits the SAME model three times, changing only
+% the motion block:
 %
 %   variant A   the motion block exactly as it sits in the existing SPM.mat
-%   variant B   the motion block rebuilt as z-scored [parameters, first
-%               derivatives] (+ quadratics), i.e. the Friston-style expansion
+%   variant B   rebuilt as z-scored [parameters, first derivatives], plus
+%               quadratics when nmotion is 24, i.e. the Friston-style expansion
 %               the script headers describe
+%   variant C   variant B without the quadratic terms, 12 columns. Those terms
+%               carry variance inflation factors in the hundreds in both A and
+%               B while plausibly earning little, so C asks whether the
+%               correction survives dropping them. Skipped when nmotion is 12,
+%               where it would be identical to B
 %
 % Everything else - the task regressors, the high-pass filter, the AR model,
-% the spike and CSF regressors, the masking threshold, the contrast vectors -
-% is taken from the existing SPM.mat and held identical, so any difference in
-% the con images is attributable to the motion columns alone.
+% the spike and CSF regressors, the masking threshold, the contrasts - is
+% taken from the existing SPM.mat and held identical, so any difference in the
+% con images is attributable to the motion columns alone.
 %
-% Nothing is written into the existing model directory. Both variants are
+% Nothing is written into the existing model directory. The variants are
 % estimated in a scratch tree under 'outdir'.
 %
 % :Inputs:
@@ -35,7 +41,7 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %        found, which is normally enough to see whether this matters
 %
 %   **'outdir':**
-%        where to estimate the two variants. Default:
+%        where to estimate the variants. Default:
 %        <modeldir>/motion_refit_comparison
 %
 %   **'nmotion':**
@@ -51,7 +57,7 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %        image to restrict the comparison to. Default: the model's own mask.nii
 %
 %   **'keepbetas':**
-%        keep the beta images of both variants. Default false: two full
+%        keep the beta images of every variant. Default false: several full
 %        estimations per subject is a lot of NIfTIs to leave inside a datalad
 %        subdataset, and nothing here needs them once the contrasts exist
 %
@@ -64,25 +70,35 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %   **OUT.table:**
 %        one row per subject and contrast:
 %
-%        - r_A_vs_original, maxdiff_A_vs_original_SE - the validation. Variant
-%          A rebuilds the original fit, so it should reproduce the con images
-%          already in the model directory, r > 0.999. If it does not, the
-%          rebuild is not faithful and the remaining columns mean nothing; the
-%          function says so rather than leaving you to notice
-%        - r_A_vs_B, median_absdiff_SE, p95_absdiff_SE - the comparison itself,
-%          the differences expressed in units of the contrast standard error so
-%          they can be read against the leakage bound from
+%        - r_A_vs_original - the validation. Variant A rebuilds the original
+%          fit, so it should reproduce the con images already in the model
+%          directory, r > 0.999. If it does not, the rebuild is not faithful
+%          and every other column means nothing; the function says so rather
+%          than leaving you to notice
+%        - r_A_vs_B, r_A_vs_C, r_B_vs_C - how far each variant moves the con
+%          image, and how close C stays to B
+%        - medabs_AB_SE, medabs_AC_SE - median absolute difference in units of
+%          variant A's contrast standard error, a common yardstick that can be
+%          read against the leakage bound from
 %          LaBGAScore_firstlevel_task_motion_diagnostics
-%        - frac_voxels_flipping_p001 - proportion of in-mask voxels crossing
-%          p < .001 under one variant but not the other
+%        - flip_AB, flip_AC - proportion of in-mask voxels crossing p < .001
+%          under one variant but not the other
+%        - vif_A, vif_B, vif_C - largest variance inflation factor among the
+%          regressors each contrast loads on, so the efficiency cost of a
+%          variant is visible without running scn_spm_design_check three times
+%
+%        The question C answers: if r_B_vs_C is high while vif_C is well below
+%        vif_B, the quadratics were costing precision without changing the
+%        answer, and C is the better model. If r_B_vs_C is low, they were doing
+%        real work.
 %
 %   **OUT.outdir:**
 %        where everything was written:
 %
-%        <outdir>/<subject>/A/                  the model refitted as it stands
-%        <outdir>/<subject>/B/                  the same, corrected motion block
-%        <outdir>/<subject>/diff_con_XXXX.nii   A minus B, numbered as in the
-%                                               model directory
+%        <outdir>/<subject>/A/, /B/, /C/           the three fits
+%        <outdir>/<subject>/diff_AB_con_XXXX.nii   A minus B, numbered as in
+%                                                  the model directory
+%        <outdir>/<subject>/diff_AC_con_XXXX.nii   A minus C
 %
 % :Notes:
 %
@@ -116,10 +132,10 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 % against the first 'nmotion' columns actually present in SPM.Sess(i).C.C. If
 % they do not match to near machine precision the run is refused, because a
 % mismatch means either 'nmotion' is wrong or the regressors were not built by
-% the LaBGAScore pipeline, and in both cases variant B would not be the
+% the LaBGAScore pipeline, and in both cases variants B and C would not be the
 % controlled comparison it claims to be.
 %
-% Estimating two variants for one subject costs roughly twice a normal
+% Estimating three variants for one subject costs roughly three times a normal
 % first-level fit. Three subjects is a sensible first pass.
 %
 % :See also: LaBGAScore_firstlevel_task_motion_diagnostics,
@@ -133,7 +149,7 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.2
+% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.3
 %
 % last modified: 2026/09/03
 
@@ -208,9 +224,9 @@ for s = 1:numel(subs)
     if ~isfile(spmfile), warning('no SPM.mat for %s, skipping', subs{s}); continue, end
     L = load(spmfile); S = L.SPM;
 
-    % ---- rebuild the two motion blocks, and verify the first one ----------
+    % ---- rebuild the motion blocks, and verify the first one --------------
     nsess = numel(S.Sess);
-    regsA = cell(nsess,1); regsB = cell(nsess,1); ok = true;
+    regsA = cell(nsess,1); regsB = cell(nsess,1); regsC = cell(nsess,1); ok = true;
 
     for i = 1:nsess
         C = S.Sess(i).C.C;                       % the multiple-regressor block as fitted
@@ -222,7 +238,7 @@ for s = 1:numel(subs)
         R = local_raw_motion(S, i);
         if isempty(R), ok = false; break, end
 
-        [fitA, fitB] = local_motion_blocks(R, opt.nmotion);
+        [fitA, fitB, fitC] = local_motion_blocks(R, opt.nmotion);
 
         % refuse to proceed unless the reconstruction matches what was fitted
         r = zeros(1, opt.nmotion);
@@ -238,10 +254,19 @@ for s = 1:numel(subs)
             ok = false; break
         end
 
-        regsA{i} = [fitA C(:, opt.nmotion+1:end)];   % as fitted
-        regsB{i} = [fitB C(:, opt.nmotion+1:end)];   % intended expansion, same spikes and CSF
+        rest = C(:, opt.nmotion+1:end);              % spikes and CSF, untouched
+        regsA{i} = [fitA rest];                      % as fitted
+        regsB{i} = [fitB rest];                      % intended expansion
+        regsC{i} = [fitC rest];                      % same, without the quadratics
     end
     if ~ok, continue, end
+
+    % with 12 motion columns there are no quadratics to drop, so C is B
+    variants = {'A','B','C'};
+    if opt.nmotion == 12
+        variants = {'A','B'};
+        fprintf('  nmotion is 12, so variant C would equal variant B; skipping it\n');
+    end
 
     % ---- make sure the functional images are actually on disk -------------
     % s2_fit_model gunzips the smoothed images into the run directories, but
@@ -255,14 +280,18 @@ for s = 1:numel(subs)
     end
     cleanupImgs = onCleanup(@() local_remove_files(unz, opt.keepunzipped));
 
-    % ---- estimate both variants ------------------------------------------
-    vdirs = struct();
-    for v = {'A','B'}
+    % ---- estimate the variants -------------------------------------------
+    vdirs = struct(); vifs = struct();
+    for v = variants
         tag = v{1};
         vd = fullfile(outdir, subs{s}, tag);
         if isfolder(vd), rmdir(vd, 's'); end
         mkdir(vd);
-        regs = regsA; if strcmp(tag,'B'), regs = regsB; end
+        switch tag
+            case 'A', regs = regsA;
+            case 'B', regs = regsB;
+            case 'C', regs = regsC;
+        end
 
         regfiles = cell(nsess,1);
         for i = 1:nsess
@@ -274,14 +303,16 @@ for s = 1:numel(subs)
         local_specify_estimate(S, vd, regfiles);
         local_contrasts(S, vd, opt.contrasts);
         if ~opt.keepbetas
-            % two full estimations per subject is a lot of NIfTIs to leave
+            % several full estimations per subject is a lot of NIfTIs to leave
             % inside a datalad subdataset, and the betas are not needed once the
             % contrasts exist; ResMS and mask are, so they stay
             delete(fullfile(vd, 'beta_*.nii'));
         end
         vdirs.(tag) = vd;
+        vifs.(tag) = local_task_vifs(vd, S, opt.contrasts);
         fprintf('  variant %s estimated\n', tag);
     end
+    hasC = ismember('C', variants);
 
     % ---- compare ---------------------------------------------------------
     maskfile = char(opt.mask);
@@ -299,49 +330,75 @@ for s = 1:numel(subs)
         cB = spm_read_vols(spm_vol(fullfile(vdirs.B, sprintf('con_%04d.nii', k))));
         tA = spm_read_vols(spm_vol(fullfile(vdirs.A, sprintf('spmT_%04d.nii', k))));
         tB = spm_read_vols(spm_vol(fullfile(vdirs.B, sprintf('spmT_%04d.nii', k))));
+        if hasC
+            cC = spm_read_vols(spm_vol(fullfile(vdirs.C, sprintf('con_%04d.nii', k))));
+            tC = spm_read_vols(spm_vol(fullfile(vdirs.C, sprintf('spmT_%04d.nii', k))));
+        else
+            cC = nan(size(cA)); tC = nan(size(tA));
+        end
 
-        a = cA(:); b = cB(:); ta = tA(:); tb = tB(:);
+        a = cA(:); b = cB(:); c3 = cC(:); ta = tA(:); tb = tB(:); tc = tC(:);
         keep = m & isfinite(a) & isfinite(b) & isfinite(ta) & isfinite(tb);
+        keepC = keep & isfinite(c3) & isfinite(tc);
 
-        % difference in units of the contrast SE, taken from variant A
+        % differences in units of the contrast SE, taken from variant A so that
+        % every column is on one common yardstick
         cc = S.xCon(ci(k)).c;
         seA = sqrt(resA(:) * (cc' * S.xX.Bcov * cc));
-        dse = abs(a - b) ./ max(seA, eps);
+        dse  = abs(a - b)  ./ max(seA, eps);
+        dseC = abs(a - c3) ./ max(seA, eps);
 
         dfe = S.xX.erdf;
         thr = spm_invTcdf(1 - 0.001, dfe);
-        flip = xor(abs(ta) > thr, abs(tb) > thr);
+        flip  = xor(abs(ta) > thr, abs(tb) > thr);
+        flipC = xor(abs(ta) > thr, abs(tc) > thr);
+
+        if hasC && any(keepC)
+            rAC = corr(a(keepC), c3(keepC));
+            rBC = corr(b(keepC), c3(keepC));
+            mAC = median(dseC(keepC));
+            fAC = mean(flipC(keepC));
+        else
+            rAC = NaN; rBC = NaN; mAC = NaN; fAC = NaN;
+        end
+        vA = vifs.A(k); vB = vifs.B(k);
+        if hasC, vC = vifs.C(k); else, vC = NaN; end
 
         % validation: variant A rebuilds the original fit, so its con image
         % should be all but identical to the one already in the model directory.
         % Anything below ~0.999 means the rebuild is not reproducing the
         % original model and the A-versus-B comparison should not be read.
-        rOrig = NaN; dOrig = NaN;
+        rOrig = NaN;
         origfile = fullfile(modeldir, subs{s}, sprintf('con_%04d.nii', ci(k)));
         if isfile(origfile)
             co = spm_read_vols(spm_vol(origfile)); o = co(:);
             ko = keep & isfinite(o);
-            if any(ko)
-                rOrig = corr(a(ko), o(ko));
-                dOrig = max(abs(a(ko) - o(ko)) ./ max(seA(ko), eps));
-            end
+            if any(ko), rOrig = corr(a(ko), o(ko)); end
         end
 
-        rows(end+1,:) = { subs{s}, S.xCon(ci(k)).name, rOrig, dOrig, corr(a(keep), b(keep)), ...
-            median(dse(keep)), prctile(dse(keep), 95), mean(flip(keep)) }; %#ok<AGROW>
+        rows(end+1,:) = { subs{s}, S.xCon(ci(k)).name, rOrig, ...
+            corr(a(keep), b(keep)), rAC, rBC, ...
+            median(dse(keep)), mAC, mean(flip(keep)), fAC, vA, vB, vC }; %#ok<AGROW>
 
-        % write the difference image for inspection, named by the ORIGINAL
-        % contrast number so it lines up with the model directory
+        % write the difference images for inspection, named by the ORIGINAL
+        % contrast number so they line up with the model directory
         V = spm_vol(fullfile(vdirs.A, sprintf('con_%04d.nii', k)));
-        V.fname = fullfile(outdir, subs{s}, sprintf('diff_con_%04d.nii', ci(k)));
+        V.fname = fullfile(outdir, subs{s}, sprintf('diff_AB_con_%04d.nii', ci(k)));
         V.descrip = sprintf('A minus B: %s', S.xCon(ci(k)).name);
         spm_write_vol(V, cA - cB);
+        if hasC
+            V.fname = fullfile(outdir, subs{s}, sprintf('diff_AC_con_%04d.nii', ci(k)));
+            V.descrip = sprintf('A minus C: %s', S.xCon(ci(k)).name);
+            spm_write_vol(V, cA - cC);
+        end
     end
 end
 
 OUT.table = cell2table(rows, 'VariableNames', ...
-    {'subject','contrast','r_A_vs_original','maxdiff_A_vs_original_SE', ...
-     'r_A_vs_B','median_absdiff_SE','p95_absdiff_SE','frac_voxels_flipping_p001'});
+    {'subject','contrast','r_A_vs_original', ...
+     'r_A_vs_B','r_A_vs_C','r_B_vs_C', ...
+     'medabs_AB_SE','medabs_AC_SE','flip_AB','flip_AC', ...
+     'vif_A','vif_B','vif_C'});
 OUT.outdir = outdir;
 
 fprintf('\n');
@@ -361,13 +418,20 @@ else
         min(OUT.table.r_A_vs_original));
 end
 
-fprintf(['\nr_A_vs_B near 1 with median_absdiff_SE near 0 means the parameterisation does\n' ...
-         'not matter here. frac_voxels_flipping_p001 is the proportion of in-mask voxels\n' ...
-         'crossing p < .001 under one variant but not the other.\n' ...
+fprintf(['\nA  the model as it stands          B  corrected motion block, with quadratics\n' ...
+         'C  corrected, quadratics dropped\n' ...
+         '\nr_*_vs_* near 1 with medabs_*_SE near 0 means the parameterisation does not\n' ...
+         'matter. flip_* is the proportion of in-mask voxels crossing p < .001 under one\n' ...
+         'variant but not the other. vif_* is the largest variance inflation factor among\n' ...
+         'the regressors each contrast loads on, so a variant that buys correctness with\n' ...
+         'efficiency shows it there.\n' ...
+         '\nThe question C answers: if r_B_vs_C is high while vif_C is well below vif_B,\n' ...
+         'the quadratic terms were costing precision without changing the answer, and C\n' ...
+         'is the better model. If r_B_vs_C is low, they were doing real work.\n' ...
          '\nWritten to %s\n' ...
-         '  <subject>/A/          the model refitted as it stands\n' ...
-         '  <subject>/B/          the same model with the corrected motion block\n' ...
-         '  <subject>/diff_con_XXXX.nii   A minus B, numbered as in the model directory\n'], outdir);
+         '  <subject>/A/, /B/, /C/               the three fits\n' ...
+         '  <subject>/diff_AB_con_XXXX.nii       A minus B, numbered as in the model dir\n' ...
+         '  <subject>/diff_AC_con_XXXX.nii       A minus C\n'], outdir);
 if ~opt.keepbetas
     fprintf('\nbeta images were deleted after contrast estimation; pass ''keepbetas'', true to keep them\n');
 end
@@ -454,14 +518,18 @@ function local_remove_files(files, keep)
     fprintf('  removed %d unzipped functional file(s), leaving the dataset as it was\n', numel(files));
 end
 
-function [fitA, fitB] = local_motion_blocks(R, nmotion)
+function [fitA, fitB, fitC] = local_motion_blocks(R, nmotion)
 % fitA reproduces what the pipeline fitted (first and second derivatives),
-% fitB is the intended expansion (parameters and first derivatives, z-scored)
+% fitB is the intended expansion (parameters and first derivatives, z-scored),
+% fitC is that same expansion without the quadratic terms. The quadratics carry
+% VIFs in the hundreds in both A and B while plausibly earning little, so C
+% tests whether the correction survives dropping them.
     g = @(X) cell2mat(arrayfun(@(c) gradient(X(:,c)), 1:size(X,2), 'UniformOutput', false));
     zs = @(X) (X - mean(X)) ./ max(std(X), eps);
     d1 = g(R); d2 = g(d1);
     fitA = [d1 d2];
     fitB = zs([R d1]);
+    fitC = fitB;                      % 12 columns, whatever nmotion is
     if nmotion == 24
         fitA = [fitA fitA.^2];
         fitB = [fitB fitB.^2];
@@ -523,17 +591,75 @@ function local_specify_estimate(S, vd, regfiles)
     spm_jobman('run', matlabbatch);
 end
 
+function w = local_map_contrast(S, Snew, k)
+% Transfer one contrast onto a design that may have a different number of
+% columns. Variant C drops 12 motion columns per session, so the original
+% vector cannot be reused by position; weights are matched by regressor NAME
+% instead, which is also what makes A and B safe rather than merely lucky.
+    c = S.xCon(k).c(:);
+    w = zeros(1, numel(Snew.xX.name));
+    nz = find(abs(c) > 0);
+    for j = 1:numel(nz)
+        nm = S.xX.name{nz(j)};
+        hit = find(strcmp(Snew.xX.name, nm));
+        if isscalar(hit)
+            % SPM names nuisance columns positionally, Sn(1) R1, Sn(1) R2 and
+            % so on, so the same name denotes a different regressor once the
+            % motion block changes width: R5 is a derivative in A, a position
+            % in C. A contrast loading on one is therefore not comparable
+            % across variants even though the name matches.
+            if ~isempty(regexp(nm, '^Sn\(\d+\) R\d+$', 'once'))
+                warning(['contrast "%s" loads on nuisance regressor "%s". Nuisance ' ...
+                         'columns are named by position, so that name denotes a ' ...
+                         'different regressor in variants whose motion block differs ' ...
+                         'in width. Treat this contrast as not comparable across ' ...
+                         'variants.'], S.xCon(k).name, nm);
+            end
+            w(hit) = c(nz(j));
+        else
+            error(['contrast "%s" puts weight %g on regressor "%s", which matches %d ' ...
+                   'columns in the refitted design. Contrasts that load on nuisance ' ...
+                   'regressors cannot be transferred between variants, since the ' ...
+                   'nuisance block differs.'], S.xCon(k).name, c(nz(j)), nm, numel(hit));
+        end
+    end
+end
+
 function local_contrasts(S, vd, ci)
-% reuse the original contrast vectors: the design has the same columns in the
-% same order, only the motion values differ
+% Contrast weights are placed by regressor name, not by column position, so
+% this works whether or not the variant has the same number of columns.
     if isempty(ci), ci = 1:numel(S.xCon); end
+    Lnew = load(fullfile(vd, 'SPM.mat')); Snew = Lnew.SPM;
     clear matlabbatch
     matlabbatch{1}.spm.stats.con.spmmat = {fullfile(vd, 'SPM.mat')};
     for k = 1:numel(ci)
         matlabbatch{1}.spm.stats.con.consess{k}.tcon.name    = S.xCon(ci(k)).name;
-        matlabbatch{1}.spm.stats.con.consess{k}.tcon.weights = S.xCon(ci(k)).c';
+        matlabbatch{1}.spm.stats.con.consess{k}.tcon.weights = local_map_contrast(S, Snew, ci(k));
         matlabbatch{1}.spm.stats.con.consess{k}.tcon.sessrep = 'none';
     end
     matlabbatch{1}.spm.stats.con.delete = 1;
     spm_jobman('run', matlabbatch);
+end
+
+function v = local_task_vifs(vd, S, ci)
+% Max variance inflation factor across the regressors each contrast actually
+% loads on, per contrast, so the efficiency cost of a variant is visible
+% without running scn_spm_design_check three times.
+    if isempty(ci), ci = 1:numel(S.xCon); end
+    Lnew = load(fullfile(vd, 'SPM.mat')); Snew = Lnew.SPM;
+    X = Snew.xX.X;
+    keep = std(X) > eps;                    % drop session constants
+    v = nan(numel(ci), 1);
+    try
+        iv = diag(inv(corrcoef(X(:, keep))));
+    catch
+        return
+    end
+    idx = find(keep);
+    for k = 1:numel(ci)
+        w = local_map_contrast(S, Snew, ci(k));
+        cols = find(abs(w) > 0);
+        [tf, loc] = ismember(cols, idx);
+        if any(tf), v(k) = max(iv(loc(tf))); end
+    end
 end
