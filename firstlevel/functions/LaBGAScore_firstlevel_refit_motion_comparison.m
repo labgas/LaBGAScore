@@ -55,6 +55,10 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %        estimations per subject is a lot of NIfTIs to leave inside a datalad
 %        subdataset, and nothing here needs them once the contrasts exist
 %
+%   **'keepunzipped':**
+%        keep any functional images this function had to unzip. Default false,
+%        so the derivatives subdataset is left exactly as it was found
+%
 % :Outputs:
 %
 %   **OUT.table:**
@@ -87,10 +91,25 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 % stored in SPM.xY.P. Running from the superdataset root is convenient only
 % because that is where you would have run s1 to get DSGN into the workspace.
 %
-% The default outdir sits INSIDE the first-level subdataset. That keeps the
-% comparison next to what it refers to, but it will show up in datalad status,
-% so either add motion_refit_comparison/ to that subdataset's .gitignore or
-% pass an outdir outside the dataset.
+% The datalad datasets are left as they were found. Three things could dirty
+% them, and each is handled:
+%
+%   - the output tree, which sits inside the first-level subdataset by default.
+%     A .gitignore of '*' is written into it, so its whole contents including
+%     that file are invisible to git and datalad status stays clean. Delete the
+%     directory when you are done with it; nothing in it is precious
+%   - the functional images. s2_fit_model gunzips them into the run
+%     directories and LaBGAScore_clean_gzip_all_nii re-compresses them
+%     afterwards, so SPM.mat routinely points at .nii files that no longer
+%     exist. Whatever has to be unzipped to refit is removed again on the way
+%     out, including if the function errors or is interrupted. Pass
+%     'keepunzipped' to retain them
+%   - SPM's graphics postscript, which it writes into the current directory.
+%     The function works from outdir and restores the working directory when
+%     it exits, so nothing is dropped into the superdataset root
+%
+% If the annexed content of an image is not present, the subject is skipped
+% with a message naming the datalad get to run, rather than a gunzip error.
 %
 % BEFORE estimating anything, the function rebuilds what it believes the
 % fitted motion block to be from the run's own confound file and checks it
@@ -114,9 +133,9 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.1
+% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.2
 %
-% last modified: 2026/09/02
+% last modified: 2026/09/03
 
 
 %% PARSE OPTIONS
@@ -129,15 +148,42 @@ p.addParameter('nmotion', 24, @(x) isnumeric(x) && ismember(x, [12 24]));
 p.addParameter('contrasts', [], @isnumeric);
 p.addParameter('mask', '', @(x) ischar(x) || isstring(x));
 p.addParameter('keepbetas', false, @islogical);
+p.addParameter('keepunzipped', false, @islogical);
 p.parse(varargin{:});
 opt = p.Results;
 
 if isempty(which('spm')), error('SPM12 is not on the Matlab path'); end
 
 modeldir = char(modeldir);
+if ~isfolder(modeldir), error('modeldir does not exist: %s', modeldir); end
+dm = dir(modeldir); modeldir = dm(1).folder;      % absolute, since we cd below
+
 outdir = char(opt.outdir);
 if isempty(outdir), outdir = fullfile(modeldir, 'motion_refit_comparison'); end
 if ~isfolder(outdir), mkdir(outdir); end
+do = dir(outdir); outdir = do(1).folder;
+
+% Keep the dataset clean. The output tree is bulky and regenerable, so it is
+% made invisible to git rather than left for datalad status to report. A
+% .gitignore of '*' ignores the directory's whole contents, itself included,
+% which works whether or not outdir sits inside a subdataset.
+gi = fullfile(outdir, '.gitignore');
+if ~isfile(gi)
+    fid = fopen(gi, 'w');
+    if fid > 0
+        fprintf(fid, ['# written by LaBGAScore_firstlevel_refit_motion_comparison\n' ...
+                      '# everything here is regenerable, and is kept out of git so the\n' ...
+                      '# subdataset stays clean\n*\n']);
+        fclose(fid);
+    end
+end
+
+% SPM writes its graphics postscript into the CURRENT directory, which would
+% otherwise land in the superdataset root. Work from outdir instead, and go
+% back afterwards however this function exits.
+origwd = pwd;
+cleanupWd = onCleanup(@() cd(origwd));
+cd(outdir);
 
 d = dir(fullfile(modeldir, 'sub-*'));
 subs = {d([d.isdir]).name}';
@@ -196,6 +242,18 @@ for s = 1:numel(subs)
         regsB{i} = [fitB C(:, opt.nmotion+1:end)];   % intended expansion, same spikes and CSF
     end
     if ~ok, continue, end
+
+    % ---- make sure the functional images are actually on disk -------------
+    % s2_fit_model gunzips the smoothed images into the run directories, but
+    % LaBGAScore_clean_gzip_all_nii re-compresses them afterwards to keep the
+    % dataset small, so SPM.xY.P routinely points at .nii files that no longer
+    % exist. Unzip what is needed and put it back afterwards.
+    try
+        unz = local_ensure_images(S);
+    catch ME
+        warning('%s: %s', subs{s}, ME.message); continue
+    end
+    cleanupImgs = onCleanup(@() local_remove_files(unz, opt.keepunzipped));
 
     % ---- estimate both variants ------------------------------------------
     vdirs = struct();
@@ -313,6 +371,10 @@ fprintf(['\nr_A_vs_B near 1 with median_absdiff_SE near 0 means the parameterisa
 if ~opt.keepbetas
     fprintf('\nbeta images were deleted after contrast estimation; pass ''keepbetas'', true to keep them\n');
 end
+fprintf(['\nThe datasets are as they were found: the output tree carries a .gitignore of\n' ...
+         '''*'' so datalad status stays clean, any functional images unzipped to refit have\n' ...
+         'been removed, and the working directory is back at %s. Verify with:\n' ...
+         '  datalad status -r\n'], origwd);
 
 end % main
 
@@ -348,6 +410,48 @@ end
 function rows = local_session_rows(S, sess)
     ns = S.nscan; st = cumsum([0 ns(:)']);
     rows = (st(sess)+1) : st(sess+1);
+end
+
+function unz = local_ensure_images(S)
+% Every volume in SPM.xY.P must exist before SPM can map the files. Where the
+% .nii has been re-compressed since the model was fitted, unzip it and return
+% the list so it can be removed again afterwards.
+    unz = {};
+    files = unique(regexprep(cellstr(S.xY.P), ',\d+$', ''), 'stable');
+    missing = {};
+    for k = 1:numel(files)
+        f = files{k};
+        if isfile(f), continue, end
+        gz = [f '.gz'];
+        if ~isfile(gz), missing{end+1} = f; continue, end %#ok<AGROW>
+        d = dir(gz);
+        if isempty(d) || d.bytes == 0
+            % a git-annex pointer whose content has not been fetched
+            error(['%s is present but empty, which usually means the annexed ' ...
+                   'content is not here. Run: datalad get %s'], gz, gz);
+        end
+        gunzip(gz, fileparts(f));
+        if ~isfile(f)
+            error('gunzip of %s did not produce %s', gz, f);
+        end
+        unz{end+1} = f; %#ok<AGROW>
+    end
+    if ~isempty(missing)
+        error(['%d functional file(s) referenced by SPM.mat are missing, with no .gz ' ...
+               'alongside, the first being %s. The model cannot be refitted without ' ...
+               'the data it was fitted on.'], numel(missing), missing{1});
+    end
+    if ~isempty(unz)
+        fprintf('  unzipped %d functional file(s) that had been re-compressed\n', numel(unz));
+    end
+end
+
+function local_remove_files(files, keep)
+    if keep || isempty(files), return, end
+    for k = 1:numel(files)
+        if isfile(files{k}), delete(files{k}); end
+    end
+    fprintf('  removed %d unzipped functional file(s), leaving the dataset as it was\n', numel(files));
 end
 
 function [fitA, fitB] = local_motion_blocks(R, nmotion)
