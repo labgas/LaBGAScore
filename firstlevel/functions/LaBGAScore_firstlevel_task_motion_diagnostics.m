@@ -110,7 +110,7 @@ function [T, G] = LaBGAScore_firstlevel_task_motion_diagnostics(BIDSdir, derivdi
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.3
+% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.4
 %
 % last modified: 2026/09/03
 
@@ -195,6 +195,8 @@ if isempty(cn), cn = arrayfun(@(k) sprintf('contrast %d', k), 1:size(CW,1), 'Uni
 
 rows = {}; Lk = []; Lsub = {}; Lidx = []; evreported = {};
 mot = {'trans_x','trans_y','trans_z','rot_x','rot_y','rot_z'};
+everpresent = false(1, nC);       % did this condition ever produce a regressor?
+seentt = string([]);              % trial_type values actually found in the events
 
 for s = 1:numel(subs)
 
@@ -258,6 +260,10 @@ for s = 1:numel(subs)
         % another, leaving all-zero columns here. Those are not estimable in
         % this run and neither is any contrast that loads on them.
         present = std(X) > eps;
+        everpresent = everpresent | present;
+        if ismember('trial_type', ev.Properties.VariableNames)
+            seentt = union(seentt, unique(string(ev.trial_type)));
+        end
 
         Kr = @(v) v - K*(K\v);
         for c = 1:nC
@@ -279,6 +285,24 @@ for s = 1:numel(subs)
             Lsub{end+1,1} = subs{s}; Lidx(end+1,1) = k; %#ok<AGROW>
         end
     end
+end
+
+% A condition whose name does not appear in any events file produces an
+% all-zero regressor and is skipped in every run, which leaves a table that
+% looks fine but describes only the conditions that did match. Say so.
+if ~all(everpresent)
+    missing = conds(~everpresent);
+    msg = sprintf('\n  conditions never found in any events file:\n    %s', strjoin(missing, '\n    '));
+    msg = [msg sprintf('\n  trial_type values actually present:\n    %s', ...
+        strjoin(cellstr(seentt(:))', '\n    '))];
+    if ~any(everpresent)
+        error(['none of the conditions match the events files, so there is nothing to ' ...
+               'report.%s\nCheck that DSGN.conditions matches the trial_type column.'], msg);
+    end
+    warning(['%d of %d conditions never matched the events files and are absent from ' ...
+             'the results, which therefore describe only the remaining %d.%s\n' ...
+             'Check that DSGN.conditions matches the trial_type column.'], ...
+             numel(missing), nC, sum(everpresent), msg);
 end
 
 if isempty(rows)
@@ -338,12 +362,25 @@ fprintf(['\nmean_leakage_SE: shift in the contrast estimate, in units of its own
 
 nanrows = find(isnan(G.leakage.mean_leakage_SE));
 if ~isempty(nanrows)
-    fprintf(['\n%d contrast(s) came back NaN: %s.\n' ...
-             'This diagnostic works one run at a time, so a contrast comparing conditions\n' ...
-             'that live in different sessions is not estimable within any single run. That\n' ...
-             'is a limit of the method, not a property of the design; such contrasts have to\n' ...
-             'be judged from the per-condition rows above.\n'], ...
-             numel(nanrows), strjoin(G.leakage.contrast(nanrows)', ', '));
+    % two quite different causes, and saying the wrong one sends you looking in
+    % the wrong place: a contrast can be unscored because it loads on a
+    % condition that never matched the events, or because it spans sessions
+    unmatched = nanrows(any(CW(nanrows, ~everpresent) ~= 0, 2));
+    spanning  = setdiff(nanrows, unmatched);
+    if ~isempty(unmatched)
+        fprintf(['\n%d contrast(s) came back NaN because they load on conditions that never\n' ...
+                 'matched the events files: %s.\n' ...
+                 'Fix the condition names and rerun; see the warning above.\n'], ...
+                 numel(unmatched), strjoin(G.leakage.contrast(unmatched)', ', '));
+    end
+    if ~isempty(spanning)
+        fprintf(['\n%d contrast(s) came back NaN: %s.\n' ...
+                 'This diagnostic works one run at a time, so a contrast comparing conditions\n' ...
+                 'that live in different sessions is not estimable within any single run. That\n' ...
+                 'is a limit of the method, not a property of the design; such contrasts have\n' ...
+                 'to be judged from the per-condition rows above.\n'], ...
+                 numel(spanning), strjoin(G.leakage.contrast(spanning)', ', '));
+    end
 end
 
 end % main
