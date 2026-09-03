@@ -110,7 +110,7 @@ function [T, G] = LaBGAScore_firstlevel_task_motion_diagnostics(BIDSdir, derivdi
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.4
+% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.5
 %
 % last modified: 2026/09/03
 
@@ -198,6 +198,30 @@ mot = {'trans_x','trans_y','trans_z','rot_x','rot_y','rot_z'};
 everpresent = false(1, nC);       % did this condition ever produce a regressor?
 seentt = string([]);              % trial_type values actually found in the events
 
+% which conditions apply to which run. With a multisession DSGN the sessions
+% carry different condition names for the same events labels, so a run must be
+% convolved against its own session's list rather than against all of them.
+condsets = {conds};
+if ~isempty(opt.dsgn) && isfield(opt.dsgn, 'conditions') && isempty(opt.conditions)
+    condsets = opt.dsgn.conditions;
+end
+allstems = {};
+for s = 1:numel(subs)
+    q = [ dir(fullfile(derivdir, subs{s}, 'func', [taskpat '_desc-confounds_timeseries.tsv'])); ...
+          dir(fullfile(derivdir, subs{s}, 'ses-*', 'func', [taskpat '_desc-confounds_timeseries.tsv'])) ];
+    allstems = [allstems, cellfun(@(x) erase(x,'_desc-confounds_timeseries.tsv'), {q.name}, ...
+        'UniformOutput', false)]; %#ok<AGROW>
+end
+[csmode, ~] = local_condset_mode(condsets, allstems);
+if strcmp(csmode, 'all') && numel(condsets) > 1
+    warning(['dsgn has %d condition sets but they could not be mapped onto the runs by ' ...
+             'session or run number, so every condition is applied to every run. If the ' ...
+             'sets differ between sessions the results will be wrong; pass ''conditions'' ' ...
+             'explicitly instead.'], numel(condsets));
+elseif ~strcmp(csmode, 'single')
+    fprintf('condition sets mapped to runs by %s number (%d sets)\n', csmode, numel(condsets));
+end
+
 for s = 1:numel(subs)
 
     % multisession studies put the runs under sub-*/ses-*/func rather than
@@ -242,7 +266,29 @@ for s = 1:numel(subs)
         B = [d1 d2];               % what LaBGAScore fitted before the 2026/09/02 fix
         if opt.quadratic, A = [A A.^2]; B = [B B.^2]; end %#ok<AGROW>
 
-        X = local_convolve(ev, conds, n, opt.tr);
+        % restrict to this run's condition set before convolving
+        active = true(1, nC);
+        if ~strcmp(csmode, 'single') && ~strcmp(csmode, 'all')
+            switch csmode
+                case 'ses', tok = regexp(stem, 'ses-([a-zA-Z0-9]+)', 'tokens', 'once');
+                case 'run', tok = regexp(stem, 'run-(\d+)', 'tokens', 'once');
+            end
+            ix = NaN;
+            if ~isempty(tok), ix = str2double(tok{1}); end
+            if ~isnan(ix) && ix >= 1 && ix <= numel(condsets)
+                active = ismember(conds, condsets{ix});
+            else
+                % falling back to every condition would quietly apply both
+                % sessions' names to this run, which is the failure this
+                % mapping exists to prevent, so refuse the run instead
+                warning(['%s: could not read a %s number to pick its condition set, ' ...
+                         'skipping the run rather than applying every condition to it'], ...
+                         stem, csmode);
+                continue
+            end
+        end
+
+        X = local_convolve(ev, conds, n, opt.tr, active);
         K = local_dct(n, opt.tr, opt.hpf);
 
         QA = orth(A - mean(A));
@@ -574,8 +620,20 @@ function K = local_dct(n, TR, cutoff)
     end
 end
 
-function X = local_convolve(ev, conds, n, TR)
-% SPM canonical HRF at microtime resolution 16, sampled back to volume onsets
+function X = local_convolve(ev, conds, n, TR, active)
+% SPM canonical HRF at microtime resolution 16, sampled back to volume onsets.
+%
+% Conditions are matched to trial_type the way the pipeline does it, with
+% contains(condition, trial_type) rather than equality: s2_fit_model tests
+% contains(DSGN.conditions{run}{cond}, trial_type), so a design that calls a
+% condition 'thc_high calorie' matches events labelled 'high calorie'. The
+% session prefix lives in DSGN, not in the events file.
+%
+% 'active' selects which conditions apply to this run. It matters for exactly
+% that case: with both 'thc_neutral' and 'pla_neutral' in play, the label
+% 'neutral' would otherwise match both in every run and produce two identical
+% regressors.
+    if nargin < 5 || isempty(active), active = true(1, numel(conds)); end
     dt = TR/16;
     t  = (0:dt:32)';
     h  = (t.^5 .* exp(-t)/gamma(6)) - (1/6)*(t.^15 .* exp(-t)/(0.9^10*gamma(16)));
@@ -583,14 +641,40 @@ function X = local_convolve(ev, conds, n, TR)
     nhi = ceil(n*TR/dt) + numel(h);
     X = zeros(n, numel(conds));
     tt = string(ev.trial_type);
+    utt = unique(tt);
     for c = 1:numel(conds)
+        if ~active(c), continue, end
+        hit = utt(arrayfun(@(u) contains(conds{c}, char(u)), utt));
+        if isempty(hit), continue, end
         hi = zeros(nhi,1);
-        for e = find(tt == string(conds{c}))'
+        for e = find(ismember(tt, hit))'
             a = max(1, round(ev.onset(e)/dt) + 1);
             b = min(nhi, a + max(1, round(ev.duration(e)/dt)) - 1);
             hi(a:b) = 1;
         end
         cv = conv(hi, h);
         X(:,c) = cv(round((0:n-1)*TR/dt) + 9);
+    end
+end
+
+function [mode, nlev] = local_condset_mode(condsets, stems)
+% DSGN.conditions carries one cell per functional run, in DSGN.funcnames order,
+% and in a multisession design those cells differ. Work out how to map a run to
+% its cell from the entities the filenames actually carry.
+    nlev = 0;
+    if numel(condsets) <= 1, mode = 'single'; return, end
+    ses = string([]); run = [];
+    for k = 1:numel(stems)
+        s = regexp(stems{k}, 'ses-([a-zA-Z0-9]+)', 'tokens', 'once');
+        r = regexp(stems{k}, 'run-(\d+)', 'tokens', 'once');
+        if ~isempty(s), ses = union(ses, string(s{1})); end
+        if ~isempty(r), run = union(run, str2double(r{1})); end
+    end
+    if ~isempty(ses) && numel(condsets) == numel(ses)
+        mode = 'ses'; nlev = numel(ses);
+    elseif ~isempty(run) && numel(condsets) == max(run)
+        mode = 'run'; nlev = max(run);
+    else
+        mode = 'all';
     end
 end
