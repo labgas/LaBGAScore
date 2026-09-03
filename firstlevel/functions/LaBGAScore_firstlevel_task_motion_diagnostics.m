@@ -110,7 +110,7 @@ function [T, G] = LaBGAScore_firstlevel_task_motion_diagnostics(BIDSdir, derivdi
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.2
+% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.3
 %
 % last modified: 2026/09/03
 
@@ -148,7 +148,17 @@ taskpat = char(opt.task); if ~isempty(taskpat), taskpat = ['*' taskpat '*']; els
 conds = opt.conditions;
 if isempty(conds) && ~isempty(opt.dsgn) && isfield(opt.dsgn, 'conditions') ...
         && ~isempty(opt.dsgn.conditions)
-    conds = opt.dsgn.conditions{1};
+    % DSGN.conditions holds one cell per session, and in a multisession design
+    % those differ: the drug session has one set of conditions and the placebo
+    % session another. Taking only the first would silently drop half the
+    % design and every contrast that refers to it, so take the union, keeping
+    % the order in which conditions first appear.
+    conds = {};
+    for i = 1:numel(opt.dsgn.conditions)
+        ci = opt.dsgn.conditions{i};
+        if ~iscell(ci), ci = {ci}; end
+        conds = [conds, setdiff(ci, conds, 'stable')]; %#ok<AGROW>
+    end
 end
 if isempty(conds)
     % look wherever events files are allowed to live, not only under the
@@ -188,7 +198,10 @@ mot = {'trans_x','trans_y','trans_z','rot_x','rot_y','rot_z'};
 
 for s = 1:numel(subs)
 
-    cfs = dir(fullfile(derivdir, subs{s}, 'func', [taskpat '_desc-confounds_timeseries.tsv']));
+    % multisession studies put the runs under sub-*/ses-*/func rather than
+    % sub-*/func, so look in both rather than silently finding nothing
+    cfs = [ dir(fullfile(derivdir, subs{s}, 'func', [taskpat '_desc-confounds_timeseries.tsv'])); ...
+            dir(fullfile(derivdir, subs{s}, 'ses-*', 'func', [taskpat '_desc-confounds_timeseries.tsv'])) ];
 
     for f = 1:numel(cfs)
 
@@ -241,10 +254,15 @@ for s = 1:numel(subs)
         QN = orth(Fn);
         M  = A - QN*(QN'*A); M = M(:, sum(abs(M)) > 1e-10); QM = orth(M);
 
+        % In a multisession design the conditions of one session are absent from
+        % another, leaving all-zero columns here. Those are not estimable in
+        % this run and neither is any contrast that loads on them.
+        present = std(X) > eps;
+
         Kr = @(v) v - K*(K\v);
         for c = 1:nC
+            if ~present(c), continue, end
             x = X(:,c) - mean(X(:,c));
-            if std(x) < eps, continue; end
             xr = x - QN*(QN'*x);            % task variance surviving the fitted nuisance model
             rows(end+1,:) = { subs{s}, stem, conds{c}, ...
                 norm(QM'*xr)^2 / max(norm(xr)^2, eps), ...
@@ -253,12 +271,22 @@ for s = 1:numel(subs)
 
         % per-contrast leakage bound
         for k = 1:size(CW,1)
+            if any(CW(k, ~present) ~= 0), continue, end   % spans a session this run lacks
             w = zeros(1, size(Df,2)); w(1:nC) = CW(k,:);
             r = w * Dpf;
+            if norm(r) < eps, continue, end
             Lk(end+1,1) = norm(r*QA) / norm(r); %#ok<AGROW>
             Lsub{end+1,1} = subs{s}; Lidx(end+1,1) = k; %#ok<AGROW>
         end
     end
+end
+
+if isempty(rows)
+    error(['no runs could be analysed. Looked for confound files matching\n' ...
+           '  %s\nand\n  %s\nCheck that derivdir points at the fmriprep directory ' ...
+           'holding sub-*, and that the ''task'' label matches the filenames.'], ...
+           fullfile(derivdir, 'sub-*', 'func', [taskpat '_desc-confounds_timeseries.tsv']), ...
+           fullfile(derivdir, 'sub-*', 'ses-*', 'func', [taskpat '_desc-confounds_timeseries.tsv']));
 end
 
 rmot = cell2mat(cellfun(@cell2mat, rows(:,6), 'UniformOutput', false));
@@ -307,6 +335,16 @@ disp(G.leakage);
 fprintf(['\nmean_leakage_SE: shift in the contrast estimate, in units of its own standard\n' ...
          'error, per unit ratio of motion artifact to residual noise. Zero if the nuisance\n' ...
          'model spans the artifact.\n']);
+
+nanrows = find(isnan(G.leakage.mean_leakage_SE));
+if ~isempty(nanrows)
+    fprintf(['\n%d contrast(s) came back NaN: %s.\n' ...
+             'This diagnostic works one run at a time, so a contrast comparing conditions\n' ...
+             'that live in different sessions is not estimable within any single run. That\n' ...
+             'is a limit of the method, not a property of the design; such contrasts have to\n' ...
+             'be judged from the per-condition rows above.\n'], ...
+             numel(nanrows), strjoin(G.leakage.contrast(nanrows)', ', '));
+end
 
 end % main
 
