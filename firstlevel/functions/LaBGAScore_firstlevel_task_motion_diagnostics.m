@@ -41,9 +41,22 @@ function [T, G] = LaBGAScore_firstlevel_task_motion_diagnostics(BIDSdir, derivdi
 %        cell array of trial_type values to model. Default: every unique
 %        trial_type found across the events files
 %
+%   **'dsgn':**
+%        the CANlab DSGN struct, as built by
+%        <study>_firstlevel_m<M>_s1_options_dsgn_struct. Conditions are taken
+%        from DSGN.conditions{1} and contrasts from DSGN.contrasts,
+%        DSGN.contrastweights and DSGN.contrastnames, so neither needs to be
+%        written out by hand. Note that DSGN.contrastweights cannot simply be
+%        flattened with cell2mat: its vectors differ in length and its entries
+%        are weights on regexp GROUPS rather than on conditions, so they are
+%        mapped through DSGN.contrasts. The derived matrix is printed for
+%        checking, and contrasts that cannot be mapped - those on parametric
+%        modulators, which this function does not model - are dropped with a
+%        warning. 'conditions' and 'contrasts' override it if both are given
+%
 %   **'contrasts':**
-%        [nContrast x nCondition] weight matrix. Default: one contrast per
-%        condition against implicit baseline
+%        [nContrast x nCondition] weight matrix. Default: from 'dsgn' if given,
+%        otherwise one contrast per condition against implicit baseline
 %
 %   **'contrastnames':**
 %        cell array of names for the rows of 'contrasts'
@@ -97,9 +110,9 @@ function [T, G] = LaBGAScore_firstlevel_task_motion_diagnostics(BIDSdir, derivdi
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.1
+% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.2
 %
-% last modified: 2026/09/02
+% last modified: 2026/09/03
 
 
 %% PARSE OPTIONS
@@ -114,6 +127,7 @@ p.addParameter('hpf', 180, @isnumeric);
 p.addParameter('quadratic', true, @islogical);
 p.addParameter('task', '', @(x) ischar(x) || isstring(x));
 p.addParameter('subjects', {}, @iscell);
+p.addParameter('dsgn', [], @(x) isempty(x) || isstruct(x));
 p.parse(varargin{:});
 opt = p.Results;
 
@@ -132,6 +146,10 @@ taskpat = char(opt.task); if ~isempty(taskpat), taskpat = ['*' taskpat '*']; els
 % -------------------------------------------------------------------------
 
 conds = opt.conditions;
+if isempty(conds) && ~isempty(opt.dsgn) && isfield(opt.dsgn, 'conditions') ...
+        && ~isempty(opt.dsgn.conditions)
+    conds = opt.dsgn.conditions{1};
+end
 if isempty(conds)
     % look wherever events files are allowed to live, not only under the
     % subject directories, so a single task-level file is picked up too
@@ -155,6 +173,9 @@ end
 nC = numel(conds);
 
 CW = opt.contrasts; cn = opt.contrastnames;
+if isempty(CW) && ~isempty(opt.dsgn)
+    [CW, cn] = local_contrasts_from_dsgn(opt.dsgn, conds);
+end
 if isempty(CW), CW = eye(nC); end
 if isempty(cn), cn = arrayfun(@(k) sprintf('contrast %d', k), 1:size(CW,1), 'UniformOutput', false); end
 
@@ -295,6 +316,106 @@ end % main
 
 function d = local_grad(X)
     d = cell2mat(arrayfun(@(c) gradient(X(:,c)), 1:size(X,2), 'UniformOutput', false));
+end
+
+function idx = local_match_conditions(pat, conds)
+% Which conditions does one of DSGN's contrast regexps select?
+%
+% The patterns are written to match beta regressor names, not bare condition
+% names: '.*stress{1}\s[^x]' wants "stress", one whitespace, then a character
+% that is not x, which is how the unmodulated regressor is told apart from the
+% "stress x<pmod>" interaction. A bare condition name has no trailing
+% whitespace and so never matches. Each condition is therefore tested in
+% several renderings of how SPM might name its regressor.
+    idx = [];
+    for k = 1:numel(conds)
+        c = conds{k};
+        renders = { c, [c ' '], [c ' *bf(1)'], ...
+                    ['Sn(1) ' c '*bf(1)'], ['Sn(1) ' c ' *bf(1)'] };
+        for q = 1:numel(renders)
+            if ~isempty(regexp(renders{q}, pat, 'once'))
+                idx(end+1) = k; %#ok<AGROW>
+                break
+            end
+        end
+    end
+end
+
+function [CW, cn] = local_contrasts_from_dsgn(DSGN, conds)
+% Build a [nContrast x nCondition] weight matrix from a CANlab DSGN struct.
+%
+% DSGN.contrastweights is a cell array of numeric vectors of DIFFERENT lengths,
+% so cell2mat cannot flatten it, and its entries are not per condition in any
+% case. Each weight applies to one regexp GROUP in DSGN.contrasts{c}, which
+% selects a set of beta regressors:
+%
+%   DSGN.contrasts{c}       = {{'.*stress{1}\s[^x]'} {'.*control{1}\s[^x]'}}
+%   DSGN.contrastweights{c} = [1 -1]
+%
+% so weight 1 goes to whatever the first pattern matches and -1 to the second.
+% The weight is assigned here to every condition that group's pattern selects.
+%
+% Contrasts on regressors this function does not model - parametric modulators
+% above all, since it builds regressors from trial_type alone - match no
+% condition and are dropped with a warning rather than silently mis-mapped.
+    if ~isfield(DSGN, 'contrasts') || ~isfield(DSGN, 'contrastweights')
+        error('dsgn needs both .contrasts and .contrastweights');
+    end
+    nCon = numel(DSGN.contrasts); nC = numel(conds);
+    CW = zeros(nCon, nC); cn = cell(nCon, 1); keep = true(nCon, 1); why = cell(nCon,1);
+
+    for c = 1:nCon
+        if isfield(DSGN, 'contrastnames') && numel(DSGN.contrastnames) >= c
+            cn{c} = DSGN.contrastnames{c};
+        else
+            cn{c} = sprintf('contrast %d', c);
+        end
+
+        grp = DSGN.contrasts{c};
+        w   = DSGN.contrastweights{c};
+        if iscell(w), w = cell2mat(w); end
+        if ~isnumeric(w)
+            keep(c) = false; why{c} = 'contrastweights is not numeric'; continue
+        end
+        if numel(w) ~= numel(grp)
+            keep(c) = false;
+            why{c} = sprintf('%d weights for %d regexp groups', numel(w), numel(grp));
+            continue
+        end
+
+        for j = 1:numel(grp)
+            pats = grp{j};
+            if ~iscell(pats), pats = {pats}; end
+            idx = [];
+            for q = 1:numel(pats)
+                idx = union(idx, local_match_conditions(pats{q}, conds));
+            end
+            if isempty(idx)
+                keep(c) = false;
+                why{c} = sprintf('pattern "%s" matches none of the conditions', pats{1});
+                break
+            end
+            CW(c, idx) = CW(c, idx) + w(j);
+        end
+    end
+
+    if any(~keep)
+        msg = '';
+        for c = find(~keep)'
+            msg = [msg sprintf('\n    %-32s %s', cn{c}, why{c})]; %#ok<AGROW>
+        end
+        warning(['%d of %d contrasts in dsgn could not be mapped onto the conditions ' ...
+                 'and are excluded:%s\nPass ''contrasts'' explicitly to override.'], ...
+                 sum(~keep), nCon, msg);
+    end
+    CW = CW(keep, :); cn = cn(keep);
+    if isempty(CW), error('no contrast in dsgn could be mapped onto the conditions'); end
+
+    fprintf('\ncontrasts derived from dsgn (verify before reading the results):\n');
+    fprintf('  %-32s %s\n', 'contrast', strjoin(conds, '  '));
+    for c = 1:size(CW,1)
+        fprintf('  %-32s %s\n', cn{c}, num2str(CW(c,:), '%+g  '));
+    end
 end
 
 function e = local_entities(name)
