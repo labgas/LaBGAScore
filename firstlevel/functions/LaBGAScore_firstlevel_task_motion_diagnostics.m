@@ -24,7 +24,13 @@ function [T, G] = LaBGAScore_firstlevel_task_motion_diagnostics(BIDSdir, derivdi
 % :Inputs:
 %
 %   **BIDSdir:**
-%        BIDS directory holding sub-*/func/*_events.tsv
+%        BIDS directory. Events files are resolved per run by the BIDS
+%        inheritance principle, so both layouts work without an option: one
+%        events file per subject and run under sub-*/func/, or a single
+%        task-level file such as BIDSdir/task-<label>_events.tsv shared by
+%        every run, which is how a long block design with fixed timing is
+%        usually stored. The most specific applicable file wins, and the route
+%        taken is printed once per run of the function.
 %
 %   **derivdir:**
 %        fMRIPrep directory holding sub-*/func/*_desc-confounds_timeseries.tsv
@@ -91,7 +97,7 @@ function [T, G] = LaBGAScore_firstlevel_task_motion_diagnostics(BIDSdir, derivdi
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.0
+% LaBGAScore_firstlevel_task_motion_diagnostics.m         v1.1
 %
 % last modified: 2026/09/02
 
@@ -127,14 +133,22 @@ taskpat = char(opt.task); if ~isempty(taskpat), taskpat = ['*' taskpat '*']; els
 
 conds = opt.conditions;
 if isempty(conds)
+    % look wherever events files are allowed to live, not only under the
+    % subject directories, so a single task-level file is picked up too
+    e = [ dir(fullfile(BIDSdir, [taskpat '_events.tsv'])); ...
+          dir(fullfile(BIDSdir, 'sub-*', [taskpat '_events.tsv'])); ...
+          dir(fullfile(BIDSdir, 'sub-*', 'func', [taskpat '_events.tsv'])); ...
+          dir(fullfile(BIDSdir, 'sub-*', 'ses-*', 'func', [taskpat '_events.tsv'])) ];
+    e = e(~[e.isdir]' & ~contains({e.name}, 'noninterest')');
     seen = string([]);
-    for s = 1:numel(subs)
-        e = dir(fullfile(BIDSdir, subs{s}, 'func', [taskpat '_events.tsv']));
-        for f = 1:numel(e)
-            ev = readtable(fullfile(e(f).folder, e(f).name), 'FileType','text', ...
-                'Delimiter','\t', 'VariableNamingRule','preserve');
-            seen = union(seen, unique(string(ev.trial_type)));
-        end
+    for f = 1:numel(e)
+        ev = readtable(fullfile(e(f).folder, e(f).name), 'FileType','text', ...
+            'Delimiter','\t', 'VariableNamingRule','preserve');
+        if ~ismember('trial_type', ev.Properties.VariableNames), continue, end
+        seen = union(seen, unique(string(ev.trial_type)));
+    end
+    if isempty(seen)
+        error('no events files with a trial_type column found under %s', BIDSdir);
     end
     conds = cellstr(seen);
 end
@@ -148,7 +162,7 @@ if isempty(cn), cn = arrayfun(@(k) sprintf('contrast %d', k), 1:size(CW,1), 'Uni
 %% LOOP OVER SUBJECTS AND RUNS
 % -------------------------------------------------------------------------
 
-rows = {}; Lk = []; Lsub = {}; Lidx = [];
+rows = {}; Lk = []; Lsub = {}; Lidx = []; evreported = {};
 mot = {'trans_x','trans_y','trans_z','rot_x','rot_y','rot_z'};
 
 for s = 1:numel(subs)
@@ -157,26 +171,14 @@ for s = 1:numel(subs)
 
     for f = 1:numel(cfs)
 
-        % match the events file to this run by stripping the fMRIPrep suffix
         stem = erase(cfs(f).name, '_desc-confounds_timeseries.tsv');
-        evf  = fullfile(BIDSdir, subs{s}, 'func', [stem '_events.tsv']);
-        if ~isfile(evf)
-            % the task label is not always spelled the same way in BIDS and in
-            % derivatives (e.g. task-emosex_movies vs task-emosex), so fall
-            % back to matching on subject and run entity alone
-            runtok = regexp(stem, 'run-[0-9]+', 'match', 'once');
-            cand = dir(fullfile(BIDSdir, subs{s}, 'func', '*_events.tsv'));
-            cand = cand(~contains({cand.name}, 'noninterest'));
-            if ~isempty(runtok)
-                cand = cand(contains({cand.name}, runtok));
-            end
-            if numel(cand) == 1
-                evf = fullfile(cand(1).folder, cand(1).name);
-            elseif isempty(cand)
-                warning('no events file for %s, skipping', stem); continue
-            else
-                warning('%d candidate events files for %s, skipping', numel(cand), stem); continue
-            end
+        [evf, how] = local_find_events(BIDSdir, subs{s}, stem);
+        if isempty(evf)
+            warning('no events file resolved for %s, skipping', stem); continue
+        end
+        if ~strcmp(how, 'exact') && ~any(strcmp(how, evreported))
+            fprintf('events files resolved by %s (e.g. %s -> %s)\n', how, stem, evf);
+            evreported{end+1} = how; %#ok<AGROW>
         end
 
         cf = readtable(fullfile(cfs(f).folder, cfs(f).name), 'FileType','text', ...
@@ -293,6 +295,79 @@ end % main
 
 function d = local_grad(X)
     d = cell2mat(arrayfun(@(c) gradient(X(:,c)), 1:size(X,2), 'UniformOutput', false));
+end
+
+function e = local_entities(name)
+% BIDS key-value entities from a filename, as a struct
+    e = struct();
+    parts = strsplit(erase(name, '.tsv'), '_');
+    for i = 1:numel(parts)
+        kv = strsplit(parts{i}, '-');
+        if numel(kv) == 2, e.(matlab.lang.makeValidName(kv{1})) = kv{2}; end
+    end
+end
+
+function [evf, how] = local_find_events(BIDSdir, sub, stem)
+% Resolve the events file for one functional run.
+%
+% Three routes, most trustworthy first:
+%
+%   exact       sub-XX/func/<stem>_events.tsv
+%   inherited   the BIDS inheritance principle - a file higher up the tree
+%               applies to everything below it, provided every entity in its
+%               name matches. A long block design with fixed timing is often
+%               stored once as BIDSdir/task-<label>_events.tsv rather than
+%               copied per subject and run. The most specific applicable
+%               candidate wins.
+%   run entity  a single events file in the subject's func dir carrying the
+%               right run, used when the task label is spelled differently in
+%               BIDS and in derivatives (e.g. task-emosex_movies vs
+%               task-emosex), which no entity match would survive
+%
+    evf = ''; how = '';
+
+    exact = fullfile(BIDSdir, sub, 'func', [stem '_events.tsv']);
+    if isfile(exact), evf = exact; how = 'exact'; return, end
+
+    want = local_entities(stem);
+
+    % search from the most specific level of the hierarchy upwards
+    levels = { fullfile(BIDSdir, sub, 'func'), fullfile(BIDSdir, sub), BIDSdir };
+    if isfield(want, 'ses')
+        levels = [ { fullfile(BIDSdir, sub, ['ses-' want.ses], 'func'), ...
+                     fullfile(BIDSdir, sub, ['ses-' want.ses]) }, levels ];
+    end
+
+    best = ''; bestn = -1;
+    for L = 1:numel(levels)
+        if ~isfolder(levels{L}), continue, end
+        cand = dir(fullfile(levels{L}, '*_events.tsv'));
+        cand = cand(~[cand.isdir] & ~contains({cand.name}, 'noninterest'));
+        for c = 1:numel(cand)
+            have = local_entities(cand(c).name);
+            keys = fieldnames(have);
+            ok = true;
+            for k = 1:numel(keys)
+                if ~isfield(want, keys{k}) || ~strcmp(want.(keys{k}), have.(keys{k}))
+                    ok = false; break
+                end
+            end
+            % a candidate with more matching entities is more specific
+            if ok && numel(keys) > bestn
+                best = fullfile(cand(c).folder, cand(c).name); bestn = numel(keys);
+            end
+        end
+        if ~isempty(best), evf = best; how = 'inheritance'; return, end
+    end
+
+    % last resort: right run, whatever the task label
+    runtok = regexp(stem, 'run-[0-9]+', 'match', 'once');
+    cand = dir(fullfile(BIDSdir, sub, 'func', '*_events.tsv'));
+    cand = cand(~contains({cand.name}, 'noninterest'));
+    if ~isempty(runtok), cand = cand(contains({cand.name}, runtok)); end
+    if isscalar(cand)
+        evf = fullfile(cand(1).folder, cand(1).name); how = 'run entity only';
+    end
 end
 
 function K = local_dct(n, TR, cutoff)
