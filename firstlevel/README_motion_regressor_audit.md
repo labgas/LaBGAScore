@@ -6,7 +6,14 @@ another machine, without the conversation it came from.
 The short version: the first-level motion regressors have never been what the
 script headers say they are. Whether that matters turns out to depend entirely
 on the study, and of the three checked so far, one needs a re-analysis, one does
-not, and one is clean.
+not, and one is unaffected.
+
+For the study that does — discoverie — the single-subject con images move a
+great deal, and on the primary contrast that movement is **removed bias rather
+than added noise**. The model to re-run it with is **variant C**: the corrected
+motion expansion without the quadratic terms. What has not been done is the
+group analysis, which is the only thing that can say whether the published
+conclusions change.
 
 ## Contents
 
@@ -89,8 +96,8 @@ per unit ratio of artifact to residual noise.
 ```
 
 **`LaBGAScore_firstlevel_refit_motion_comparison`** — settles empirically what
-the bound can only bracket, by refitting each subject's model three times from
-its own `SPM.mat`, changing only the motion block:
+the bound can only bracket, by refitting each subject's model from its own
+`SPM.mat`, changing only the motion block:
 
 - **A** exactly as fitted, **B** the corrected expansion, **C** B without the
   quadratic terms
@@ -229,7 +236,7 @@ refit can score them.
 
 | Study | Pattern | Action |
 |---|---|---|
-| **discoverie** | consistent **and** large; refit moves the primary contrast to r = 0.66 with ~36% of voxels flipping | Refit all subjects, rerun the group analysis. Hold claims about `stress vs control` until then |
+| **discoverie** | consistent **and** large; refit moves the primary contrast to r = 0.66 with ~36% of voxels flipping, and that movement is bias rather than added noise | Refit all subjects with **variant C**, rerun the group analysis. Hold claims about `stress vs control` until the group maps exist |
 | **erythritol_4b** | consistent but small | No re-analysis indicated. Differential contrasts safest |
 | **proj_thc** | inconsistent, moderate leakage | Nothing to correct. Expected cost is lost power, not a wrong answer. Cross-session contrasts likely safest of all |
 
