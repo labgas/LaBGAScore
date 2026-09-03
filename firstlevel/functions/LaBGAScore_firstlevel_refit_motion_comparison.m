@@ -45,10 +45,15 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %        <modeldir>/motion_refit_comparison
 %
 %   **'nmotion':**
-%        number of leading motion columns in the multiple-regressor block:
-%        24 with quadratics, 12 without. Default 24. The value is verified
-%        against the design before anything is estimated (see Notes), so a
-%        wrong setting errors rather than producing a misleading comparison
+%        how many leading motion columns the EXISTING model has in its
+%        multiple-regressor block: 24 when it was fitted with quadratics, 12
+%        without. Default 24. It describes the model being audited, not the
+%        variants: A and B are built to that same width, and C is always 12
+%        because dropping the quadratics is the whole point of it. So this
+%        stays at whatever the study used, and does not change now that there
+%        are three variants. The value is verified against the design before
+%        anything is estimated (see Notes), so a wrong setting is refused
+%        rather than producing a misleading comparison
 %
 %   **'contrasts':**
 %        indices into SPM.xCon to compare. Default: all
@@ -149,7 +154,7 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.3
+% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.4
 %
 % last modified: 2026/09/03
 
