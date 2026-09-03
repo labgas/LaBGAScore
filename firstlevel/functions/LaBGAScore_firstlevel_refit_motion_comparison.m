@@ -50,17 +50,47 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %   **'mask':**
 %        image to restrict the comparison to. Default: the model's own mask.nii
 %
+%   **'keepbetas':**
+%        keep the beta images of both variants. Default false: two full
+%        estimations per subject is a lot of NIfTIs to leave inside a datalad
+%        subdataset, and nothing here needs them once the contrasts exist
+%
 % :Outputs:
 %
-%   **OUT:**
-%        struct with a per-subject-per-contrast table of the correlation
-%        between the two variants' con images, the median absolute difference
-%        expressed in units of the contrast's standard error, and the
-%        proportion of in-mask voxels whose t crosses p < .001 under one
-%        variant but not the other. Difference images are written alongside
-%        the estimates for inspection
+%   **OUT.table:**
+%        one row per subject and contrast:
+%
+%        - r_A_vs_original, maxdiff_A_vs_original_SE - the validation. Variant
+%          A rebuilds the original fit, so it should reproduce the con images
+%          already in the model directory, r > 0.999. If it does not, the
+%          rebuild is not faithful and the remaining columns mean nothing; the
+%          function says so rather than leaving you to notice
+%        - r_A_vs_B, median_absdiff_SE, p95_absdiff_SE - the comparison itself,
+%          the differences expressed in units of the contrast standard error so
+%          they can be read against the leakage bound from
+%          LaBGAScore_firstlevel_task_motion_diagnostics
+%        - frac_voxels_flipping_p001 - proportion of in-mask voxels crossing
+%          p < .001 under one variant but not the other
+%
+%   **OUT.outdir:**
+%        where everything was written:
+%
+%        <outdir>/<subject>/A/                  the model refitted as it stands
+%        <outdir>/<subject>/B/                  the same, corrected motion block
+%        <outdir>/<subject>/diff_con_XXXX.nii   A minus B, numbered as in the
+%                                               model directory
 %
 % :Notes:
+%
+% The working directory does not matter: modeldir and everything derived from
+% it are absolute, and the functional images are located through the paths
+% stored in SPM.xY.P. Running from the superdataset root is convenient only
+% because that is where you would have run s1 to get DSGN into the workspace.
+%
+% The default outdir sits INSIDE the first-level subdataset. That keeps the
+% comparison next to what it refers to, but it will show up in datalad status,
+% so either add motion_refit_comparison/ to that subdataset's .gitignore or
+% pass an outdir outside the dataset.
 %
 % BEFORE estimating anything, the function rebuilds what it believes the
 % fitted motion block to be from the run's own confound file and checks it
@@ -84,7 +114,7 @@ function OUT = LaBGAScore_firstlevel_refit_motion_comparison(modeldir, varargin)
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.0
+% LaBGAScore_firstlevel_refit_motion_comparison.m         v1.1
 %
 % last modified: 2026/09/02
 
@@ -98,6 +128,7 @@ p.addParameter('outdir', '', @(x) ischar(x) || isstring(x));
 p.addParameter('nmotion', 24, @(x) isnumeric(x) && ismember(x, [12 24]));
 p.addParameter('contrasts', [], @isnumeric);
 p.addParameter('mask', '', @(x) ischar(x) || isstring(x));
+p.addParameter('keepbetas', false, @islogical);
 p.parse(varargin{:});
 opt = p.Results;
 
@@ -184,6 +215,12 @@ for s = 1:numel(subs)
 
         local_specify_estimate(S, vd, regfiles);
         local_contrasts(S, vd, opt.contrasts);
+        if ~opt.keepbetas
+            % two full estimations per subject is a lot of NIfTIs to leave
+            % inside a datalad subdataset, and the betas are not needed once the
+            % contrasts exist; ResMS and mask are, so they stay
+            delete(fullfile(vd, 'beta_*.nii'));
+        end
         vdirs.(tag) = vd;
         fprintf('  variant %s estimated\n', tag);
     end
@@ -197,10 +234,13 @@ for s = 1:numel(subs)
     resA = spm_read_vols(spm_vol(fullfile(vdirs.A, 'ResMS.nii')));
 
     for k = 1:numel(ci)
-        cA = spm_read_vols(spm_vol(fullfile(vdirs.A, sprintf('con_%04d.nii', ci(k)))));
-        cB = spm_read_vols(spm_vol(fullfile(vdirs.B, sprintf('con_%04d.nii', ci(k)))));
-        tA = spm_read_vols(spm_vol(fullfile(vdirs.A, sprintf('spmT_%04d.nii', ci(k)))));
-        tB = spm_read_vols(spm_vol(fullfile(vdirs.B, sprintf('spmT_%04d.nii', ci(k)))));
+
+        % contrasts are renumbered 1..numel(ci) inside the variant directories,
+        % while the original model numbers them by their index in SPM.xCon
+        cA = spm_read_vols(spm_vol(fullfile(vdirs.A, sprintf('con_%04d.nii', k))));
+        cB = spm_read_vols(spm_vol(fullfile(vdirs.B, sprintf('con_%04d.nii', k))));
+        tA = spm_read_vols(spm_vol(fullfile(vdirs.A, sprintf('spmT_%04d.nii', k))));
+        tB = spm_read_vols(spm_vol(fullfile(vdirs.B, sprintf('spmT_%04d.nii', k))));
 
         a = cA(:); b = cB(:); ta = tA(:); tb = tB(:);
         keep = m & isfinite(a) & isfinite(b) & isfinite(ta) & isfinite(tb);
@@ -214,26 +254,65 @@ for s = 1:numel(subs)
         thr = spm_invTcdf(1 - 0.001, dfe);
         flip = xor(abs(ta) > thr, abs(tb) > thr);
 
-        rows(end+1,:) = { subs{s}, S.xCon(ci(k)).name, corr(a(keep), b(keep)), ...
+        % validation: variant A rebuilds the original fit, so its con image
+        % should be all but identical to the one already in the model directory.
+        % Anything below ~0.999 means the rebuild is not reproducing the
+        % original model and the A-versus-B comparison should not be read.
+        rOrig = NaN; dOrig = NaN;
+        origfile = fullfile(modeldir, subs{s}, sprintf('con_%04d.nii', ci(k)));
+        if isfile(origfile)
+            co = spm_read_vols(spm_vol(origfile)); o = co(:);
+            ko = keep & isfinite(o);
+            if any(ko)
+                rOrig = corr(a(ko), o(ko));
+                dOrig = max(abs(a(ko) - o(ko)) ./ max(seA(ko), eps));
+            end
+        end
+
+        rows(end+1,:) = { subs{s}, S.xCon(ci(k)).name, rOrig, dOrig, corr(a(keep), b(keep)), ...
             median(dse(keep)), prctile(dse(keep), 95), mean(flip(keep)) }; %#ok<AGROW>
 
-        % write the difference image for inspection
-        V = spm_vol(fullfile(vdirs.A, sprintf('con_%04d.nii', ci(k))));
+        % write the difference image for inspection, named by the ORIGINAL
+        % contrast number so it lines up with the model directory
+        V = spm_vol(fullfile(vdirs.A, sprintf('con_%04d.nii', k)));
         V.fname = fullfile(outdir, subs{s}, sprintf('diff_con_%04d.nii', ci(k)));
-        V.descrip = 'variant A minus variant B';
+        V.descrip = sprintf('A minus B: %s', S.xCon(ci(k)).name);
         spm_write_vol(V, cA - cB);
     end
 end
 
 OUT.table = cell2table(rows, 'VariableNames', ...
-    {'subject','contrast','r_con','median_absdiff_SE','p95_absdiff_SE','frac_voxels_flipping_p001'});
+    {'subject','contrast','r_A_vs_original','maxdiff_A_vs_original_SE', ...
+     'r_A_vs_B','median_absdiff_SE','p95_absdiff_SE','frac_voxels_flipping_p001'});
 OUT.outdir = outdir;
 
 fprintf('\n');
 disp(OUT.table);
-fprintf(['\nr_con near 1 and median_absdiff_SE near 0 means the parameterisation does not\n' ...
-         'matter here. frac_voxels_flipping_p001 is the proportion of in-mask voxels that\n' ...
-         'cross p < .001 under one variant but not the other. Difference images are in %s\n'], outdir);
+
+bad = OUT.table.r_A_vs_original < 0.999 & ~isnan(OUT.table.r_A_vs_original);
+if any(bad)
+    warning(['VALIDATION FAILED for %d of %d rows: variant A does not reproduce the ' ...
+             'original con images (lowest r = %.4f). The rebuild is not reproducing the ' ...
+             'original model, so the A-versus-B columns should NOT be interpreted. ' ...
+             'Check that the images SPM.xY.P points at are the ones the model was fitted on.'], ...
+             sum(bad), height(OUT.table), min(OUT.table.r_A_vs_original(bad)));
+elseif all(isnan(OUT.table.r_A_vs_original))
+    warning('no original con images found in %s, so the rebuild could not be validated', modeldir);
+else
+    fprintf('validation passed: variant A reproduces the original con images (min r = %.5f)\n', ...
+        min(OUT.table.r_A_vs_original));
+end
+
+fprintf(['\nr_A_vs_B near 1 with median_absdiff_SE near 0 means the parameterisation does\n' ...
+         'not matter here. frac_voxels_flipping_p001 is the proportion of in-mask voxels\n' ...
+         'crossing p < .001 under one variant but not the other.\n' ...
+         '\nWritten to %s\n' ...
+         '  <subject>/A/          the model refitted as it stands\n' ...
+         '  <subject>/B/          the same model with the corrected motion block\n' ...
+         '  <subject>/diff_con_XXXX.nii   A minus B, numbered as in the model directory\n'], outdir);
+if ~opt.keepbetas
+    fprintf('\nbeta images were deleted after contrast estimation; pass ''keepbetas'', true to keep them\n');
+end
 
 end % main
 
