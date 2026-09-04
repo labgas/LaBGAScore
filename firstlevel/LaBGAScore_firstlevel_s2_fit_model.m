@@ -273,7 +273,15 @@ for sub=1:size(derivsubjs,1)
     BIDSidx = ~contains(BIDSimgs,'rest'); % omit resting state scan if it exists
     BIDSimgs = {BIDSimgs{BIDSidx}}';
     
-    derivimgs = dir(fullfile(subjderivdir,'s6-*.nii.gz'));
+    % look in the run-* subdirs first and fall back to the flat layout: once this
+    % script has run, the smoothed images live in the run dirs, and after
+    % LaBGAScore_clean_gzip_all_nii they are gzipped there rather than at the top
+    % level, so globbing only the top level left the pipeline unable to re-run on
+    % its own output
+    derivimgs = dir(fullfile(subjderivdir,'run-*','s6-*.nii.gz'));
+    if isempty(derivimgs)
+        derivimgs = dir(fullfile(subjderivdir,'s6-*.nii.gz'));
+    end
     derivimgs = {derivimgs(:).name}';
     derividx = ~contains(derivimgs,'rest'); % omit resting state scan if it exists
     derivimgs = {derivimgs{derividx}}';
@@ -282,10 +290,26 @@ for sub=1:size(derivsubjs,1)
     fmriprep_noisefiles = {fmriprep_noisefiles(:).name}';
     noiseidx = ~contains(fmriprep_noisefiles,'rest'); % omit resting state scan if it exists
     fmriprep_noisefiles = {fmriprep_noisefiles{noiseidx}}';
-    
-    % read events.tsv files with onsets, durations, and trial type
-    eventsfiles = dir(fullfile(subjBIDSdir,'*events.tsv'));
-    eventsfiles = {eventsfiles(:).name}';
+
+    % keep only the runs that have BOTH a smoothed image and a confounds file,
+    % matched on the run label. The two lists are globbed independently but consumed
+    % POSITIONALLY below - derivimgs{run} is opened inside the run dir named from
+    % fmriprep_noisefiles{run} - so an unmatched entry does not merely miscount, it
+    % shifts every later run onto the wrong image, with no error. fMRIPrep does write
+    % a confounds file for runs that were excluded upstream, so this does occur.
+    runlab = @(c) regexp(c,'run-\d+','match','once');
+    img_runs   = cellfun(runlab, derivimgs, 'UniformOutput', false);
+    noise_runs = cellfun(runlab, fmriprep_noisefiles, 'UniformOutput', false);
+        if ~any(cellfun(@isempty, img_runs)) && ~any(cellfun(@isempty, noise_runs))
+            keep_img   = ismember(img_runs, noise_runs);
+            keep_noise = ismember(noise_runs, img_runs);
+                if ~all(keep_img) || ~all(keep_noise)
+                    warning('\n%s: dropping run(s) that lack either a smoothed image or a confounds file: %s', ...
+                        derivsubjs{sub}, strjoin(unique([noise_runs(~keep_noise); img_runs(~keep_img)]),', '));
+                end
+            derivimgs           = derivimgs(keep_img);
+            fmriprep_noisefiles = fmriprep_noisefiles(keep_noise);
+        end
     
         for runname = 1:size(fmriprep_noisefiles,1)
             subjrunnames{runname} = strsplit(fmriprep_noisefiles{runname},'_desc');
@@ -295,6 +319,22 @@ for sub=1:size(derivsubjs,1)
         
     subjrunnames = subjrunnames';
     subjrundirnames = subjrundirnames';
+
+    % resolve the events.tsv that applies to each run by the BIDS inheritance
+    % principle: a run-specific file next to the functional image wins, then a
+    % session- or subject-level file, then one at the dataset root. A block design
+    % with fixed timing is often stored once as <BIDSdir>/task-<label>_events.tsv
+    % instead of being copied per subject and run, and both layouts are valid BIDS.
+    % Resolution is shared with LaBGAScore_firstlevel_task_motion_diagnostics.
+    eventsfiles = cell(size(fmriprep_noisefiles,1),1);
+        for runname = 1:size(fmriprep_noisefiles,1)
+            [eventsfiles{runname},eventshow] = LaBGAScore_firstlevel_find_events(BIDSdir,derivsubjs{sub},subjrunnames{runname});
+                if isempty(eventsfiles{runname})
+                    error('\nno events.tsv found for %s %s: looked for a run-specific file in %s, then for inherited files up to %s, please check before proceeding', ...
+                        derivsubjs{sub},subjrundirnames{runname},subjBIDSdir,BIDSdir);
+                end
+            fprintf('\nevents for %s %s resolved by %s: %s\n',derivsubjs{sub},subjrundirnames{runname},eventshow,eventsfiles{runname});
+        end
         
     % create rundirs in subjderivdir if needed
         if ~isfolder(fullfile(subjderivdir,rundirnames{1}))
@@ -304,11 +344,26 @@ for sub=1:size(derivsubjs,1)
     
     cd(rootdir);
     
-    % sanity check #1: number of images & noise/event files
-        if ~isequal(size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1),size(eventsfiles,1)) 
-            error('\nnumbers of raw images, preprocessed images, noise, and events files do not match for %s, please check BIDSimgs, derivimgs, fmriprep_noisefiles, and eventsfiles variables before proceeding',derivsubjs{sub});
+    % sanity check #1: number of images & noise files
+    % The model is fitted from the SMOOTHED DERIVATIVES and the fMRIPREP CONFOUNDS,
+    % and those two drive the run loop, so a mismatch between them is fatal. The RAW
+    % BIDS images are only read when spike_def = 'CANlab' (below); with spike_def =
+    % 'fMRIprep' they never enter the model, so their absence - which happens when a
+    % study's raw data does not live in this superdataset - is reported rather than
+    % treated as fatal. Events are not counted here: under BIDS inheritance a single
+    % file can serve many runs, so they are resolved per run above, where a run that
+    % resolves to nothing already errors.
+        if ~isequal(size(derivimgs,1),size(fmriprep_noisefiles,1))
+            error('\nnumbers of preprocessed images (%d) and noise files (%d) do not match for %s; these drive the run loop, please check derivimgs and fmriprep_noisefiles before proceeding', ...
+                size(derivimgs,1),size(fmriprep_noisefiles,1),derivsubjs{sub});
+        elseif strcmpi(LaBGAS_options.mandatory.spike_def,'CANlab')==1 && ~isequal(size(BIDSimgs,1),size(derivimgs,1))
+            error('\nspike_def = CANlab reads the raw BIDS images, but %s has %d of them against %d preprocessed images, please check before proceeding', ...
+                derivsubjs{sub},size(BIDSimgs,1),size(derivimgs,1));
+        elseif ~isequal(size(BIDSimgs,1),size(derivimgs,1))
+            warning('\n%s has %d raw BIDS images against %d preprocessed images and %d noise files; raw images are not used with spike_def = %s, continuing', ...
+                derivsubjs{sub},size(BIDSimgs,1),size(derivimgs,1),size(fmriprep_noisefiles,1),LaBGAS_options.mandatory.spike_def);
         else
-            warning('\nnumbers of raw images, preprocessed images, noise, and events files match for %s, continuing',derivsubjs{sub});
+            warning('\nnumbers of raw images, preprocessed images, and noise files match for %s, continuing',derivsubjs{sub});
         end
 
         
@@ -322,19 +377,26 @@ for sub=1:size(derivsubjs,1)
         rundir = fullfile(subjderivdir,subjrundirnames{run});
         
         % move fmriprep noisefile and smoothed image into subdir if needed
-        rundirlist = dir(rundir);
-        rundirlist = rundirlist(~[rundirlist(:).isdir]');
-            if isempty(rundirlist)
+        % Match names EXACTLY, test the two files independently, and resolve the image
+        % from wherever it actually is. The previous version tested contains() against
+        % the concatenated directory listing, i.e. on substrings, so a file whose name
+        % merely contains the wanted name (a confounds file accidentally given the s6-
+        % prefix, or the .nii.gz when the .nii is wanted) made the guard conclude the
+        % file was already staged; it also used an elseif chain, so a run missing both
+        % files only ever got one of them.
+        rundirlist  = dir(rundir);
+        rundirfiles = {rundirlist(~[rundirlist(:).isdir]').name};
+            if ~any(strcmp(rundirfiles,fmriprep_noisefiles{run}))
                 copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
-                copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
-                gunzip(fullfile(rundir,derivimgs{run}));
-                delete(fullfile(rundir,derivimgs{run}));
-            elseif ~contains([rundirlist.name],fmriprep_noisefiles{run})
-                copyfile(fullfile(subjderivdir,fmriprep_noisefiles{run}),fullfile(rundir,fmriprep_noisefiles{run}));
-            elseif ~contains([rundirlist.name],derivimgs{run}(1:end-3))
-                copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
-                gunzip(fullfile(rundir,derivimgs{run}));
-                delete(fullfile(rundir,derivimgs{run}));
+            end
+            if ~any(strcmp(rundirfiles,derivimgs{run}(1:end-3)))    % unzipped .nii not staged yet
+                if any(strcmp(rundirfiles,derivimgs{run}))          % .gz already in the run dir
+                    gunzip(fullfile(rundir,derivimgs{run}));        % keep it: that is the dataset's copy
+                else                                                % flat layout, copy it in
+                    copyfile(fullfile(subjderivdir,derivimgs{run}),fullfile(rundir,derivimgs{run}));
+                    gunzip(fullfile(rundir,derivimgs{run}));
+                    delete(fullfile(rundir,derivimgs{run}));
+                end
             end
 
             
@@ -547,7 +609,7 @@ for sub=1:size(derivsubjs,1)
         %% EVENTS FILES
         
         % read events.tsv files
-        O = readtable(fullfile(subjBIDSdir,eventsfiles{run}),'FileType', 'text', 'Delimiter', 'tab');
+        O = readtable(eventsfiles{run},'FileType', 'text', 'Delimiter', 'tab');
         O.trial_type = categorical(O.trial_type);
         
         % sanity check #2: conditions
