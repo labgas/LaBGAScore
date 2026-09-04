@@ -42,6 +42,11 @@ function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
 %  'sidedness': 'one' (default) or 'two'
 %  'tail'    : 'pos' or 'neg' (only if sidedness = 'one')
 %  'parallel' : true (default) or false
+%  'seed'     : base RNG seed for the permutation null. The loop below is a
+%               parfor, so a client-side rng() does NOT reach it; the seed is
+%               applied per iteration via setParforStream. If omitted, one is
+%               drawn and returned in info.seed - the run stays random, but can
+%               be reproduced exactly by passing that seed back.
 %
 % -------------------------------------------------------------------------
 % OUTPUTS
@@ -113,6 +118,7 @@ conn = 26;
 sidedness = 'one';
 tail = 'pos';
 use_parallel = true;
+seed = [];              % base RNG seed; [] draws one and records it in info.seed
 
 for i = 1:2:numel(varargin)
    switch lower(varargin{i})
@@ -128,6 +134,8 @@ for i = 1:2:numel(varargin)
            tail = lower(varargin{i+1});
        case 'parallel'
            use_parallel = varargin{i+1};
+       case 'seed'
+           seed = varargin{i+1};
        otherwise
            error('Unknown option: %s', varargin{i});
    end
@@ -254,7 +262,28 @@ else
    maxWorkers = 0;
 end
 
+% The permutation loop below is a parfor, and its rand/randperm calls run on
+% workers, whose streams a client-side rng() never reaches - so seeding on the
+% client does NOT make this reproducible. setParforStream installs a Threefry
+% substream per iteration instead, so the draws depend only on
+% (seed, stageOffset, iter): not on which worker ran an iteration, how many
+% workers the pool has, or the order iterations complete in.
+%
+% Stage offset 5e6 continues the series used by the ENet/PLSDA/PLSR pipelines
+% (1e6 outer CV, 2e6 permutation, 3e6 bootstrap, 4e6 learning curve), so TFCE
+% never draws from the same substreams as those stages.
+%
+% A seed is always resolved and always returned in info.seed. Behaviour stays
+% random by default - no silent determinism - but every run can be reproduced
+% exactly afterwards by passing back the seed it reports.
+if isempty(seed)
+   seed = randi(2^31-1);
+end
+tfce_stage_offset = 5e6;
+
 parfor (p = 1:nPerm, maxWorkers)
+
+   setParforStream(seed, tfce_stage_offset, p);
 
    % --- permute residuals ---
    switch design
@@ -324,6 +353,8 @@ info.TFCE_null_max = TFCE_null_max;
 info.p_TFCE_global = p_global;
 info.nuisance_rank = nuisance_rank;
 info.tfce_dh = tfce_dh;
+info.seed = seed;                          % rerun with 'seed', info.seed to reproduce
+info.rng_stage_offset = tfce_stage_offset;
 
 end
 
