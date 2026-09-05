@@ -345,17 +345,10 @@ end
 p_vox = (sum(TFCE_perm >= tfce_real,2)+1) ./ (nPerm+1);
 p_global = (sum(TFCE_null_max >= TFCE_real_max)+1)/(nPerm+1);
 
-% Voxelwise FWE from the max-statistic null. Computed by sorting rather than by
-% comparing every voxel against every permutation, since an nPerm x nVox array is
-% 9.4 GB at 10,000 permutations and 235,807 voxels.
-[real_sorted, real_order] = sort(double(tfce_real(:)));
-null_sorted = sort(double(TFCE_null_max(:)));
-% histcounts over edges [-inf; sorted real values; inf]: the cumulative count up
-% to bin i is the number of null maxima strictly below the i-th real value
-bin_counts = histcounts(null_sorted, [-inf; real_sorted; inf]);
-n_null_below = cumsum(bin_counts(1:end-1))';
-p_fwe = zeros(size(real_sorted));
-p_fwe(real_order) = (nPerm - n_null_below + 1) ./ (nPerm + 1);
+% Voxelwise FWE from the max-statistic null. Factored into its own function so
+% the same arithmetic can be applied retrospectively to results saved before FWE
+% was implemented, which store TFCE_real and TFCE_null_max but no p_FWE.
+p_fwe = tfce_fwe_from_null(tfce_real, TFCE_null_max);
 
 p_img = statistic_image('type','p');
 p_img.volInfo = fmri_dat_subj.volInfo;
