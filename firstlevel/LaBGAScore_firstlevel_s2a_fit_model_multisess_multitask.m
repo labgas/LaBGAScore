@@ -1388,6 +1388,15 @@ for sub = 1:size(derivsubjs,1)
                 
                 if ses > 1
                     
+                    % run_idx_DSGN maps this subject's PRESENT runs onto the DSGN condition
+                    % slots, which are numbered for the FULL run set. Cleared first so that a
+                    % branch failing to set it cannot silently reuse the previous run's value
+                    % and pair this run with the wrong condition - which is what a
+                    % 'rund_idx_DSGN' typo did here until 2026-09-07, in sessions where only
+                    % run-4 survived. NaN makes that a loud failure at the DSGN.conditions
+                    % index below instead of a silently mislabelled run.
+                    run_idx_DSGN = NaN;
+
                     if nr_runs{ses} < size(rundirnames,1)
                     
                         if contains(fmriprep_noisefiles{run},'run-1')
@@ -1408,7 +1417,7 @@ for sub = 1:size(derivsubjs,1)
                             end
                         else
                             if run == 1 % run 1-3 missing
-                                rund_idx_DSGN = run + 3 + (size(rundirnames,1)*(ses-1));
+                                run_idx_DSGN = run + 3 + (size(rundirnames,1)*(ses-1));
                             elseif run == 2 % 2 of the previous runs missing
                                 run_idx_DSGN = run + 2 + (size(rundirnames,1)*(ses-1));
                             elseif run == 3 % 1 of the previous runs missing
@@ -1426,6 +1435,15 @@ for sub = 1:size(derivsubjs,1)
                     
                 elseif ses == 1
                     
+                    % run_idx_DSGN maps this subject's PRESENT runs onto the DSGN condition
+                    % slots, which are numbered for the FULL run set. Cleared first so that a
+                    % branch failing to set it cannot silently reuse the previous run's value
+                    % and pair this run with the wrong condition - which is what a
+                    % 'rund_idx_DSGN' typo did here until 2026-09-07, in sessions where only
+                    % run-4 survived. NaN makes that a loud failure at the DSGN.conditions
+                    % index below instead of a silently mislabelled run.
+                    run_idx_DSGN = NaN;
+
                     if nr_runs{ses} < size(rundirnames,1)
                     
                         if contains(fmriprep_noisefiles{run},'run-1')
@@ -1446,7 +1464,7 @@ for sub = 1:size(derivsubjs,1)
                             end
                         else
                             if run == 1 % run 1-3 missing
-                                rund_idx_DSGN = run + 3;
+                                run_idx_DSGN = run + 3;
                             elseif run == 2 % 2 of the previous runs missing
                                 run_idx_DSGN = run + 2;
                             elseif run == 3 % 1 of the previous runs missing
