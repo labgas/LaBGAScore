@@ -325,11 +325,25 @@ atlas = load_atlas('canlab2024');
 
 % THRESHOLDS FOR OUTPUT FMRI_DATA OBJECTS
 unc_p = 0.01;
-unc_k = 50;
-fdr_p = 0.05;
-fdr_k = 25;
-fwe_p = 0.05;
-fwe_k = 25;
+% Extent thresholds for the output fmri_data objects. Split into the plain AUC
+% p-maps and the TFCE-derived maps, because an extent threshold means something
+% different in each.
+%
+% On the AUC maps it is an ordinary display threshold: the map is voxelwise, so
+% requiring a few contiguous voxels suppresses isolated specks.
+%
+% On the TFCE maps it corrects twice. TFCE already integrates cluster extent
+% into the statistic, and the FWE map is already family-wise corrected across
+% voxels, so a k on top removes signal that the correction has already accounted
+% for. The same mistake in the second-level GLM stack was measured on
+% proj_discoverie: k >= 50 removed every one of the 42 surviving TFCE-FWE voxels
+% and reported an empty map. Hence 0 here, deliberately, not "not set".
+unc_k_auc  = 50;
+fdr_k_auc  = 25;
+
+unc_k_tfce = 0;
+fdr_k_tfce = 0;
+fwe_k_tfce = 0;
 
     
 %% ========================================================================
@@ -496,6 +510,30 @@ cfg.verbose = 0;
 %             would be applied to that kernel matrix rather than to the
 %             features. TDT does not guard against this.
 %
+% WHY 'z' AND NOT 'min0max1'. Both scale per voxel, but they are set by very
+% different things: 'z' uses the mean and SD over all subjects, 'min0max1' uses
+% only the two most extreme subjects at that voxel (TDT computes
+% min(data,[],1)/max(data,[],1), i.e. per feature). Measured on proj_cfs
+% con_0003, 134 subjects over 150,630 grey-matter voxels:
+%
+%   range / SD per voxel      median 6.51, p95 8.85  (Gaussian expectation ~5.5)
+%   dropping ONE subject at    median 19.8%, p95 45.7%, max 78.8%
+%     each end shrinks range by
+%   voxels where some subject  12.3%
+%     exceeds |z| > 5
+%
+% So at a typical voxel a single subject at each end sets a fifth of the range
+% that defines the scaling, and at the 95th percentile nearly half of it.
+% min0max1 maps exactly those two subjects to 0 and 1 and compresses everyone
+% else into what is left, which makes the scaling of every voxel depend on its
+% least reliable observations.
+%
+% Note 'min0max1global' is a different thing again, and is the one TDT actually
+% recommends for libsvm: one global min/max, a pure speed device that
+% "produces the same classification results as for unscaled data". It is not a
+% normalisation choice. 'min0max1' gives the fragility of order statistics
+% without that guarantee, and is easy to select by conflating the two names.
+%
 % 'kernel' is the default because searchlight runtime is the binding
 % constraint here. Switch to 'strict' if you want train-only scaling and can
 % afford it.
@@ -505,7 +543,7 @@ switch scaling_regime
     case 'kernel'
         decoding_method  = 'classification_kernel';
         model_parameters = '-s 0 -t 4 -c 1 -b 0 -q';   % C-SVC, precomputed kernel
-        scale_method     = 'min0max1';
+        scale_method     = 'z';
         scale_estimation = 'all';
     case 'strict'
         decoding_method  = 'classification';
@@ -692,7 +730,7 @@ switch analysis_mode
         save_nii(nii, fullfile(tdt_resultsdir,'p_uncorrected.nii'));
         
         [AUC_stat_obj, AUC_fmri_data, AUC_region_obj, AUC_region_table] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_uncorrected.nii'), results.(performance_metric{1}).output, ...
-            mask_obj, atlas, unc_p, ['right-tailed uncorrected p-values based on ' num2str(n_perms) ' permutations'], 'AUC', 'unc', unc_k);
+            mask_obj, atlas, unc_p, ['right-tailed uncorrected p-values based on ' num2str(n_perms) ' permutations'], 'AUC', 'unc', unc_k_auc);
 
 
         %% ========================================================================
@@ -714,7 +752,7 @@ switch analysis_mode
             nii.img = fmap;
             save_nii(nii, fullfile(tdt_resultsdir,'p_FDR.nii'));
             [AUC_stat_obj_fdr, AUC_fmri_data_fdr, AUC_region_obj_fdr, AUC_region_table_fdr] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_FDR.nii'), results.(performance_metric{1}).output, ...
-                mask_obj, atlas, fdr_p, ['right-tailed FDR-corrected p-values based on ' num2str(n_perms) ' permutations'], 'AUC', 'fdr', fdr_k);
+                mask_obj, atlas, fdr_p, ['right-tailed FDR-corrected p-values based on ' num2str(n_perms) ' permutations'], 'AUC', 'fdr', fdr_k_auc);
         else
             % Enforce constraint q >= p (as in SAS proc multtest)
             for j = 1:length(q_fdr)
@@ -727,7 +765,7 @@ switch analysis_mode
             nii.img = fmap;
             save_nii(nii, fullfile(tdt_resultsdir,'q_FDR.nii'));
             [AUC_stat_obj_fdr, AUC_fmri_data_fdr, AUC_region_obj_fdr, AUC_region_table_fdr] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'q_FDR.nii'), results.(performance_metric{1}).output, ...
-                mask_obj, atlas, fdr_p, ['right-tailed FDR-corrected q-values based on ' num2str(n_perms) ' permutations'], 'AUC', 'fdr', fdr_k);
+                mask_obj, atlas, fdr_p, ['right-tailed FDR-corrected q-values based on ' num2str(n_perms) ' permutations'], 'AUC', 'fdr', fdr_k_auc);
         end
 
         %% ========================================================================
@@ -755,15 +793,19 @@ switch analysis_mode
         eps_val = 1e-6;     % prevents zero-plateaus that trigger warnings
 
         % Real t-map
-        real_t_vec = (real_vec - mean(all_perm_results,2)) ./ std(all_perm_results,0,2);
-        real_t_vec = real_t_vec + eps_val;
+        perm_mu = mean(all_perm_results, 2);
+        perm_sd = std(all_perm_results, 0, 2);
+        perm_sd(perm_sd == 0) = 1;   % voxels with no variance across permutations
+
+        real_t_vec = (real_vec - perm_mu) ./ perm_sd + eps_val;
         results.(performance_metric{1}).real_t = real_t_vec;
 
-        % Permutation t-maps matrix: [V x P]
-        perm_t_vec = (all_perm_results - mean(all_perm_results,2)) ./ std(all_perm_results,0,2);
-        perm_t_vec = perm_t_vec + eps_val;
-        results.(performance_metric{1}).perm_t = perm_t_vec;
-
+        % Permutation t-maps are NOT materialised as a [V x P] matrix here.
+        % Doing so cost a second array the size of all_perm_results (for a
+        % 150k-voxel searchlight with 1000 permutations, ~600 MB) and it was
+        % then stored in results and written into res_*.mat as well. The two
+        % vectors below are all that is needed; each permutation's t-map is
+        % formed inside the TFCE loop from its own column, which parfor slices.
         % ========================================================================
         % 1. REAL TFCE MAP
         % ========================================================================
@@ -810,7 +852,11 @@ switch analysis_mode
         parfor p = 1:P
 
            tmpVol = zeros(size(nii.img), 'single');
-           tmpVol(mask_idx(valid_idx)) = single(perm_t_vec(:,p));
+           % t-map for THIS permutation, built from its own column of
+           % all_perm_results (a sliced parfor input, so only that column is
+           % sent to the worker) rather than from a precomputed [V x P] matrix
+           tvec = (all_perm_results(:,p) - perm_mu) ./ perm_sd + eps_val;
+           tmpVol(mask_idx(valid_idx)) = single(tvec);
 
            % Compute TFCE on permutation t-map
            % same integration grid as the observed map
@@ -857,7 +903,7 @@ switch analysis_mode
         save_nii(nii, fullfile(tdt_resultsdir,'p_TFCE_voxelwise.nii'));
         
         [TFCE_stat_obj, TFCE_fmri_data, TFCE_region_obj, TFCE_region_table] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_TFCE_voxelwise.nii'), results.(performance_metric{1}).real_TFCE, ...
-            mask_obj, atlas, unc_p, ['right-tailed uncorrected TFCE p-values based on ' num2str(n_perms) ' permutations'], 'TFCE', 'unc', unc_k);
+            mask_obj, atlas, unc_p, ['right-tailed uncorrected TFCE p-values based on ' num2str(n_perms) ' permutations'], 'TFCE', 'unc', unc_k_tfce);
 
         % ========================================================================
         % 5. FDR-CORRECTED TFCE p-MAP
@@ -880,7 +926,7 @@ switch analysis_mode
             save_nii(nii, fullfile(tdt_resultsdir,'p_TFCE_FDR_voxelwise.nii'));
             
             [TFCE_stat_obj_fdr, TFCE_fmri_data_fdr, TFCE_region_obj_fdr, TFCE_region_table_fdr] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_TFCE_FDR_voxelwise.nii'), results.(performance_metric{1}).real_TFCE, ...
-                mask_obj, atlas, fdr_p, ['right-tailed fdr-corrected TFCE p-values based on ' num2str(n_perms) ' permutations'], 'TFCE', 'fdr', fdr_k);
+                mask_obj, atlas, fdr_p, ['right-tailed fdr-corrected TFCE p-values based on ' num2str(n_perms) ' permutations'], 'TFCE', 'fdr', fdr_k_tfce);
 
         else
             % Enforce constraint q >= p (as in SAS proc multtest)
@@ -896,7 +942,7 @@ switch analysis_mode
             save_nii(nii, fullfile(tdt_resultsdir,'q_TFCE_FDR_voxelwise.nii'));
             
             [TFCE_stat_obj_fdr, TFCE_fmri_data_fdr, TFCE_region_obj_fdr, TFCE_region_table_fdr] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'q_TFCE_FDR_voxelwise.nii'), results.(performance_metric{1}).real_TFCE, ...
-                mask_obj, atlas, fdr_p, ['right-tailed fdr-corrected TFCE q-values based on ' num2str(n_perms) ' permutations'], 'TFCE', 'fdr', fdr_k);
+                mask_obj, atlas, fdr_p, ['right-tailed fdr-corrected TFCE q-values based on ' num2str(n_perms) ' permutations'], 'TFCE', 'fdr', fdr_k_tfce);
 
         end
         
@@ -928,7 +974,7 @@ switch analysis_mode
         save_nii(nii, fullfile(tdt_resultsdir,'p_TFCE_FWE_voxelwise.nii'));
         
         [TFCE_stat_obj_fwe, TFCE_fmri_data_fwe, TFCE_region_obj_fwe, TFCE_region_table_fwe] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_TFCE_FWE_voxelwise.nii'), results.(performance_metric{1}).real_TFCE, ...
-            mask_obj, atlas, fwe_p, ['right-tailed fwe-corrected TFCE p-values (max statistic) based on ' num2str(n_perms) ' permutations'], 'TFCE', 'fwe', fwe_k);
+            mask_obj, atlas, fwe_p, ['right-tailed fwe-corrected TFCE p-values (max statistic) based on ' num2str(n_perms) ' permutations'], 'TFCE', 'fwe', fwe_k_tfce);
         
         fprintf('Voxel-wise TFCE FWE-corrected map saved.\n');
 
