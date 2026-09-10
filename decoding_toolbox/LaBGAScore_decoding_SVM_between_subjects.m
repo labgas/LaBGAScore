@@ -37,11 +37,13 @@
 %      * 'wholebrain'  : decoding using a full-brain mask
 %
 %    Key configuration choices include:
-%      - Linear C-SVC (libsvm -s 0 -t 0), identical for real and permutation runs
+%      - Linear C-SVC, identical for real and permutation runs. Two regimes,
+%        selected by scaling_regime: 'kernel' (classification_kernel, scaling
+%        estimated on all data - TDT's own recommendation, and much faster) or
+%        'strict' (classification, train-only 'across' scaling, no kernel)
 %      - Cross-validation folds balanced across groups, and across any
 %        variable named in cv_strata_vars within group
-%      - Training-only z-scoring (TDT 'across'): parameters estimated on the
-%        training fold and applied to the test fold
+%      - Scaling per scaling_regime, applied identically to real and null
 %      - Explicit handling of unbalanced group sizes
 %      - Performance metric: AUC minus chance
 %
@@ -462,49 +464,65 @@ cfg.files.label = table_combined.labels;
 cfg.results.output = performance_metric;
 cfg.verbose = 0;
 
-% ---- classifier and scaling: defined ONCE, used by the real run AND the
-%      permutations, because they must be the same procedure ---------------
+% ---- classifier and scaling ----------------------------------------------
 %
-% The intent recorded here was "z-scoring training data per fold, apply to
-% test data in same fold ... for cases with different sites, scanner, etc".
-% That is TDT's 'across', not 'separate' ('separate' scales training and test
-% independently of each other). What was actually configured:
+% Defined ONCE and applied to the real run and the permutations alike, because
+% they have to be the same procedure. An earlier version of this script set
+% them separately and they diverged: the real statistic came from a C-SVC
+% while the null was generated with '-s 2', which is ONE-CLASS SVM in libsvm
+% (svm.h: enum {C_SVC, NU_SVC, ONE_CLASS, EPSILON_SVR, NU_SVR}) - a model that
+% never sees the training labels. A null from a different procedure is not the
+% null distribution of the real statistic, so the p-values built on it were
+% invalid. It also set cfg.decoding_method, which is not a TDT field at all
+% (the field is cfg.decoding.method) and so did nothing.
 %
-%   cfg.decoding_method  = 'classification_kernel';   % NOT A TDT FIELD
-%   cfg.scale.estimation = 'separate';
+% TWO VALID COMBINATIONS. They differ in speed, not really in validity:
 %
-% while the permutation branch used
+%   'kernel'  classification_kernel + scaling estimated on all data.
+%             TDT precomputes the kernel once per decoding, which is a large
+%             saving when voxels >> subjects - decisive for wholebrain and
+%             worthwhile for searchlight over many permutations. TDT itself
+%             recommends estimating scaling on all samples, on the grounds
+%             that a simple rescaling carries no category information from
+%             training to test (see decoding_scale_data.m).
 %
-%   cfg.decoding.train.classification.model_parameters = '-s 2 -c 1 -q';
-%   cfg.scale.estimation = 'all';
+%   'strict'  classification + 'across' scaling, i.e. scaling parameters
+%             estimated on the training fold only and applied to the test
+%             fold. Removes even that much dependence on the test data, at
+%             the cost of the kernel speed-up: 'across' CANNOT be combined
+%             with classification_kernel, because under the kernel path
+%             data_train is a struct holding kernel(i_train,i_train) (see
+%             tdt_get_train_test in decoding.m) and TDT's per-fold scaling
+%             would be applied to that kernel matrix rather than to the
+%             features. TDT does not guard against this.
 %
-% Three problems, all silent:
-%
-% 1. 'decoding_method' does not exist in TDT (the field is cfg.decoding.method),
-%    so that line did nothing. The real run behaved as intended only because
-%    TDT's default happens to be classification_kernel.
-% 2. '-s 2' is ONE-CLASS SVM in libsvm (svm.h: enum {C_SVC, NU_SVC, ONE_CLASS,
-%    EPSILON_SVR, NU_SVR}). The null was therefore produced by a model that
-%    ignores the training labels, while the real statistic came from a C-SVC
-%    that uses them. That is not the null distribution of the real statistic,
-%    so every permutation p-value derived from it - uncorrected, FDR and TFCE -
-%    was invalid.
-% 3. Real and null scaled differently (per fold vs globally).
-%
-% Note 'across' CANNOT be combined with classification_kernel: with a kernel,
-% data_train is a struct holding kernel(i_train,i_train) (see tdt_get_train_test
-% in decoding.m), so TDT's per-fold scaling would be applied to the kernel
-% matrix rather than to the features. Train-only scaling therefore costs the
-% kernel speed-up. That trade is deliberate.
-decoding_method  = 'classification';           % C-SVC, no precomputed kernel
-model_parameters = '-s 0 -t 0 -c 1 -b 0 -q';   % linear C-SVC
-scale_method     = 'z';
-scale_estimation = 'across';                   % estimate on train, apply to test
+% 'kernel' is the default because searchlight runtime is the binding
+% constraint here. Switch to 'strict' if you want train-only scaling and can
+% afford it.
+scaling_regime = 'kernel';    % 'kernel' | 'strict'
 
-cfg.decoding.method  = decoding_method;
-cfg.decoding.train.classification.model_parameters = model_parameters;
+switch scaling_regime
+    case 'kernel'
+        decoding_method  = 'classification_kernel';
+        model_parameters = '-s 0 -t 4 -c 1 -b 0 -q';   % C-SVC, precomputed kernel
+        scale_method     = 'min0max1';
+        scale_estimation = 'all';
+    case 'strict'
+        decoding_method  = 'classification';
+        model_parameters = '-s 0 -t 0 -c 1 -b 0 -q';   % C-SVC, linear kernel
+        scale_method     = 'z';
+        scale_estimation = 'across';
+    otherwise
+        error('scaling_regime must be ''kernel'' or ''strict''');
+end
+
+cfg.decoding.method = decoding_method;
+cfg.decoding.train.(decoding_method).model_parameters = model_parameters;
 cfg.scale.method     = scale_method;
 cfg.scale.estimation = scale_estimation;
+
+fprintf('\ndecoding: %s, scaling %s/%s (regime ''%s'')\n', ...
+    decoding_method, scale_method, scale_estimation, scaling_regime);
 
 cfg.plot_selected_voxels = 0;
 
@@ -543,7 +561,7 @@ cfgp.design.function.name = 'make_design_cv';
 % This block previously switched the classifier and the scaling here, which is
 % how the real statistic and its null came to be computed differently.
 cfgp.decoding.method = decoding_method;
-cfgp.decoding.train.classification.model_parameters = model_parameters;
+cfgp.decoding.train.(decoding_method).model_parameters = model_parameters;
 cfgp.scale.method = scale_method;
 cfgp.scale.estimation = scale_estimation;
 
