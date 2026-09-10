@@ -54,6 +54,7 @@ than guessed:
 | `LaBGAScore_decoding_template_xclass_acc` | decoding_toolbox | — | 0 | 1 |
 | `canlabCmap` | figures | — | 0 | 0 |
 | `cluster_surface_plots` | figures | spm12 | 2 | 0 |
+| `plugin_set_figure_size` | figures | — | 0 | 0 |
 | `save_all_open_figures_smart` | figures | — | 0 | 0 |
 | `LaBGAScore_firstlevel_find_events` | firstlevel | — | 0 | 0 |
 | `LaBGAScore_firstlevel_refit_motion_comparison` | firstlevel | spm12 | 8 | 1 |
@@ -397,6 +398,12 @@ No external dependencies.
 
 - `spm_read_vols` — `ambiguous_within_repo`, 2 candidates
 - `spm_vol` — `ambiguous_within_repo`, 2 candidates
+
+### `plugin_set_figure_size`
+
+`figures/plugin_set_figure_size.m`
+
+No external dependencies.
 
 ### `save_all_open_figures_smart`
 

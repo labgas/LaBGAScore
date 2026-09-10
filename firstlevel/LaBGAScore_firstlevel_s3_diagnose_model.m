@@ -76,11 +76,20 @@ if LaBGAS_options.display.plotmontages
             o3 = canlab_results_fmridisplay([],'outline','linewidth',0.5,'montagetype','compact','overlay','mni_icbm152_t1_tal_nlin_sym_09a_brainonly.img');
             o3 = addblobs(o3,tmapsobj{tmap},'splitcolor',{[.1 .8 .8] [.1 .1 .8] [.9 .4 0] [1 1 0]});
             [o3,title_handle] = title_montage(o3,wh_montage,figtitle);
-            set(title_handle,'FontSize',18);
             fighan = activate_figures(o3);
             f3 = fighan{1};
             f3.Tag = figtitle;
-            f3.WindowState = 'maximized';
+            % Size the canvas and scale the title with plugin_set_figure_size
+            % (LaBGAScore/figures), the same helper the second-level templates
+            % use, instead of 'maximized' plus a hardcoded 18 pt title.
+            %
+            % 'maximized' is a NO-OP without a window manager: headless the
+            % figure stays at MATLAB's default 560x420, so the montage came out
+            % on a small canvas with a title sized for a large one. The explicit
+            % FontSize 18 made that worse and is dropped - titlescale (default
+            % 2/3) sizes the title relative to the canvas, which is what the
+            % second-level reports settled on after the same complaint.
+            plugin_set_figure_size('fig', f3);
             drawnow,snapnow
             close(f3)
             clear figtitle o3 title_handle fighan f3

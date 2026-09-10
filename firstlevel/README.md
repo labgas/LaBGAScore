@@ -336,11 +336,12 @@ mirrors what
 already uses at first level: `<modeldir>/provenance/`, not the `results/notes` tree it uses
 at second level, because first-level models have no `results/` directory.
 
-`s2`/`s2a` pass `maxHeight 800` / `maxWidth 1600`, keeping report figures the size they have
-always been here. `LaBGAScore_prov_publish` does not set them by default, because `publish()`
-applies them by resizing the PNG on disk — detail is lost, not merely displayed smaller.
-Drop those two arguments at the call site for full-resolution montages at the cost of larger
-files.
+`s2`/`s2a` do **not** pass `maxHeight`/`maxWidth`, matching the second-level scripts.
+`LaBGAScore_prov_publish` does not set them by default either, because `publish()` applies
+them by resizing the PNG on disk — detail is lost, not merely displayed smaller. They used to
+be passed here as `800`/`1600`; that became inert once the figures were sized by
+`plugin_set_figure_size` (12 × 7.5 in is 864 × 540 px, well inside those caps), and leaving
+them in would only have silently downsampled a larger figure someone set later.
 
 This requires **LaBGAScore itself on the MATLAB path with subfolders**, since
 `prov_publish` lives in `clean/`. Full detail in
@@ -394,6 +395,15 @@ side-effect-free script.
 
 - **`githubrootdir` is hardcoded** to `/data/master_github_repos` in `s1`/`s1a` and
   `prep_s0`. Change it if your clones live elsewhere.
+- **Figure sizing is shared with second level.** The design plots in `s2`/`s2a` and the
+  montages in `s3` are sized by
+  [`plugin_set_figure_size`](../figures/plugin_set_figure_size.m) (LaBGAScore `figures/`),
+  the same helper the second-level templates use, to a 12 × 7.5 inch canvas. It replaced
+  `WindowState 'maximized'`, which is a **no-op without a window manager**: headless — now
+  the default way to run these scripts — the figure simply stayed at MATLAB's default
+  560 × 420, so panels came out cramped and point-based fonts rendered relatively too large.
+  Montage titles are scaled by the same helper (`titlescale`, default 2/3) rather than
+  carrying an explicit 18 pt, which is what the second-level reports settled on.
 - **Report figures depend on how you run the script.** Headless — the default — `publish()`
   *prints* figures, so no display setting affects them and their size is not capped by any
   screen. Run interactively in X2go only for higher-resolution figures (72 dpi headless

@@ -718,7 +718,7 @@ for sub = 1:size(derivsubjs,1)
 
                 [Xfull,~,~,hrf_full] = onsets2fmridesign(ons_durs,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name);    
 
-                f1 = figure('WindowState','maximized');
+                f1 = figure;
 
                 subplot(2,1,1);
                 plotDesign(ons_durs,[],DSGN.tr,'samefig','basisset',hrf_name);
@@ -757,6 +757,13 @@ for sub = 1:size(derivsubjs,1)
                 ax2.TitleHorizontalAlignment = 'left';
 
                 sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
+
+                % size the canvas explicitly rather than relying on 'maximized', which is a
+                % no-op without a window manager: headless the figure stays at MATLAB's
+                % default 560x420 and the design panels come out cramped, with point-based
+                % fonts rendering relatively too large. Called here, after all plotting, as
+                % plugin_set_figure_size requires.
+                plugin_set_figure_size('fig', f1);
 
                 print(f1,fullfile(runmodeldir,['design_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
@@ -868,7 +875,7 @@ for sub = 1:size(derivsubjs,1)
                             case 'parametric_singleregressor'
                                 [X_pmod_raw,~,~,hrf_pmod_raw] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_singleregressor',pmods_raw);
 
-                                f2 = figure('WindowState','maximized');
+                                f2 = figure;
 
                                 colors = get(gcf, 'DefaultAxesColorOrder');
                                 colors = mat2cell(colors, ones(size(colors, 1), 1), 3);
@@ -914,6 +921,13 @@ for sub = 1:size(derivsubjs,1)
 
                                 sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
 
+                                % size the canvas explicitly rather than relying on 'maximized', which is a
+                                % no-op without a window manager: headless the figure stays at MATLAB's
+                                % default 560x420 and the design panels come out cramped, with point-based
+                                % fonts rendering relatively too large. Called here, after all plotting, as
+                                % plugin_set_figure_size requires.
+                                plugin_set_figure_size('fig', f2);
+
                                 print(f2,fullfile(runmodeldir,['design_',LaBGAS_options.pmods.pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
                                 clear f2 ax1 ax2
@@ -922,7 +936,7 @@ for sub = 1:size(derivsubjs,1)
                                 [X_unmod,delta_unmod,delta_hires_unmod,hrf_unmod] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name);  
                                 [X_pmod_run,delta,delta_hires,hrf_pmod] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_singleregressor',pmods_demean_cond); % unclear what to add as first column in matrix following 'parametric_standard' option
 
-                                f2 = figure('WindowState','maximized');
+                                f2 = figure;
 
                                 colors = get(gcf, 'DefaultAxesColorOrder');
                                 colors = mat2cell(colors, ones(size(colors, 1), 1), 3);
@@ -996,6 +1010,13 @@ for sub = 1:size(derivsubjs,1)
                                 ax3.TitleHorizontalAlignment = 'left';
 
                                 sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
+
+                                % size the canvas explicitly rather than relying on 'maximized', which is a
+                                % no-op without a window manager: headless the figure stays at MATLAB's
+                                % default 560x420 and the design panels come out cramped, with point-based
+                                % fonts rendering relatively too large. Called here, after all plotting, as
+                                % plugin_set_figure_size requires.
+                                plugin_set_figure_size('fig', f2);
 
                                 print(f2,fullfile(runmodeldir,['design_',LaBGAS_options.pmods.pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
@@ -1572,7 +1593,7 @@ for sub = 1:size(derivsubjs,1)
 
                     [Xfull,~,~,hrf_full] = onsets2fmridesign(ons_durs,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name);    
 
-                    f1 = figure('WindowState','maximized');
+                    f1 = figure;
 
                     subplot(2,1,1);
                     plotDesign(ons_durs,[],DSGN.tr,'samefig','basisset',hrf_name);
@@ -1616,6 +1637,13 @@ for sub = 1:size(derivsubjs,1)
                     % made, which is the default. The run dir also went into the filename
                     % with a leading space.
                     sgtitle([derivsubjs{sub},' ses-0',num2str(ses),' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
+                    % size the canvas explicitly rather than relying on 'maximized', which is a
+                    % no-op without a window manager: headless the figure stays at MATLAB's
+                    % default 560x420 and the design panels come out cramped, with point-based
+                    % fonts rendering relatively too large. Called here, after all plotting, as
+                    % plugin_set_figure_size requires.
+                    plugin_set_figure_size('fig', f1);
+
                     print(f1,fullfile(runmodeldir,['design_',derivsubjs{sub},'_ses-0',num2str(ses),'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
                     clear f1 ax1 ax2
@@ -1735,7 +1763,7 @@ for sub = 1:size(derivsubjs,1)
                                     
                                     [X_pmod_raw,~,~,hrf_pmod_raw] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_singleregressor',pmods_raw);
 
-                                    f2 = figure('WindowState','maximized');
+                                    f2 = figure;
 
                                     colors = get(gcf, 'DefaultAxesColorOrder');
                                     colors = mat2cell(colors, ones(size(colors, 1), 1), 3);
@@ -1781,6 +1809,13 @@ for sub = 1:size(derivsubjs,1)
 
                                     sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
 
+                                    % size the canvas explicitly rather than relying on 'maximized', which is a
+                                    % no-op without a window manager: headless the figure stays at MATLAB's
+                                    % default 560x420 and the design panels come out cramped, with point-based
+                                    % fonts rendering relatively too large. Called here, after all plotting, as
+                                    % plugin_set_figure_size requires.
+                                    plugin_set_figure_size('fig', f2);
+
                                     print(f2,fullfile(runmodeldir,['design_',LaBGAS_options.pmods.pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
                                     clear f2 ax1 ax2
@@ -1790,7 +1825,7 @@ for sub = 1:size(derivsubjs,1)
                                     [X_unmod,delta_unmod,delta_hires_unmod,hrf_unmod] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name);  
                                     [X_pmod_run,delta,delta_hires,hrf_pmod] = onsets2fmridesign(ons_durs_int,DSGN.tr,nii_hdr.tdim .*DSGN.tr, hrf_name,'parametric_singleregressor',pmods_demean_cond); % unclear what to add as first column in matrix following 'parametric_standard' option
 
-                                    f2 = figure('WindowState','maximized');
+                                    f2 = figure;
 
                                     colors = get(gcf, 'DefaultAxesColorOrder');
                                     colors = mat2cell(colors, ones(size(colors, 1), 1), 3);
@@ -1864,6 +1899,13 @@ for sub = 1:size(derivsubjs,1)
                                     ax3.TitleHorizontalAlignment = 'left';
 
                                     sgtitle([derivsubjs{sub},' ',subjrundirnames{run}],'Color','red','FontSize',18, 'FontWeight','bold');
+
+                                    % size the canvas explicitly rather than relying on 'maximized', which is a
+                                    % no-op without a window manager: headless the figure stays at MATLAB's
+                                    % default 560x420 and the design panels come out cramped, with point-based
+                                    % fonts rendering relatively too large. Called here, after all plotting, as
+                                    % plugin_set_figure_size requires.
+                                    plugin_set_figure_size('fig', f2);
 
                                     print(f2,fullfile(runmodeldir,['design_',LaBGAS_options.pmods.pmod_type,'_',derivsubjs{sub},'_',subjrundirnames{run},'.png']),'-dpng','-r300');
 
@@ -1959,11 +2001,14 @@ for sub = 1:size(derivsubjs,1)
         %       adding a Provenance section to the html report recording the commit
         %       of every dependency this run reached, plus a .tsv/.mat copy in
         %       subjfirstprovdir - see clean/README_provenance.md
-        %       maxHeight/maxWidth are passed explicitly to keep report figures the
-        %       size they have always been here; drop them for full-resolution
-        %       montages at the cost of larger files
+        %       maxHeight/maxWidth are deliberately NOT passed, matching the
+        %       second-level scripts. publish() honours them by resizing the .png
+        %       on disk, so any detail they remove is gone permanently. They were
+        %       inert here anyway once the figures are sized by
+        %       plugin_set_figure_size: 12 x 7.5 in is 864 x 540 px, comfortably
+        %       inside the 1600 x 800 they used to impose.
         LaBGAScore_prov_publish('LaBGAScore_firstlevel_s3_diagnose_model.m',subjfirstdiagnosedir, ...
-            'savedir',subjfirstprovdir,'maxHeight',800,'maxWidth',1600);
+            'savedir',subjfirstprovdir);
         delete('High_pass_filter_analysis.png','Variance_Inflation.png','LaBGAScore_firstlevel_s3_diagnose_model.png'); % getting rid of some redundant output images due to the use of publish()
         
     end

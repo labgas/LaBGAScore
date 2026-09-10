@@ -112,7 +112,7 @@ back at display size. Any figure as wide as the screen is flagged `display-limit
 the machine rather than the script decided its size and the report will look different
 elsewhere.
 
-This is also why `plugin_set_figure_size` in CANlab_help_examples was changed to fit its
+This is also why `plugin_set_figure_size` (`figures/`) was changed to fit its
 request to the display, preserving aspect ratio. Previously its fixed 16x10 inch default
 needed 2128x1330 px, did not fit the LaBGAS server's 1718x1360 screen, and was captured at
 1718x1254 - **aspect 1.37 instead of 1.60**, i.e. exactly the `WindowState maximized`
