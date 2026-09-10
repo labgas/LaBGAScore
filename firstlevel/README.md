@@ -394,13 +394,14 @@ side-effect-free script.
 
 - **`githubrootdir` is hardcoded** to `/data/master_github_repos` in `s1`/`s1a` and
   `prep_s0`. Change it if your clones live elsewhere.
-- **Report figures are captured from the screen.** `publish()` grabs figures as they are
-  drawn, so your session geometry and display DPI decide how they come out.
-  `clean/LaBGAScore_check_display.m` tells you whether the current X2go session can produce
-  a full-size figure, and the recommended settings per screen are under *Set up your X2go
-  display for publishing figures* in
-  [`LaBGAS_fMRI_analysis_workflow.md`](../LaBGAS_fMRI_analysis_workflow.md). Every report
-  records the screen geometry, DPI and resulting figure dimensions — see
+- **Report figures depend on how you run the script.** Headless — the default — `publish()`
+  *prints* figures, so no display setting affects them and their size is not capped by any
+  screen. Run interactively in X2go only for higher-resolution figures (72 dpi headless
+  against 96–144); there `publish()` *captures* figures from the screen, so session geometry
+  and DPI decide how they come out, `clean/LaBGAScore_check_display.m` tells you whether your
+  session can produce a full-size figure, and the recommended settings per screen are in
+  section 2 of [`LaBGAS_fMRI_analysis_workflow.md`](../LaBGAS_fMRI_analysis_workflow.md).
+  Every report records the screen geometry, DPI and resulting figure dimensions — see
   [Provenance](#provenance).
 - **No tests.** Static analysis over this folder only, from the MATLAB prompt:
   ```

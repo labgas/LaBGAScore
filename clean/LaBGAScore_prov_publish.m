@@ -74,19 +74,27 @@ function htmlfile = LaBGAScore_prov_publish(scriptname, htmlsavedir, varargin)
 %
 % *DISPLAY SETTINGS*
 %
-% publish() captures figures from the screen, so your X2go window size and
-% display DPI decide how figures in the report come out. The header of every
-% report produced here records both, plus the resulting figure dimensions,
-% and flags figures whose size was set by the display rather than by the
-% script. Run LaBGAScore_check_display to check your session, and see
-% "Set up your X2go display for publishing figures" in
-% LaBGAS_fMRI_analysis_workflow.md for the recommended settings per screen.
+% This matters for INTERACTIVE (X2go) runs only. There, publish() captures
+% figures from the screen, so your window size and display DPI decide how
+% figures in the report come out; run LaBGAScore_check_display to check your
+% session, and see section 2 of LaBGAS_fMRI_analysis_workflow.md for the
+% recommended settings per screen.
+%
+% Headless - the default way to run these scripts - publish() PRINTS figures
+% instead, so no screen setting affects them and figure size is not capped by
+% the 1024x768 / 72 dpi virtual screen headless MATLAB reports. The only cost
+% is pixel density: 72 dpi against 96-144 in a graphical session.
+%
+% The header of every report produced here records the screen geometry and DPI,
+% plus the resulting figure dimensions, and flags figures whose size was set by
+% the display rather than by the script.
 %
 %
 % *SEE ALSO*
 %
 % LaBGAScore_prov_snapshot, LaBGAScore_prov_resolve_retrospective,
-% LaBGAScore_check_display, plugin_set_figure_size (CANlab_help_examples)
+% LaBGAScore_check_display, LaBGAScore_run_reports,
+% labgascore_run_headless.sh, plugin_set_figure_size (CANlab_help_examples)
 %
 % -------------------------------------------------------------------------
 %
