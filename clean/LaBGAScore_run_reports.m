@@ -125,6 +125,23 @@ if ~exist(htmlsavedir, 'dir')
 end
 
 % Fail before doing an hour of work, not after.
+
+% MATLAB truncates identifiers at namelengthmax (63). A script whose name is
+% longer than that cannot be called, and the failure is confusing: publish()
+% reports "Unrecognized function or variable" naming the TRUNCATED script, which
+% looks like a path problem rather than a naming one. Copying template names
+% into a study prefix reaches this easily -
+% cfs_secondlevel_m2a_s5_prep_3_calc_univariate_contrast_maps_and_save is 68.
+toolong = scriptnames(cellfun(@(s) numel(s) > namelengthmax, scriptnames));
+if ~isempty(toolong)
+    msg = sprintf('script name(s) longer than namelengthmax (%d): ', namelengthmax);
+    for k = 1:numel(toolong)
+        msg = [msg sprintf('\n  %s (%d chars, truncates to %s)', ...
+            toolong{k}, numel(toolong{k}), toolong{k}(1:namelengthmax))]; %#ok<AGROW>
+    end
+    error('LaBGAScore_run_reports:nametoolong', '%s', msg);
+end
+
 missing = scriptnames(cellfun(@(s) isempty(which(s)), scriptnames));
 if ~isempty(missing)
     error('LaBGAScore_run_reports:notonpath', ...
