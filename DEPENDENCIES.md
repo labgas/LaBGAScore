@@ -1,11 +1,9 @@
 # LaBGAScore — dependency overview
 
-Core scripts and templates for the LaBGAS standard neuroimaging analysis workflow.
-
 > **Generated file — do not edit.** Regenerate with
 > `LaBGAScore_dep_report('/data/master_github_repos/LaBGAScore')`
 > (see `clean/LaBGAScore_dep_report.m` in LaBGAScore).
-> Generated 2026-09-01 by MATLAB 2021a.
+> Generated 2026-09-10 by MATLAB 2021a.
 
 This document records which **external** functions each file calls and which
 repository those live in. Calls that resolve back into this repository, and
@@ -49,13 +47,16 @@ than guessed:
 | `LaBGAScore_prov_publish` | clean | — | 0 | 1 |
 | `LaBGAScore_prov_resolve_retrospective` | clean | — | 0 | 0 |
 | `LaBGAScore_prov_snapshot` | clean | — | 0 | 1 |
+| `LaBGAScore_run_reports` | clean | — | 0 | 0 |
 | `LaBGAScore_smart_parallel_pool_setup` | clean | — | 0 | 0 |
 | `LaBGAScore_cosmomvpa_searchlight_rsa` | cosmomvpa | CANlab_help_examples, CanlabCore, CoSMoMVPA | 25 | 1 |
-| `LaBGAScore_decoding_SVM_between_subjects` | decoding_toolbox | CANlab_help_examples, CanlabCore, CoSMoMVPA, spm12 | 10 | 1 |
+| `LaBGAScore_decoding_SVM_between_subjects` | decoding_toolbox | CANlab_help_examples, CanlabCore, spm12 | 8 | 1 |
 | `LaBGAScore_decoding_template_xclass_acc` | decoding_toolbox | — | 0 | 1 |
 | `canlabCmap` | figures | — | 0 | 0 |
 | `cluster_surface_plots` | figures | spm12 | 2 | 0 |
 | `save_all_open_figures_smart` | figures | — | 0 | 0 |
+| `LaBGAScore_firstlevel_find_events` | firstlevel | — | 0 | 0 |
+| `LaBGAScore_firstlevel_refit_motion_comparison` | firstlevel | spm12 | 8 | 1 |
 | `LaBGAScore_firstlevel_s1_options_dsgn_struct` | firstlevel | — | 0 | 0 |
 | `LaBGAScore_firstlevel_s1a_options_dsgn_multisess_multitask` | firstlevel | — | 0 | 0 |
 | `LaBGAScore_firstlevel_s1b_fit_phMRI_model` | firstlevel | spm12 | 4 | 1 |
@@ -65,11 +66,12 @@ than guessed:
 | `LaBGAScore_firstlevel_s3_diagnose_model` | firstlevel | CanlabCore | 11 | 11 |
 | `LaBGAScore_firstlevel_s3b_phMRI_signature_responses` | firstlevel | CanlabCore | 3 | 1 |
 | `LaBGAScore_firstlevel_s3c_phMRI_neurotransmitter_maps` | firstlevel | CanlabCore, canlab_single_trials | 5 | 3 |
+| `LaBGAScore_firstlevel_task_motion_diagnostics` | firstlevel | — | 0 | 0 |
 | `canlab_glm_subject_levels_old` | firstlevel | CanlabCore, spm12 | 5 | 2 |
 | `canlab_glm_subject_levels_run1subject_old` | firstlevel | CanlabCore, spm12 | 10 | 11 |
 | `LaBGAScore_prep_graphvar_input_from_conn` | graphvar | CanlabCore | 3 | 2 |
 | `LaBGAScore_juspace_corr_behav` | juspace | CANlab_help_examples | 1 | 0 |
-| `LaBGAScore_prep_juspace_input` | juspace | CANlab_help_examples, CanlabCore | 8 | 4 |
+| `LaBGAScore_prep_juspace_input` | juspace | CANlab_help_examples, CanlabCore | 7 | 4 |
 | `LaBGAScore_mrs_osprey_jobfile_GE` | mrs | — | 0 | 0 |
 | `LaBGAScore_mrs_osprey_jobfile_Philips` | mrs | — | 0 | 0 |
 | `LaBGAScore_mrs_osprey_single_sess_jobfile_GE` | mrs | — | 0 | 0 |
@@ -116,6 +118,8 @@ than guessed:
 | `LaBGAScore_prep_s2_smooth` | prep | spm12 | 2 | 1 |
 | `LaBGAScore_prep_s2_smooth_multisess` | prep | spm12 | 2 | 1 |
 | `ENet_neuroimaging_pipeline` | secondlevel | CanlabCore | 1 | 0 |
+| `LaBGAScore_region_table` | secondlevel | CanlabCore | 6 | 0 |
+| `LaBGAScore_region_table_safe` | secondlevel | — | 0 | 0 |
 | `LaBGAScore_secondlevel_MS_mat_pipeline` | secondlevel | spm12 | 1 | 0 |
 | `LaBGAScore_secondlevel_extractparcels_sessions` | secondlevel | CANlab_help_examples, CanlabCore | 4 | 1 |
 | `LaBGAScore_secondlevel_mvpa_beta_maps_conn` | secondlevel | CanlabCore, ooFmriDataObjML | 18 | 16 |
@@ -154,6 +158,7 @@ than guessed:
 | `selectENetHyperparams` | secondlevel | CanlabCore | 1 | 0 |
 | `setParforStream` | secondlevel | — | 0 | 0 |
 | `swapWithinSubjectLabels` | secondlevel | — | 0 | 0 |
+| `tfce_fwe_from_null` | secondlevel | — | 0 | 0 |
 | `tfce_one_fmri_dat` | secondlevel | — | 0 | 0 |
 | `tfce_transform_3d` | secondlevel | — | 0 | 0 |
 | `tfce_volume` | secondlevel | — | 0 | 0 |
@@ -168,11 +173,11 @@ than guessed:
 
 | Repository | Call edges | Distinct functions |
 |---|---:|---:|
-| CanlabCore | 635 | 53 |
-| spm12 | 179 | 29 |
+| CanlabCore | 640 | 58 |
+| spm12 | 193 | 30 |
 | ooFmriDataObjML | 18 | 11 |
-| CoSMoMVPA | 17 | 17 |
 | osprey | 16 | 8 |
+| CoSMoMVPA | 15 | 15 |
 | CANlab_help_examples | 9 | 2 |
 | CanlabPrivate | 6 | 2 |
 | canlab_single_trials | 4 | 2 |
@@ -301,6 +306,12 @@ No external dependencies.
 
 No external dependencies.
 
+### `LaBGAScore_run_reports`
+
+`clean/LaBGAScore_run_reports.m`
+
+No external dependencies.
+
 ### `LaBGAScore_smart_parallel_pool_setup`
 
 `clean/LaBGAScore_smart_parallel_pool_setup.m`
@@ -359,11 +370,6 @@ No external dependencies.
 - `load_atlas`
 - `train` *(@algorithm)* — `dotcall`
 
-**CoSMoMVPA**
-
-- `load_nii`
-- `save_nii`
-
 **spm12**
 
 - `decoding`
@@ -397,6 +403,27 @@ No external dependencies.
 `figures/save_all_open_figures_smart.m`
 
 No external dependencies.
+
+### `LaBGAScore_firstlevel_find_events`
+
+`firstlevel/functions/LaBGAScore_firstlevel_find_events.m`
+
+No external dependencies.
+
+### `LaBGAScore_firstlevel_refit_motion_comparison`
+
+`firstlevel/functions/LaBGAScore_firstlevel_refit_motion_comparison.m`
+
+**spm12**
+
+- `cfg_dep` *(@cfg_dep)*
+- `contrasts` *(@mardo)* — `dotcall`
+- `spm` — `ambiguous_within_repo`, 2 candidates
+- `spm_invTcdf` — `ambiguous_within_repo`, 2 candidates
+- `spm_jobman`
+- `spm_read_vols` — `ambiguous_within_repo`, 2 candidates
+- `spm_vol` — `ambiguous_within_repo`, 2 candidates
+- `spm_write_vol` — `ambiguous_within_repo`, 3 candidates
 
 ### `LaBGAScore_firstlevel_s1_options_dsgn_struct`
 
@@ -530,6 +557,12 @@ No external dependencies.
 - `fmri_data_st` *(@fmri_data_st)*
 - `get_wh_image` *(@fmri_data_st)* — `dotcall`
 
+### `LaBGAScore_firstlevel_task_motion_diagnostics`
+
+`firstlevel/functions/LaBGAScore_firstlevel_task_motion_diagnostics.m`
+
+No external dependencies.
+
 ### `canlab_glm_subject_levels_old`
 
 `firstlevel/functions/canlab_glm_subject_levels_old.m`
@@ -596,7 +629,6 @@ No external dependencies.
 - `apply_mask` *(@image_vector)*
 - `fmri_data` *(@fmri_data)*
 - `fmri_mask_image` *(@fmri_mask_image)*
-- `get_wh_image` *(@image_vector)*
 - `load_atlas`
 - `resample_space` *(@image_vector)* — `ambiguous_within_repo`, 2 candidates
 - `threshold` *(@atlas)* — `dotcall`, 4 candidates
@@ -975,6 +1007,25 @@ No external dependencies.
 
 - `training` *(@chain)* — `ambiguous_within_repo`, 38 candidates
 
+### `LaBGAScore_region_table`
+
+`secondlevel/functions/LaBGAScore_region_table.m`
+
+**CanlabCore**
+
+- `autolabel_regions_using_atlas` *(@region)*
+- `canlab_print_legend_text`
+- `cluster_names`
+- `cluster_table`
+- `posneg_separate` *(@region)*
+- `print_publication_table` *(@image_vector)*
+
+### `LaBGAScore_region_table_safe`
+
+`secondlevel/functions/LaBGAScore_region_table_safe.m`
+
+No external dependencies.
+
 ### `LaBGAScore_secondlevel_MS_mat_pipeline`
 
 `secondlevel/scripts/LaBGAScore_secondlevel_MS_mat_pipeline.m`
@@ -1293,6 +1344,12 @@ No external dependencies.
 ### `swapWithinSubjectLabels`
 
 `secondlevel/functions/swapWithinSubjectLabels.m`
+
+No external dependencies.
+
+### `tfce_fwe_from_null`
+
+`secondlevel/functions/tfce_fwe_from_null.m`
 
 No external dependencies.
 

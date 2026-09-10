@@ -37,6 +37,9 @@ Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlev
 | `LaBGAScore_smart_parallel_pool_setup.m` (`clean/`) | `c2a_second_level_regression.m`, `prep_3a_run_second_level_regression_and_save.m`, `prep_3c_run_SVMs_on_contrasts_masked.m` | Sets up the parallel pool before bootstrapping/permutation |
 | `group_tfce_from_subject_maps.m` (`secondlevel/functions/`) | `prep_3a_run_second_level_regression_and_save.m` | Group TFCE from subject-level maps |
 | `thresholded_fmri_data_from_statistic_image.m` (`secondlevel/functions/`) | `prep_3a_run_second_level_regression_and_save.m`, `c2_SVM_contrasts_masked.m` | Thresholded `fmri_data` object from a `statistic_image` |
+| `tfce_fwe_from_null.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | Max-statistic FWE p-values from a saved TFCE permutation null |
+| `LaBGAScore_region_table.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | `@region/table` vendored without the large-value clipping |
+| `LaBGAScore_region_table_safe.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | Three-output wrapper so an undisplayable contrast does not abort the report |
 
 The first two rows above are call-graph verified; the two `atlas_mask_tools` entries are
 reached through option strings (`atlasname_glm`, `roi_names`) rather than direct calls, so

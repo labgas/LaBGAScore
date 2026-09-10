@@ -32,6 +32,18 @@ function IDX = LaBGAScore_dep_build_index(varargin)
 % * 'githubrootdir' default '/data/master_github_repos'
 % * 'extraroots'    cellstr appended to the default roots, default
 %                   {'/opt/KUL_apps/spm12'}
+% * 'excluderoots'  repository names under githubrootdir to leave OUT of the
+%                   default roots, default {'ExploreASL'}. ExploreASL vendors
+%                   a modified copy of SPM in External/SPMmodified (786 spm_*
+%                   files), which makes 1296 of SPM's 4714 callable names
+%                   ambiguous between two repositories. The resolver then
+%                   declines to attribute them, because its evidence must be
+%                   repo-unique - so indexing ExploreASL collapses the SPM
+%                   record from 193 edges to 9 and leaks 3 ExploreASL edges
+%                   into a report where nothing calls it. Nothing in the
+%                   LaBGAS MATLAB workflow calls ExploreASL; it is an ASL
+%                   pipeline that happens to share the clone directory. Pass
+%                   {} to index it anyway.
 % * 'cachefile'     default <clean dir>/.dep_index_<hostname>.mat
 % * 'rebuild'       logical, force a rebuild, default false
 % * 'print'         logical, default true
@@ -80,6 +92,7 @@ p = inputParser;
 p.addParameter('roots', {}, @(x) iscell(x) || ischar(x) || isstring(x));
 p.addParameter('githubrootdir', '/data/master_github_repos', @(x) ischar(x) || isstring(x));
 p.addParameter('extraroots', {'/opt/KUL_apps/spm12'}, @(x) iscell(x) || ischar(x) || isstring(x));
+p.addParameter('excluderoots', {'ExploreASL'}, @(x) iscell(x) || ischar(x) || isstring(x));
 p.addParameter('cachefile', '', @(x) ischar(x) || isstring(x));
 p.addParameter('rebuild', false, @islogical);
 p.addParameter('print', true, @islogical);
@@ -89,7 +102,7 @@ opt = p.Results;
 githubrootdir = char(opt.githubrootdir);
 
 if isempty(opt.roots)
-    roots = local_default_roots(githubrootdir, cellstr(opt.extraroots));
+    roots = local_default_roots(githubrootdir, cellstr(opt.extraroots), cellstr(opt.excluderoots));
 else
     roots = cellstr(opt.roots);
 end
@@ -249,8 +262,9 @@ end
 %% LOCAL FUNCTIONS
 % -------------------------------------------------------------------------
 
-function roots = local_default_roots(githubrootdir, extraroots)
-% every git repo directly under githubrootdir, plus the extras, plus MATLAB
+function roots = local_default_roots(githubrootdir, extraroots, excluderoots)
+% every git repo directly under githubrootdir, minus excluderoots, plus the
+% extras, plus MATLAB
 
 roots = {};
 
@@ -259,6 +273,7 @@ d = d([d.isdir]);
 d = d(~startsWith({d.name},'.'));
 
 for k = 1:numel(d)
+    if any(strcmpi(d(k).name, excluderoots)), continue, end
     thispath = fullfile(githubrootdir, d(k).name);
     if isfolder(fullfile(thispath,'.git')) || isfile(fullfile(thispath,'.git'))
         roots{end+1} = thispath; %#ok<AGROW>
