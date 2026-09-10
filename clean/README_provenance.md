@@ -61,11 +61,18 @@ model's `results/notes/`. No script templates need editing — deliberately, sin
 templates live partly in the sibling repo and every study has its own renamed copies
 that would never pick up such an edit.
 
+In practice you rarely call it by hand: `LaBGAScore_run_reports` and the
+`labgascore_run_headless.sh` wrapper both publish through it, and additionally check that
+the run **actually worked** (see below).
+
 ### Figure size and screen size
 
-> **Setting up your session:** see *"Set up your X2go display for publishing figures"* in
-> [`LaBGAS_fMRI_analysis_workflow.md`](../LaBGAS_fMRI_analysis_workflow.md) for recommended
-> X2go settings per screen size, and run `LaBGAScore_check_display` to check your own.
+> **This applies to interactive X2go sessions only.** Headless is the default way to run
+> scripts, and there `publish` prints figures rather than capturing them from the screen, so
+> no screen setting affects them. See section 2 of
+> [`LaBGAS_fMRI_analysis_workflow.md`](../LaBGAS_fMRI_analysis_workflow.md); for the
+> interactive route it also gives recommended X2go settings per screen size, and
+> `LaBGAScore_check_display` checks your own session.
 
 
 `LaBGAScore_prov_publish` deliberately does **not** set `maxWidth`/`maxHeight`, so figures
@@ -120,6 +127,39 @@ To record provenance outside `publish`, call the snapshot directly:
 ```matlab
 PROV = LaBGAScore_prov_snapshot('scriptname', 'my_script', 'savedir', notesdir);
 ```
+
+## Knowing whether the run actually worked
+
+Provenance records *what* ran. It does not tell you whether the run **succeeded** — and
+that is not obvious, because **`publish` catches a script's error into the HTML report and
+then returns normally.** No exception is raised, the exit status is 0, and a report file
+appears. A chain of scripts can therefore report success from beginning to end while one of
+them died partway, sometimes after an hour of computation and before anything was saved.
+
+`LaBGAScore_run_reports` closes that gap:
+
+```matlab
+results = LaBGAScore_run_reports({'..._s4_prep_2_load_image_data_and_save'
+                                  '..._s5_prep_3_calc_univariate_contrasts'}, htmlsavedir, ...
+              'artefacts', {'data_objects.mat' 'contrast_data_objects.mat'}, ...
+              'minbytes', 1e6);
+if ~all(results.ok), error('%d report(s) failed', sum(~results.ok)); end
+```
+
+It publishes through `LaBGAScore_prov_publish`, reads each report back, and reports a
+failure when it finds the markup `publish` uses for a caught error,
+`<pre class="codeoutput error">`. The `artefacts` option additionally asserts that the file
+the script was supposed to write exists and is of plausible size — a report can be perfectly
+clean and still correspond to a run that saved nothing.
+
+Two implementation details that are easy to get wrong, and were:
+
+- **Match the markup, not the report text.** Searching for "Error in" or "Unrecognized
+  function" flags scripts that ran perfectly, because those phrases occur in ordinary
+  comments and `publish` renders comments as prose in the report.
+- **MATLAB's `regexp` has no `\b`.** It uses `\<` and `\>` for word boundaries, so a
+  pattern like `\berror\b` matches nothing at all, silently — which made this detector pass
+  every failing report until it was tested against a deliberately failing script.
 
 ## Reconstructing provenance for past runs
 
@@ -344,4 +384,6 @@ missing one that was.
 | `LaBGAScore_dep_build_index.m` | index every callable file under the dependency roots |
 | `LaBGAScore_dep_map.m` | per-script call graph |
 | `LaBGAScore_dep_report.m` | generate `DEPENDENCIES.md` / `.tsv` / `.yml` |
-| `LaBGAScore_check_display.m` | check whether this session's display can produce good report figures |
+| `LaBGAScore_check_display.m` | check whether this session's display can produce good report figures (interactive X2go only) |
+| `LaBGAScore_run_reports.m` | publish a chain of scripts and fail loudly when one of them errors |
+| `labgascore_run_headless.sh` | run `LaBGAScore_run_reports` headless from the command line |

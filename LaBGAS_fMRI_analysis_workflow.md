@@ -23,9 +23,85 @@
 
 Follow the instructions in *Getting started with the LaBGAS Linux server*, or mail [linuxteam.gbiomed@kuleuven.be](mailto:linuxteam.gbiomed@kuleuven.be) (or, better, create a ticket via the ICTS helpdesk) with Lukas in cc, to request access to the server if you do not have it yet.
 
-### 2. Set up your X2go display for publishing figures
+### 2. Decide how you will run scripts and publish reports
 
-MATLAB's `publish` function, which produces the HTML reports for first- and second-level analyses, **captures figures from the screen**. Your X2go display settings therefore decide how the figures in your reports come out, and mismatched settings are why the same script can produce different-looking reports for two people.
+There are two ways to run the analysis scripts, and **headless is now the default**. Read this section once; it decides how your report figures come out.
+
+| | **Headless (default)** | **Interactive X2go** |
+|---|---|---|
+| What it is | MATLAB with no display at all, started from the terminal | MATLAB in a graphical session on the server |
+| Figure resolution | 72 dpi | 96–144 dpi, i.e. **sharper** |
+| Figure size | Not limited by any screen | Limited by your X2go window |
+| Long runs | Survives logout, no window to keep open | Dies if the session drops |
+| Needs X2go set up correctly | No | Yes — see step 2b |
+| Use it for | Everything, by default | Final figures for a paper; interactive debugging |
+
+**Use headless unless you specifically want higher-resolution figures.** It is simpler, it does not depend on anyone's display settings, and it cannot produce the "same script, different-looking report for two people" problem. The one thing you give up is pixel density: headless MATLAB reports a fixed 1024 × 768 screen at **72 dpi**, so a 12 × 7.5 inch figure is written at 864 × 540 px, where a 120 dpi X2go session would write the same figure at 1440 × 900 px.
+
+Note what headless does **not** cost you: **figure size is not capped by the virtual screen**. Without a display, `publish` *prints* figures rather than screen-capturing them, so a figure larger than 1024 × 768 px comes out at full size. Per-subject density grids, which are grown to keep every panel legible, routinely come out at 1440 × 2160 px headless.
+
+#### 2a. Running headless
+
+Use the wrapper in `LaBGAScore/clean`:
+
+```bash
+labgascore_run_headless.sh -d /data/proj_xxx \
+    -s proj_secondlevel_m1_s0_a_set_up_paths_always_run_first \
+    proj_secondlevel_m1_s4_prep_2_load_image_data_and_save
+```
+
+A whole chain, checking that each script actually wrote its results, and left running after you log out:
+
+```bash
+setsid nohup labgascore_run_headless.sh -d /data/proj_xxx \
+    -p /data/master_github_repos/LaBGAScore \
+    -p /data/proj_xxx/code \
+    -s proj_secondlevel_m1_s0_a_set_up_paths_always_run_first \
+    -s proj_secondlevel_m1_s2_prep_1_set_conditions_contrasts \
+    -a data_objects.mat -a contrast_data_objects.mat -a - \
+    proj_secondlevel_m1_s4_prep_2_load_image_data_and_save \
+    proj_secondlevel_m1_s5_prep_3_calc_univariate_contrasts \
+    proj_secondlevel_m1_s6_prep_3a_run_second_level_regression \
+    > run.log 2>&1 < /dev/null &
+```
+
+- `-d` is **required** and must be the superdataset root: `prep_s0_define_directories` derives every path from `pwd`, so running from elsewhere silently points the analysis at the wrong tree.
+- `-s` runs your setup scripts in order; at least one must define `htmlsavedir`. Repeat it for `prep_1`, `prep_1b`, and so on.
+- `-a` gives the expected output of the correspondingly numbered script (`-` where there is nothing to check). See "Why the artefact check matters" below.
+- `-p` / `-P` put things on the MATLAB path if your `startup.m` does not already (`-P` prepends without `genpath`, which is what SPM12 wants).
+- **All options must come before the script names.** Anything after the first script name is treated as another script; the wrapper refuses obvious mistakes rather than running the wrong thing.
+- `-h` prints the full option list.
+
+Run `LaBGAScore_run_reports` directly if you are already inside MATLAB:
+
+```matlab
+results = LaBGAScore_run_reports({'script_one' 'script_two'}, htmlsavedir, ...
+              'artefacts', {'data_objects.mat' []});
+if ~all(results.ok), error('%d report(s) failed', sum(~results.ok)); end
+```
+
+##### Why the artefact check matters
+
+**`publish` catches a script's error into the HTML and then returns normally.** A run that died halfway is, to the calling code, indistinguishable from one that succeeded: no exception, exit status 0. Chains of scripts have repeatedly appeared to complete while a script had in fact crashed — often on an option variable that only exists in some configurations, and sometimes after an hour of computation but *before* anything was saved.
+
+`LaBGAScore_run_reports` therefore reads each report back and fails on it, and `-a` additionally asserts that the results file exists. Always pass `-a` for the scripts that save something. Without it, a report that is clean but empty still counts as success.
+
+It detects failure from the report *markup* (`<pre class="codeoutput error">`), not by searching the report text for phrases like "Error in". Those phrases appear in ordinary comments, which `publish` renders as prose — a text search reports failures for scripts that ran perfectly.
+
+##### If you write your own command instead
+
+```bash
+matlab -nodisplay -nosplash -r "try, run('myscript.m'); catch e, disp(getReport(e)); exit(1); end, exit(0)" < /dev/null
+```
+
+Two traps, both of which will waste your time:
+
+- **`matlab -batch` cannot publish.** It fails with *"Unable to run the `publish` function, because it is not supported for this ..."*. Use `-nodisplay` with `-r`.
+- **Redirect stdin from `/dev/null`.** With `-r`, MATLAB keeps reading commands from stdin afterwards; with a closed pipe it can exit before running anything at all, which looks like a silent no-op.
+
+#### 2b. Setting up X2go, if you want higher-resolution figures
+
+Only needed if you choose the interactive route. `publish` then **captures figures from the screen**, so your display settings decide how figures come out, and mismatched settings are why the same script can produce different-looking reports for two people.
 
 Two settings matter, and they trade against each other:
 
@@ -1044,10 +1120,21 @@ The scripts themselves are extensively annotated and documented, hence we refer 
 
 ### 5. Run the script
 
-Like all scripts in the LaBGAScore repo, it should be run from the Matlab command line, with the root directory of your superdataset as the working directory! You only need to run the second script, since it calls the first and third under the hood!
+You only need to run the second script, since it calls the first and third under the hood. Run it with the **root directory of your superdataset** as the working directory — `prep_s0_define_directories` derives every path from `pwd`, so running from elsewhere silently points the analysis at the wrong tree.
+
+From the Matlab command line:
 
 ```matlab
 ery_4a_firstlevel_m1_s2_fit_model
+```
+
+Or headless from the Linux command line, which is the default for second level and works equally well here — first-level fits take hours, and this survives logout ([step 2a](#2a-running-headless)):
+
+```bash
+setsid nohup labgascore_run_headless.sh -d /data/proj_erythritol/proj_erythritol_4a \
+    -s ery_4a_firstlevel_m1_s1_options_dsgn_struct \
+    ery_4a_firstlevel_m1_s2_fit_model \
+    > firstlevel.log 2>&1 < /dev/null &
 ```
 
 Then save the output it wrote to the derivatives and firstlevel subdatasets and the superdataset:
@@ -1185,9 +1272,9 @@ Scripts under `b_copy_to_local_scripts_dir_and_modify/` are always study-specifi
 | 2 | [`a2_set_default_options`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/b_copy_to_local_scripts_dir_and_modify/a2_set_default_options.m) | Sets default options for all core secondlevel scripts, organized into one section per script; see comments in code for more info, and the [CANlab documentation in repo](https://github.com/labgas/CANlab_help_examples) and [canlab.github.io](https://canlab.github.io/). Automatically called by `a_set_up_paths_always_run_first`. Always copy to your study/model-specific code subdataset before editing — never edit the checked-in repo copy. |
 | 3 | [`prep_1_set_conditions_contrasts_colors`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/b_copy_to_local_scripts_dir_and_modify/prep_1_set_conditions_contrasts_colors.m) | Defines `DAT.conditions`, `DAT.contrasts`, and `DAT.colors` (the core design specification used by every later script) and saves them with DSGN to `image_names_and_setup.mat`. A worked example from one LaBGAS study, not a generic template — study-specific modifications will typically be extensive. |
 | 4 | [`prep_1b_prep_behavioral_data`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/b_copy_to_local_scripts_dir_and_modify/prep_1b_prep_behavioral_data.m) | Optional script that attaches behavioral/non-imaging data to DAT: reads .tsv phenotype files, computes z-scored condition-/contrast-level ratings into `DAT.BEHAVIOR`, and populates `DAT.BETWEENPERSON` group/condition/contrast tables for between-subject covariates. Like `prep_1_`, a worked example, not a generic template. Prior to running, make sure the `participants.tsv` file is structured correctly and contains all the subjects. |
-| 5 | [`prep_2_load_image_data_and_save`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/prep_2_load_image_data_and_save.m) | Loads first-level beta/con images into `fmri_data_st` objects, runs QC (with plots if requested), z-scores them, and saves both raw and scaled versions (`data_objects.mat` / `data_objects_scaled.mat`). Inspect the QC plots in the html report before proceeding to `prep_3_`. Run using Matlab's `publish` function from your terminal (followed by a manual `datalad save`): `publish('prep_2_load_image_data_and_save.m','outputDir',htmlsavedir)`. **NOTE:** to prevent Matlab from snapping the same figure more than once while publishing (which messes up the report), make sure your cursor is in another window than the one running Matlab during execution of the publish command! |
+| 5 | [`prep_2_load_image_data_and_save`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/prep_2_load_image_data_and_save.m) | Loads first-level beta/con images into `fmri_data_st` objects, runs QC (with plots if requested), z-scores them, and saves both raw and scaled versions (`data_objects.mat` / `data_objects_scaled.mat`). Inspect the QC plots in the html report before proceeding to `prep_3_`. Run it via `labgascore_run_headless.sh` or `LaBGAScore_prov_publish` (see step 5), followed by a manual `datalad save`. **NOTE:** when publishing *interactively*, keep your cursor in a window other than the one running Matlab, or Matlab may snap the same figure more than once and mess up the report. This does not apply to headless runs, where figures are printed rather than captured from the screen. |
 | 6 | [`prep_3_calc_univariate_contrast_maps_and_save`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/prep_3_calc_univariate_contrast_maps_and_save.m) | Calculates within-person contrast images from `prep_2`'s raw and z-scored condition images, plus an l2norm-rescaled variant, runs QC on all three, and saves them to `contrast_data_objects.mat`. Inspect the QC output before proceeding to `prep_3a_` or other downstream scripts. |
-| 7 | [`prep_3a_run_second_level_regression_and_save`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/prep_3a_run_second_level_regression_and_save.m) | Runs second-level regression (voxel-wise via `regress()`, or parcel-wise/robust via `robfit_parcelwise()`) for each contrast/condition in DAT, optionally converts t-maps to BayesFactor maps, optionally runs cross-validated MVPA regression on continuous covariates, and saves the results. Publish `c2a_second_level_regression` afterward for thresholded results. Adaptations should only be necessary if you want to run several second-level GLM analyses within the same model (e.g. with/without covariate control) — in that case, make copies with letters as indices (`s6a`, `s6b`, etc.) and add the necessary lines of code to overwrite the options set in `a2_set_default_options.m`. **NOTE:** in that case, run this script followed immediately by the next one for each model, rather than this script first for all models, to avoid confusion of the `regression_stats_results` variable name in the Matlab workspace, or load the correct `regressions_stats_and_maps.mat` file corresponding to the model you want to display using the next script. Within a model, you can use multiple `prep_3a` scripts to run analyses with different covariates, provided they are included in the DAT structure defined in `prep_1` and `prep_1b`; to include other/new covariates, use a new/different model (start again from `a_set_up_paths_always_run_first`). Run the script using Matlab's `publish` function from your Matlab terminal (followed by a manual `datalad save`). |
+| 7 | [`prep_3a_run_second_level_regression_and_save`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/prep_3a_run_second_level_regression_and_save.m) | Runs second-level regression (voxel-wise via `regress()`, or parcel-wise/robust via `robfit_parcelwise()`) for each contrast/condition in DAT, optionally converts t-maps to BayesFactor maps, optionally runs cross-validated MVPA regression on continuous covariates, and saves the results. Publish `c2a_second_level_regression` afterward for thresholded results. Adaptations should only be necessary if you want to run several second-level GLM analyses within the same model (e.g. with/without covariate control) — in that case, make copies with letters as indices (`s6a`, `s6b`, etc.) and add the necessary lines of code to overwrite the options set in `a2_set_default_options.m`. **NOTE:** in that case, run this script followed immediately by the next one for each model, rather than this script first for all models, to avoid confusion of the `regression_stats_results` variable name in the Matlab workspace, or load the correct `regressions_stats_and_maps.mat` file corresponding to the model you want to display using the next script. Within a model, you can use multiple `prep_3a` scripts to run analyses with different covariates, provided they are included in the DAT structure defined in `prep_1` and `prep_1b`; to include other/new covariates, use a new/different model (start again from `a_set_up_paths_always_run_first`). Run it via `labgascore_run_headless.sh` or `LaBGAScore_prov_publish` (see step 5), followed by a manual `datalad save`. |
 | 8 | [`c2a_second_level_regression`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/c2a_second_level_regression.m) | Displays the thresholded second-level regression results generated by `prep_3a_run_second_level_regression_and_save.m`. See that script's documentation for available options. |
 | 9 | [`prep_3c_run_SVMs_on_contrasts_masked`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/prep_3c_run_SVMs_on_contrasts_masked.m) | Runs second-level support vector machine classification for each contrast in `DAT.contrasts`, plots uncorrected result montages, and saves the results. Publish `c2_SVM_contrasts_masked` afterward for thresholded results (after bootstrapping/searchlight analysis). Adaptations should only be necessary if you want to run several second-level SVM analyses within the same model (e.g. with/without the built-in scaling options, or with different cross-validation settings) — in that case, make copies with letters as indices (`s6a`, `s6b`, etc.) and add the necessary lines of code to overwrite the options set in `a2_set_default_options.m`. |
 | 10 | [`c2_SVM_contrasts_masked`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/c2_SVM_contrasts_masked.m) | Displays the thresholded SVM results generated by `prep_3c_run_SVMs_on_contrasts_masked.m`. See that script's documentation for available options. |
@@ -1203,15 +1290,50 @@ Scripts under `b_copy_to_local_scripts_dir_and_modify/` are always study-specifi
 
 ### 5. Run script(s)
 
-**NOTE:** like every other script in this workflow, second-level scripts are run from the Matlab terminal rather than from the Linux command line. Matlab's `publish` function, used by several of them, does not behave the same way when Matlab is driven from a shell. If the script produces any output, perform a manual `datalad save` to the relevant subdataset and superdataset after running it.
+**Record which version of the dependencies you ran against.** The scripts in your `code` subdataset are frozen once you copy them, but CanlabCore, the LaBGAS fork of CANlab_help_examples and the other repos under `/data/master_github_repos` keep changing. Instead of the bare `publish` call given in each script header, use `LaBGAScore_prov_publish`. Both routes below do this for you.
 
-**Record which version of the dependencies you ran against.** The scripts in your `code` subdataset are frozen once you copy them, but CanlabCore, the LaBGAS fork of CANlab_help_examples and the other repos under `/data/master_github_repos` keep changing. Instead of the bare `publish` call given in each script header, use:
+If the script produces any output, perform a manual `datalad save` to the relevant subdataset and superdataset after running it.
+
+#### Recommended: headless, from the Linux command line
+
+See [step 2a](#2a-running-headless) for the full option list. One script:
+
+```bash
+labgascore_run_headless.sh -d /data/proj_<yourstudy> \
+    -s <projname>_secondlevel_m<M>_s0_a_set_up_paths_always_run_first \
+    <projname>_secondlevel_m<M>_s<N>_<scriptname>
+```
+
+A whole chain, asserting that each script wrote its results, surviving logout:
+
+```bash
+setsid nohup labgascore_run_headless.sh -d /data/proj_<yourstudy> \
+    -s <projname>_secondlevel_m<M>_s0_a_set_up_paths_always_run_first \
+    -s <projname>_secondlevel_m<M>_s2_prep_1_set_conditions_contrasts \
+    -s <projname>_secondlevel_m<M>_s3_prep_1b_behavioral_data \
+    -a data_objects.mat -a contrast_data_objects.mat -a - -a - \
+    <projname>_secondlevel_m<M>_s4_prep_2_load_image_data_and_save \
+    <projname>_secondlevel_m<M>_s5_prep_3_calc_univariate_contrast_maps_and_save \
+    <projname>_secondlevel_m<M>_s6_prep_3a_run_second_level_regression_and_save \
+    <projname>_secondlevel_m<M>_s7_c2a_second_level_regression \
+    > run.log 2>&1 < /dev/null &
+```
+
+**Pass `-a` for every script that saves something.** `publish` swallows a script's error into the report and returns normally, so without the artefact check a crashed run is indistinguishable from a successful one — including a crash that happens after an hour of computation but before anything is written to disk.
+
+**Run `prep_3a` and its `c2a` display script as one chain, in order**, as above. Running `prep_3a` for several models first and then the `c2a` scripts leaves the wrong `regression_stats_results` in the workspace; if you must, load the matching `regression_stats_and_maps*.mat` before running `c2a`.
+
+#### Alternative: interactively, from the Matlab terminal
+
+Use this when you want higher-resolution figures ([step 2b](#2b-setting-up-x2go-if-you-want-higher-resolution-figures)) or are debugging. Run from the Matlab command line with the **root directory of your superdataset** as the working directory:
 
 ```matlab
 LaBGAScore_prov_publish('<projname>_secondlevel_m<M>_s<N>_<scriptname>', htmlsavedir)
 ```
 
-This publishes the html report at exactly the same figure resolution as before (it does not set `maxWidth`/`maxHeight`, which would permanently shrink the saved `.png` files), adds a small stylesheet so the report reads correctly on a laptop as well as a large desktop screen, and adds a Provenance section recording the commit of every dependency the script reaches, any uncommitted local changes to files it uses, and the MATLAB and SPM versions. A machine-readable copy is written to `<model>/results/notes/`, small enough to stay in git rather than git-annex.
+**NOTE:** interactively, `publish` captures figures from the screen, so keep your cursor in another window while it runs — otherwise Matlab may snap the same figure twice and the report comes out wrong. This does not apply headless, where figures are printed rather than captured.
+
+`LaBGAScore_prov_publish` publishes the html report at exactly the same figure resolution as before (it does not set `maxWidth`/`maxHeight`, which would permanently shrink the saved `.png` files), adds a small stylesheet so the report reads correctly on a laptop as well as a large desktop screen, and adds a Provenance section recording the commit of every dependency the script reaches, any uncommitted local changes to files it uses, and the MATLAB and SPM versions. A machine-readable copy is written to `<model>/results/notes/`, small enough to stay in git rather than git-annex.
 
 For analyses you have **already** run, `LaBGAScore_prov_resolve_retrospective('/data/proj_<yourstudy>')` reconstructs the same record after the fact and writes it alongside the existing reports without modifying them. See [`clean/README_provenance.md`](https://github.com/labgas/LaBGAScore/blob/main/clean/README_provenance.md) in LaBGAScore.
 

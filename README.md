@@ -10,6 +10,7 @@ Core scripts (and templates for them) for LaBGAS's (Laboratory for Brain-Gut Axi
 - [Dependencies](#dependencies)
 - [Domain-by-domain overview](#domain-by-domain-overview)
 - [Relationship to `CANlab_help_examples` (LaBGAS fork)](#relationship-to-canlab_help_examples-labgas-fork)
+- [Running scripts and publishing reports](#running-scripts-and-publishing-reports)
 - [Provenance and dependency documentation](#provenance-and-dependency-documentation)
 - [Tests and CI](#tests-and-ci)
 - [License](#license)
@@ -105,7 +106,7 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 
 **`figures/`** — plotting helpers: `canlabCmap.m` (CANlab colormap), `cluster_surface_plots.m`, `save_all_open_figures_smart.m`.
 
-**`clean/`** — utilities: `LaBGAScore_clean_gzip_all_nii.m` (recursive `.nii` gzip), `LaBGAScore_clean_sourcedata.m` (cleans the `sourcedata` subdataset), `LaBGAScore_move_repos_matlabpath.m`, `LaBGAScore_smart_parallel_pool_setup.m`.
+**`clean/`** — utilities: `LaBGAScore_clean_gzip_all_nii.m` (recursive `.nii` gzip), `LaBGAScore_clean_sourcedata.m` (cleans the `sourcedata` subdataset), `LaBGAScore_move_repos_matlabpath.m`, `LaBGAScore_smart_parallel_pool_setup.m`, plus the provenance/dependency tooling and the report runners described below (`labgascore_run_headless.sh`, `LaBGAScore_run_reports.m`).
 
 **`qr_code/`** — standalone Python utilities (`emailQR.py`, `email_QR_Input.py`, `QRtoPDF.py`) for generating and emailing QR codes; not MATLAB, and unrelated to the neuroimaging pipeline proper.
 
@@ -122,6 +123,49 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 | `LaBGAScore_atlas_rois_from_atlas.m` (`atlas_mask_tools/`) | referenced via `roi_names`/`roi_modelname`/`roi_set_name` options | Generates per-ROI atlas objects for ROI-average analysis |
 
 In short: LaBGAScore owns study setup, first-level modeling, and atlas/mask generation; `CANlab_help_examples` (LaBGAS fork) owns the second-level/group analysis templates built on top of LaBGAScore's outputs. For that repo's own internals, see its own [`README.md`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/README.md) under `Second_level_analysis_template_scripts/`.
+
+## Running scripts and publishing reports
+
+**Headless is the default.** Analysis scripts are run from the Linux command line with no
+display, using the wrapper in `clean/`:
+
+```bash
+labgascore_run_headless.sh -d /data/proj_xxx \
+    -s proj_secondlevel_m1_s0_a_set_up_paths_always_run_first \
+    -a data_objects.mat \
+    proj_secondlevel_m1_s4_prep_2_load_image_data_and_save
+```
+
+Prepend `setsid nohup ... > run.log 2>&1 < /dev/null &` for long chains, which then survive
+logout. `-h` prints the full option list. Run interactively in X2go instead only when you
+want higher-resolution figures (72 dpi headless against 96–144 dpi in a graphical session)
+or are debugging. Figure *size* is not limited headless: without a display `publish` prints
+figures rather than capturing them from the screen.
+
+Two traps worth knowing if you write the MATLAB invocation yourself:
+
+- **`matlab -batch` cannot `publish`** — it fails with *"Unable to run the `publish`
+  function, because it is not supported for this ..."*. Use `-nodisplay` with `-r`.
+- **Redirect stdin from `/dev/null`**, or MATLAB may exit before running anything.
+
+**`clean/LaBGAScore_run_reports.m`** does the publishing and, more importantly, decides
+whether it worked. `publish` catches a script's error into the html report and returns
+normally, so a crashed run raises no exception and exits 0 — a chain of scripts can appear
+to complete while one of them died, sometimes after an hour of computation and before
+anything was saved. `LaBGAScore_run_reports` reads each report back, fails on the error
+markup `publish` writes (`<pre class="codeoutput error">`, matched as markup rather than by
+searching the report text, since phrases like "Error in" occur in ordinary comments), and
+optionally asserts that the results file the script should have written exists and is of
+plausible size. It continues past failures and names them all at the end.
+
+```matlab
+results = LaBGAScore_run_reports({'script_one' 'script_two'}, htmlsavedir, ...
+              'artefacts', {'data_objects.mat' []});
+if ~all(results.ok), error('%d report(s) failed', sum(~results.ok)); end
+```
+
+Full instructions, including the X2go DPI table for the interactive route, are in
+[`LaBGAS_fMRI_analysis_workflow.md`](LaBGAS_fMRI_analysis_workflow.md).
 
 ## Provenance and dependency documentation
 

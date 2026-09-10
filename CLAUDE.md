@@ -97,12 +97,13 @@ detail in `clean/README_provenance.md`; the essentials:
   `Second_level_analysis_template_scripts/` and cover exactly the 19 scripts listed in that
   folder's README, not the ~113 scripts present.
 - **`LaBGAScore_check_display`** reports whether the current X2go session can produce a
-  full-size report figure, and what to change if not. `publish()` captures figures from the
-  screen, so session size and DPI decide how figures come out; recommended settings per
-  screen are in `LaBGAS_fMRI_analysis_workflow.md` ("Set up your X2go display for
-  publishing figures"). `LaBGAScore_prov_publish` records the screen geometry, DPI and the
-  resulting figure dimensions in every report, and flags figures whose size was set by the
-  display rather than by the script.
+  full-size report figure, and what to change if not. It applies to the **interactive**
+  route only: there, `publish()` captures figures from the screen, so session size and DPI
+  decide how figures come out. Recommended settings per screen are in
+  `LaBGAS_fMRI_analysis_workflow.md` ("Setting up X2go, if you want higher-resolution
+  figures"). `LaBGAScore_prov_publish` records the screen geometry, DPI and the resulting
+  figure dimensions in every report, and flags figures whose size was set by the display
+  rather than by the script.
 
 Resolution is index-based rather than `which()`-based, because `which` returns one
 path-order-dependent answer and on this setup it is the wrong one for the calls that
@@ -122,6 +123,36 @@ relax these without re-checking the negative controls documented there.
 **State as of 2026-09-01:** the retrospective has been run over `proj_cfs` and
 `proj_discoverie` (second and first level). Those outputs are written but **not committed**
 in the `proj_*` datasets, pending review.
+
+## Running scripts and publishing reports
+
+**Headless is the default**; X2go is the alternative when higher-resolution figures are
+wanted. See "Running scripts and publishing reports" in `README.md` and section 2 of
+`LaBGAS_fMRI_analysis_workflow.md`. Facts worth not rediscovering:
+
+- **`matlab -batch` cannot `publish()`** — "Unable to run the 'publish' function, because
+  it is not supported for this ...". `-nodisplay` with `-r` works. Verified directly.
+- **Redirect stdin from `/dev/null`** with `-r`, or MATLAB can exit before running
+  anything, which looks like a silent no-op.
+- Headless reports `ScreenSize [1 1 1024 768]`, `ScreenPixelsPerInch 72`,
+  `feature('ShowFigureWindows') == 0`. Figures are **not** capped by that virtual screen:
+  without a display `publish` prints rather than screen-captures, so density grids come out
+  at e.g. 1440x2160 px. The only cost of headless is pixel density (72 dpi against 96-144).
+- **`publish()` catches a script error into the html and returns normally**, so a crashed
+  run raises nothing and exits 0. This is the single biggest source of silently wrong
+  results in this pipeline. `clean/LaBGAScore_run_reports.m` exists to close it: it reads
+  each report back and fails on `<pre class="codeoutput error">`, and optionally asserts the
+  script's output file exists. Match that **markup**, never the report text — phrases like
+  "Error in" and "Unrecognized function" occur in ordinary comments, which `publish` renders
+  as prose, so a text search flags scripts that ran perfectly. Verified both ways.
+- MATLAB's `regexp` does **not** support `\b` as a word boundary (it uses `\<`/`\>`). A
+  pattern like `\berror\b` silently never matches; this made the detector above report
+  every failing report as OK until it was found by testing against a deliberately failing
+  script.
+- `clean/labgascore_run_headless.sh` wraps all of the above. Its MATLAB code goes into a
+  temporary `.m` file rather than a one-line `-r` string, because flattening newlines makes
+  a MATLAB `%` comment swallow the rest of the command and runs `for`/`if` headers into
+  their bodies.
 
 ## Static analysis
 
