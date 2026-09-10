@@ -273,15 +273,25 @@ to C essentially unchanged (0.5–4%), where the simple effects shrink 10–20%.
 
 ## Repository state
 
+**The fix is on `main`, merged 2026-09-10.** `firstlevel-fixes` has served its
+purpose and is no longer the place to look.
+
 | Branch | Contents |
 |---|---|
-| `main` | the two READMEs, every fix except the derivatives one, both audit tools |
-| `firstlevel-fixes` | `main` plus one commit: the four `varfun(deriv,…)` → `varfun(zscore,…)` lines, nothing else |
+| `main` | everything: the two READMEs, both audit tools, and the four `varfun(deriv,…)` → `varfun(zscore,…)` lines |
+| `firstlevel-fixes` | merged into `main`; retained only as the record of how the fix was reviewed |
 
 `CANlab_help_examples` `master` carries a pointer to the first-level guides.
 
-The branch is deliberately minimal so it can be reviewed as a single decision.
-Merging it changes the noise model for everything fitted afterwards.
+The branch was deliberately minimal so it could be reviewed as a single decision.
+By the time it was merged, its other two commits — re-runnability, BIDS
+inheritance for `events.tsv`, and the `rund_idx_DSGN` typo — had already been
+applied to `main` independently while refitting proj_moodbugs, proj_discoverie
+and proj_cfs, so the merge changed **exactly those four lines and nothing else**.
+
+**Everything fitted before 2026-09-10 used the wrong motion block**, including
+every model in the "Results per study" section above. The team decided on
+2026-09-10 to regenerate all results with the corrected regressors.
 
 Note that merging `firstlevel-fixes` gives model **B**, not C: the fix restores
 the parameters alongside their derivatives, and the quadratics are a separate
@@ -290,12 +300,22 @@ should turn that switch off as well.
 
 ## Next steps
 
-1. **Refit discoverie fully** with variant C, and rerun the group analysis.
-   Compare group maps, not single-subject con images — that is the only level at
-   which bias and added variance separate.
-2. **Decide on `firstlevel-fixes`.** Four subjects agreeing removes the reason to
-   keep it pending; at minimum it should apply to anything fitted from here on.
-3. **Confirm the CFS cohort question**, and run the diagnostic on `proj_cfs` if
+1. ~~**Decide on `firstlevel-fixes`.**~~ **Done 2026-09-10** — merged into `main`.
+   Everything fitted from here on uses the corrected motion block.
+2. **Regenerate all results.** Agreed by the team on 2026-09-10. Refits so far:
+   proj_moodbugs_wp2 (`model_2_basic`, and `model_3_basic` with HPF 300),
+   proj_discoverie (`model_2_basic`, 158 subjects), proj_cfs (`model_2_basic`,
+   134 subjects). Second level rerun as `model_1a`/`model_1b` (moodbugs),
+   `model_3a` (discoverie) and `model_1a` (cfs).
+3. **Compare group maps, not single-subject con images** — that is the only level
+   at which bias and added variance separate. Recorded per study in
+   `~/README_motion_refit_phase5.md` for discoverie.
+4. **Confirm the CFS cohort question**, and run the diagnostic on `proj_cfs` if
    it is a separate study.
-4. Only then consider what, if anything, needs communicating externally about
+5. Only then consider what, if anything, needs communicating externally about
    discoverie.
+
+**Note on variant.** Merging gave model **B** — parameters alongside their
+derivatives. The quadratics remain a separate switch
+(`LaBGAS_options.movement_reg_quadratic`), so a study following the **C** verdict
+must turn that off as well. The refits listed above used B.
