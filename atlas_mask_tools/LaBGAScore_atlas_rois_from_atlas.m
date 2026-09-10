@@ -15,6 +15,21 @@
 % /data/proj_discoverie
 %
 %
+% *WHO CONSUMES THE OUTPUT*
+%
+% prep_3a_run_second_level_regression_and_save.m (CANlab_help_examples, LaBGAS
+% fork) with doroi_analysis = true. It loads
+%
+%     <maskdir>/<roi_modelname>_rois_<roi_set_name>.mat
+%
+% and does NOT create it, so run this script first, with the same
+% roi_modelname and roi_set_name as that model's a2_set_default_options.
+%
+% Note prep_3a loads from the maskdir of the model it is running, whatever
+% roi_modelname says - roi_modelname is only a filename prefix. To reuse an roi
+% set across models, copy the .mat into the other model's maskdir.
+%
+%
 % *OPTIONS*
 %
 % * save_original_roi_atlas_obj = true/false      saves original roi atlas objects (i.e. BEFORE merging selected parcels into one roi atlas object, hence one index per parcel)

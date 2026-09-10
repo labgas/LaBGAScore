@@ -1314,6 +1314,33 @@ Scripts under `b_copy_to_local_scripts_dir_and_modify/` are always study-specifi
 | 18 | [`h_signature_responses_group_diff`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/h_signature_responses_group_diff.m) | Runs a two-sample t-test for selected signature responses per contrast, plotting group differences and printing between-group test statistics for each (group membership from `DAT.BETWEENPERSON.group`, binarized via median split if continuous). Note: unlike other Group 2 scripts, this script does not call `a_set_up_paths_always_run_first` or reload DAT/DATA_OBJ from saved .mat files itself; it assumes these are already in the workspace from a previous script run earlier in the same Matlab session (e.g. `prep_4_apply_signatures_and_save.m`). Run this with a `publish` command. |
 | 19 | [`e1_corr_patterns`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/e1_corr_patterns.m) | Calculates, thresholds, and plots pairwise searchlight correlation maps between all condition or contrast images in DAT via CANlab's `searchlight_correlation()` function, optionally masked/restricted to an atlas. Independent of `prep_4`/signatures. |
 
+### 4b. If you want ROI analysis, create the ROI masks first
+
+`doroi_analysis = true` in `prep_3a` extracts ROI averages from masks that **already
+exist**. It does not create them, and until they exist the script cannot run.
+
+Generate them with
+[`LaBGAScore_atlas_rois_from_atlas.m`](https://github.com/labgas/LaBGAScore/blob/main/atlas_mask_tools/LaBGAScore_atlas_rois_from_atlas.m)
+(LaBGAScore `atlas_mask_tools/`), run **from the root of your superdataset**. It combines
+regions from one or more atlases and writes the result into the model's `maskdir`
+(`secondlevel/<model>/masks/`, created by `a_set_up_paths_always_run_first`) as:
+
+```
+<maskdir>/<roi_modelname>_rois_<roi_set_name>.mat
+```
+
+Use the **same** `roi_modelname` and `roi_set_name` there as in `a2_set_default_options`, or
+`prep_3a` will look for a filename that was never written.
+
+<div class="canlab-note" markdown="1">
+**`roi_modelname` is only a filename prefix.** The `.mat` is always loaded from the `maskdir`
+of the model you are *running*, whatever `roi_modelname` says. So to reuse an ROI set
+generated for another model, **copy the `.mat` into this model's `maskdir`** — pointing
+`roi_modelname` at the other model is not enough. That mistake produces
+`Unable to read file .../<model>/masks/<name>.mat`, which `prep_3a` now catches before the
+regression starts rather than partway through.
+</div>
+
 ### 5. Run script(s)
 
 **Record which version of the dependencies you ran against.** The scripts in your `code` subdataset are frozen once you copy them, but CanlabCore, the LaBGAS fork of CANlab_help_examples and the other repos under `/data/master_github_repos` keep changing. Instead of the bare `publish` call given in each script header, use `LaBGAScore_prov_publish`. Both routes below do this for you.
