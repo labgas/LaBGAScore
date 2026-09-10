@@ -1222,12 +1222,38 @@ chmod -R g+rwX ./*
 
 ### 2. Create a model-specific subdirectory corresponding to its firstlevel sibling
 
-**IMPORTANT NOTE:** even if you do not anticipate running several first-level models, always create a model-specific directory to keep things organized and consistent with your firstlevel subdataset, e.g.:
+**IMPORTANT NOTE:** even if you do not anticipate running several first-level models, always create a model-specific directory to keep things organized and consistent with your firstlevel subdataset.
+
+#### Naming convention
+
+A second-level model is named after the **first-level model it is built on**, so the name says where its data came from:
+
+```
+model_<firstlevel number><letter>_<description>
+```
+
+- **`<firstlevel number>`** — the number of the first-level model supplying the con images, i.e. the `model_<N>_*` directory in `firstlevel/`. Everything derived from `firstlevel/model_2_basic` starts `model_2`.
+- **`<letter>`** — distinguishes second-level analyses derived from that same first-level model: `a`, `b`, `c`, …
+- **`<description>`** — what the analysis is, including the covariates it controls for.
 
 ```bash
-cd /data/proj_erythritol/proj_erythritol_4a/secondlevel
-mkdir model_1_conds_pmods
+cd /data/proj_cfs/secondlevel
+mkdir model_2a_casecontrol_cov_scanner      # firstlevel model_2_basic, case-control, scanner as covariate
 ```
+
+The point is that the first-level model is otherwise invisible from the second-level name, and it is the thing most likely to change underneath an analysis — a refit, a different noise model, a different HPF. Two second-level results are only comparable if they share it.
+
+Use the same convention for the scripts inside, so a script names its model too:
+
+```
+<proj>_secondlevel_m<firstlevel number><letter>_s<step>_<template name>.m
+```
+
+e.g. `cfs_secondlevel_m2a_s6_prep_3a_run_second_level_regression_and_save.m`.
+
+> **Models created before this convention keep their names.** Renaming them would break the paths recorded inside saved `.mat` files and every published report, and the datasets are DataLad-tracked. So in `proj_cfs`, for instance, `model_1_casecontrol_glm` and `model_2_casecontrol_glm_noBMI` are *second-level* indices that predate the convention and say nothing about which first-level model they used — both in fact used `firstlevel/model_1_basic`. Check `s0` if you need to know: it names the first-level options script it runs.
+
+> **The description is a claim about the design, so keep it true.** `_cov_scanner` means scanner is in the model and nothing else is. If you add a covariate, rename the model rather than quietly widening what the name covers — otherwise two runs with different designs end up sharing a name.
 
 ### 3. Download the scripts from the LaBGAS fork of the CANlab_help_examples GitHub repo to your code subdataset and rename them
 

@@ -49,6 +49,23 @@ Most domains split into `<domain>/scripts/` (or top-level `.m` scripts) and `<do
 - A `_example` suffix (e.g. `secondlevel/scripts/LaBGAScore_secondlevel_ooFmriDataObjML_example.m`) marks a script that is illustrative only, not meant to be copied and run as-is.
 - Scripts (files with no `function`/`classdef` declaration) use a standard MATLAB comment header: `%% scriptname.m` title, a `*USAGE*` section, optionally `*OPTIONS*`/`*DEPENDENCIES*`/`*NOTES*`, then an author/date/version block. Functions follow MATLAB's standard function help-text convention (H1 line, syntax) instead.
 
+**Study model directories.** Inside a study (not in this repo), a second-level model is named
+after the **first-level model it is built on**:
+
+```
+model_<firstlevel number><letter>_<description>
+```
+
+so `model_2a_casecontrol_cov_scanner` is built on `firstlevel/model_2_basic`, is the first
+second-level analysis derived from it, and controls for scanner. Scripts inside follow
+`<proj>_secondlevel_m<N><letter>_s<step>_<template name>.m`. The first-level model is
+otherwise invisible from the second-level name, and it is the thing most likely to change
+underneath an analysis, so two results are only comparable if they share it. Models named
+before this convention keep their names — renaming would break paths recorded in saved
+`.mat` files and published reports. Full detail, including how to tell what an
+older model was built on, is in
+[`LaBGAS_fMRI_analysis_workflow.md`](LaBGAS_fMRI_analysis_workflow.md#naming-convention).
+
 `secondlevel/` additionally contains seven detailed, standalone usage guides — `README_ENet_neuroimaging_pipeline.md`, `README_ENet_plotting.md`, `README_PLSDA_neuroimaging_pipeline.md`, `README_PLSDA_paired_neuroimaging_pipeline.md`, `README_PLSDA_plotting.md`, `README_PLSR_neuroimaging_pipeline.md`, `README_PLSR_plotting.md` — for the Elastic Net / PLS-DA / PLSR pipeline functions and their diagnostic plotting companions. Consult those directly for usage details; they aren't duplicated here.
 
 ## Dependencies
