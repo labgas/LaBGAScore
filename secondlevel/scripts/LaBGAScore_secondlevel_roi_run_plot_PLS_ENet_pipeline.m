@@ -136,7 +136,29 @@ p = cell(1, size(cons2analyze,2));
 
 load(fullfile(resultsdir, ['roi_stats_', mygroupnamefield, '_', scaling_string, '_', results_suffix, '.mat']));
 input_data = roi_means_table;
-varnames = input_data{1}.Properties.VariableNames(1:end-1); % group var always last
+% Drop the OUTCOME by name, not by position. The old code assumed the group
+% variable was positionally last, which holds only when prep_3a wrote no
+% covariate columns after it. In proj_cfs the table is
+% [8 ROIs, group, scanner], so 1:end-1 stripped 'scanner' and left 'group'
+% itself among the features - the model would then predict group from group
+% and report near-perfect accuracy.
+varnames = input_data{1}.Properties.VariableNames;
+if ~ismember(group_ID, varnames)
+    error('group_ID ''%s'' not found in the roi_stats table (vars: %s).', ...
+        group_ID, strjoin(varnames, ', '));
+end
+varnames = setdiff(varnames, group_ID, 'stable');
+
+% Optional explicit feature list. Without it every remaining column is treated
+% as a feature, which silently includes any covariate column that prep_3a
+% appended (e.g. 'scanner') unless it is also named in covariate_names.
+if exist('feature_names','var') && ~isempty(feature_names)
+    missing_f = setdiff(feature_names, varnames);
+    if ~isempty(missing_f)
+        error('feature_names not found (or is the outcome): %s', strjoin(missing_f, ', '));
+    end
+    varnames = feature_names;
+end
 
 % Drop the covariate columns from the FEATURE list by name. The 1:end-1 above
 % only strips the group variable, which is positionally last; covariate columns

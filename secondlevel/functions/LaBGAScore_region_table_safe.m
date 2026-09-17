@@ -51,7 +51,41 @@ try
 
 catch ME
 
-    if contains(ME.message, 'results_table')
+    % @region/table builds
+    %     cl    = [poscl negcl];
+    %     ispos = [true(1,length(poscl)) false(1,length(negcl))];
+    % and later indexes cl(ispos) / cl(~ispos). On some region arrays those two
+    % fall out of step and the index runs past the end of cl:
+    %
+    %     The logical indices contain a true value outside of the array bounds
+    %     region/table line 233: poscl = cl(ispos)
+    %     region/table line 239: negcl = cl(~ispos)
+    %
+    % Seen on both parcelwise tier results in proj_discoverie model_2a (T1 hit
+    % line 233, T2 line 239) while the equivalent full-sample run was fine, so
+    % it depends on the particular region array rather than on the analysis.
+    % It is a defect in the TABLE, not in the statistics: the parcelwise results
+    % are already computed and saved by the time this is called. Absorb it so a
+    % report is not lost over a table, and say loudly what was skipped - a
+    % missing table must never look like an absence of findings.
+    if contains(ME.message, 'logical indices contain a true value outside')
+
+        fprintf(['\n*** REGION TABLE SKIPPED for this contrast ***\n' ...
+                 '    @region/table failed with: %s\n' ...
+                 '    (its internal cl / ispos lengths disagree for this region array)\n' ...
+                 '    The STATISTICS are unaffected and already saved; only this\n' ...
+                 '    table could not be rendered. Do NOT read the missing table as\n' ...
+                 '    "no significant regions" - check the saved maps.\n\n'], ME.message);
+
+        try
+            [rpos, rneg] = fcn(r, varargin{:});
+        catch
+            rpos = r;
+            rneg = [];
+        end
+        results_table = table();
+
+    elseif contains(ME.message, 'results_table')
 
         % nothing displayable: still return the split regions if we can
         try

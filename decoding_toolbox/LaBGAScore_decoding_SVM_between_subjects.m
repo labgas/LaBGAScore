@@ -129,6 +129,17 @@
 % * unbalanced               true/false, whether to allow unbalanced group sizes in cfg.design
 % * analysis_mode           'searchlight' | 'roi' | 'wholebrain'
 %                               if 'searchlight': searchlight_radius (mm), mask_file (whole-brain mask for the searchlight)
+%                                                 searchlight_subset - TIMING BENCHMARK ONLY, leave empty ([])
+%                                                 for any real analysis. An Nx1 LIST OF SEARCHLIGHT
+%                                                 INDICES (or Nx3 XYZ coords) - NOT a decimation
+%                                                 factor: the scalar 20 runs ONE centre, not every
+%                                                 20th, and TDT accepts it silently. TDT returns 0, not NaN, for centres it did
+%                                                 not run, and 0 is a legitimate AUC_minus_chance
+%                                                 (exactly chance), so skipped centres CANNOT be told
+%                                                 apart from real ones downstream: they would enter the
+%                                                 FDR correction and the TFCE null as genuine
+%                                                 chance-level data. The script therefore refuses to run
+%                                                 inference when it is set, and stops after the timings.
 %                               if 'roi': roi_list (cell array of ROI mask paths)
 %                               if 'wholebrain': mask_file
 % * n_perms                 number of permutations for the null distribution, default 1000
@@ -241,8 +252,22 @@ end
 
 % PHENOTYPE FILE WITH GROUP INFO
 
-phenofile = fullfile(BIDSdir, 'phenotype.csv');
-phenotype = readtable(phenofile);
+% The filename was hardcoded to one study's phenotype.csv. LaBGAS studies do
+% not agree on this: proj_cfs has BIDS/phenotype.csv (comma), proj_moodbugs has
+% BIDS/participants.tsv (tab). Named here so the script runs on either, with the
+% delimiter taken from the extension rather than left to readtable's guess.
+pheno_file = 'phenotype.csv';         % file inside BIDSdir, e.g. 'participants.tsv'
+
+phenofile = fullfile(BIDSdir, pheno_file);
+if exist(phenofile, 'file') ~= 2
+    error(['\nphenotype file not found: %s\nSet pheno_file to the right name ' ...
+           '(proj_cfs uses phenotype.csv, proj_moodbugs uses participants.tsv).\n'], phenofile);
+end
+if endsWith(lower(phenofile), '.tsv')
+    phenotype = readtable(phenofile, 'FileType', 'text', 'Delimiter', 'tab');
+else
+    phenotype = readtable(phenofile, 'FileType', 'text', 'Delimiter', 'comma');
+end
 
 % PHENOTYPE COLUMN NAMES AND GROUP CODING
 %
@@ -261,6 +286,98 @@ group_neg_name  = 'controls';         % label for class -1
 % CROSS-VALIDATION SETTINGS
 
 K = 5;
+
+% CONFOUND HANDLING
+%
+% Fold stratification (cv_strata_vars, below) balances a nuisance variable
+% ACROSS folds. That is a variance fix: it stops a fold holding all or none of
+% a small stratum. It does NOT remove confounding. If the nuisance predicts
+% group, the classifier learns the nuisance during training, the held-out fold
+% carries the same nuisance-group mapping, and the AUC is inflated by exactly
+% the signal you were trying to control.
+%
+% Measured in proj_discoverie model_3a, where centre is the nuisance:
+%   centre alone predicts group at AUC 0.745
+%   centre KUL vs UM is decodable from the images at AUC 0.982
+%   one centre (UM) is 100%% cases, so there centre and group are collinear
+% For contrast, in proj_cfs scanner was orthogonal to group (r = 0.026) and
+% stratification alone was sufficient.
+%
+% Note also that scaling does NOT help. TDT's 'z'/'all' is feature-wise: the
+% same affine map per voxel across subjects, which cannot remove between-subject
+% structure at all. Per-image z-scoring does remove the global mean and scale,
+% but measured on discoverie that left centre decodability at 0.983 (from
+% 0.982) - the site effect is spatial, not global.
+%
+% Three levers, which address different things and can be combined:
+
+% (a) Restrict the sample. Cell array {column, values-to-keep}, e.g.
+%     {'center', {'KUL'}} for a single-site analysis with no confound left to
+%     control. Empty = use everyone.
+subject_filter = {};
+
+% (b) Residualize the features on nuisance variables before decoding. Named
+%     phenotype columns are dummy-coded (a k-level factor becomes k-1 columns -
+%     coding three sites as one -1/0/1 column treats them as ordered and
+%     removes only one degree of freedom's worth of site variance) and
+%     regressed out of the image matrix.
+%     This is label-blind: labels never enter the transform, so it is applied
+%     identically to the real and permuted runs and cannot leak group
+%     information. Fitting it per training fold would be stricter still, but
+%     TDT owns the CV loop and must not be modified, so that would mean calling
+%     decoding() once per fold. Revisit if a result sits near threshold.
+%     NOTE what this costs: where a nuisance level contains only one class, the
+%     nuisance and the group effect are collinear and residualizing removes the
+%     group signal with it.
+nuisance_resid_vars = {};
+
+% (b2) ComBat-harmonize the features on this variable before decoding.
+%     Name of a phenotype column holding site/scanner labels, '' to switch off.
+%     Harmonization runs with NO covariates (mod = []), deliberately and
+%     unconditionally - see LaBGAScore_combat_fit for why that is structural
+%     rather than a simplification.
+%
+%     WHY mod = [] IS NOT NEGOTIABLE HERE. Harmonizing with the outcome in mod
+%     protects the group effect from removal, which sounds desirable and is
+%     catastrophic: the labels then shape the features the classifier is
+%     trained on. Simulated under H0 with no true group effect at all, using
+%     this study's actual T2 geometry, KUL 101 (44 case / 57 control) and
+%     UGOT 23 (18 / 5), i.e. 62/62 overall:
+%
+%       whole-sample, mod = group   AUC 0.547   above chance in 82% of sims
+%       whole-sample, mod = []      AUC 0.448
+%       fitted per training fold    AUC 0.472
+%
+%     Read that carefully, because only the first row is about validity.
+%     mod = group pushes the estimate ABOVE chance on data with no effect in
+%     it, so it is refused outright. With mod = [] the transform is label-blind
+%     and cannot invent an effect, but its point estimate is still displaced -
+%     here downwards - because the sites differ in class proportion (44% cases
+%     at KUL against 78% at UGOT), so removing a site mean removes part of the
+%     class contrast with it. Fitting per training fold reduces that
+%     displacement (0.472 against 0.448) without eliminating it.
+%
+%     So treat the AUC from a harmonized run the way the residualized runs are
+%     already treated: read the p-value and the distance from the reported null
+%     mean, not the AUC on its own. LaBGAScore_combat_fit / _apply implement
+%     the strict per-fold version, validated against combat.m to 2e-15, and are
+%     the better choice where the point estimate itself has to be reported.
+%
+%     NOTE what this costs, as with residualization: a site whose subjects are
+%     all one class has no within-site class contrast, so removing its site
+%     effect removes its class signal too.
+combat_batch_var = '';
+
+% (b3) Reference site for ComBat: that site passes through unchanged and the
+%     others are mapped onto it. '' harmonizes to the grand mean instead.
+combat_ref = '';
+
+% (c) Permute labels WITHIN levels of these variables when building the null.
+%     This preserves each level's class counts, so the permuted classifier can
+%     exploit the nuisance exactly as much as the real one, and the null lands
+%     where the nuisance alone would put it rather than at chance. This fixes
+%     the INFERENCE; it does not deflate the point estimate.
+perm_within_vars = {};
 
 % Variables to stratify the CV folds on, IN ADDITION to group. Folds are
 % always balanced across groups; anything named here is balanced within group
@@ -292,6 +409,33 @@ switch analysis_mode
         searchlight_radius = 6; % in mm
         mask_file = which('gm_mask_canlab2023_coarse_fmriprep20_0_20.nii');
         mask_obj = fmri_mask_image(mask_file);
+
+        % TIMING BENCHMARK ONLY - leave empty for any real analysis.
+        %
+        % TDT's cfg.searchlight.subset is a LIST OF SEARCHLIGHT INDICES, not a
+        % decimation factor: an Nx1 vector of indices into the searchlight mask
+        % (NOT voxel indices of the whole volume), or an Nx3 matrix of XYZ
+        % coordinates. See the cfg.searchlight.subset entry in decoding.m.
+        %
+        % Getting this wrong is expensive and quiet. Passing the scalar 20 does
+        % not run every 20th centre - it runs ONE centre, the one at index 20,
+        % and TDT reports no error because a 1x1 subset is a valid Nx1 list.
+        % A benchmark built that way times a single searchlight and understates
+        % a whole-brain run by orders of magnitude.
+        %
+        % To sample the mask evenly, pass indices, e.g.
+        %     searchlight_subset = round(linspace(1, n_centres, 500))';
+        % where n_centres is the number of voxels in mask_file.
+        %
+        % It must never be used for a result, and the guard below enforces
+        % that. The reason is not merely that the map is sparse: TDT returns
+        % 0, NOT NaN, for centres it did not run. Zero is a perfectly
+        % legitimate value of AUC_minus_chance - it means exactly chance - so
+        % the 'valid voxel' test further down (~isnan(real_vec)) cannot tell a
+        % skipped voxel from a genuinely uninformative one. Every un-run centre
+        % would enter the FDR correction and the TFCE null as real chance-level
+        % data, deflating both. The failure is silent and the map looks fine.
+        searchlight_subset = [];   % e.g. 8 = every 8th centre, benchmark only
     case 'roi'
         roi_list = {
                    which('aINS_L.nii')
@@ -311,11 +455,40 @@ end
 
 % PERMUTATION SETTINGS
 
+% COMBINED-DESIGN PERMUTATIONS (speed)
+%
+% 0 keeps the original scheme: one decoding() call per permutation, parfor over
+% permutations. Because TDT extracts the searchlight sphere and builds the
+% kernel ONCE PER decoding() CALL, outside its own step loop, that scheme
+% repeats the extraction and the kernel n_perms + 1 times for every one of the
+% 150,630 centres, even though the features never change - only the labels do.
+%
+% Any value > 0 splits the permutations into that many chunks, gives each chunk
+% a single design holding its permutations as SETS, and makes one decoding()
+% call per chunk with cfg.results.setwise = 1. The sphere extraction and the
+% kernel then happen once per centre per chunk instead of once per permutation,
+% while parfor still runs the chunks in parallel. Set it to the worker count
+% (or a small multiple) to keep every worker busy.
+%
+% The arithmetic is identical either way - same designs, same labels, same
+% classifier - so results must match the per-permutation path. Verify that on a
+% small run before trusting a long one.
+perm_chunks = 0;
+
 n_perms = 1000;
 
 % OUTPUT DIRECTORIES
 
-tdt_resultsdir = fullfile(resultsdir,'TDT',conname,analysis_mode);  % folder where all TDT results are saved, can work with subfolders if you want to run multiple analyses
+% results_tag keeps variants of the same contrast and mode apart. Without it
+% every sample restriction writes to the same folder and silently overwrites
+% the last one - which happened here: three discoverie tiers all mapped to
+% .../TDT/stress_vs_control/wholebrain.
+if ~exist('results_tag','var'), results_tag = ''; end
+if isempty(results_tag)
+    tdt_resultsdir = fullfile(resultsdir,'TDT',conname,analysis_mode);
+else
+    tdt_resultsdir = fullfile(resultsdir,'TDT',conname,results_tag,analysis_mode);
+end  % folder where all TDT results are saved, can work with subfolders if you want to run multiple analyses
     if ~exist(tdt_resultsdir,'dir')
         mkdir(tdt_resultsdir);
     end
@@ -325,6 +498,16 @@ atlas = load_atlas('canlab2024');
 
 % THRESHOLDS FOR OUTPUT FMRI_DATA OBJECTS
 unc_p = 0.01;
+fdr_p = 0.05;   % FDR-corrected p/q threshold for the output fmri_data objects
+fwe_p = 0.05;   % TFCE FWE-corrected p threshold
+%
+% fdr_p and fwe_p were lost when the extent thresholds were split into the
+% _auc/_tfce pairs below: the old block defined unc_p/unc_k/fdr_p/fdr_k/
+% fwe_p/fwe_k together and the rewrite kept only unc_p. Nothing complained,
+% because they are used ONLY in the searchlight branch - wholebrain and roi
+% never reach thresholded_fmri_data_from_pval_nii. The cfs searchlight
+% therefore ran the full 200 permutations, saved the null and both p-maps,
+% and then died on "Unrecognized function or variable 'fdr_p'" 819 minutes in.
 % Extent thresholds for the output fmri_data objects. Split into the plain AUC
 % p-maps and the TFCE-derived maps, because an extent threshold means something
 % different in each.
@@ -368,8 +551,54 @@ table_combined.labels = zeros(height(table_combined),1);
 table_combined.labels(is_pos) = 1;
 table_combined.labels(is_neg) = -1;
 
+% ---- (a) restrict the sample ---------------------------------------------
+if ~isempty(subject_filter)
+    filt_var = subject_filter{1};
+    filt_val = subject_filter{2};
+    if ~iscell(filt_val), filt_val = {filt_val}; end
+    if ~ismember(filt_var, table_combined.Properties.VariableNames)
+        error('\nsubject_filter names ''%s'', which is not a column of the phenotype file.\n', filt_var);
+    end
+    fv = table_combined.(filt_var);
+    if isnumeric(fv)
+        keep = ismember(fv, cell2mat(filt_val(:)'));
+    else
+        if ~iscell(fv), fv = cellstr(string(fv)); end
+        keep = ismember(fv, cellfun(@(x) char(string(x)), filt_val, 'UniformOutput', false));
+    end
+    if ~any(keep)
+        error('\nsubject_filter left 0 subjects (%s in %s).\n', filt_var, strjoin(cellfun(@(x) char(string(x)), filt_val, 'UniformOutput', false), ', '));
+    end
+    fprintf('\nsubject_filter: keeping %d of %d subjects (%s = %s)\n', ...
+        sum(keep), numel(keep), filt_var, strjoin(cellfun(@(x) char(string(x)), filt_val, 'UniformOutput', false), ', '));
+    table_combined = table_combined(keep,:);
+    is_pos = is_pos(keep); is_neg = is_neg(keep);
+end
+
 fprintf('\n%s (label +1): n = %d\n%s (label -1): n = %d\n', ...
     group_pos_name, sum(is_pos), group_neg_name, sum(is_neg));
+
+% ---- how much can the nuisance alone do? ---------------------------------
+% Printed BEFORE any decoding, because it is the number the result has to beat.
+% A classifier that learns nothing but the nuisance gets this for free.
+benchmark_vars = unique([nuisance_resid_vars(:); perm_within_vars(:); cv_strata_vars(:)], 'stable');
+if ~isempty(benchmark_vars)
+    yb = double(table_combined.labels(:) == 1);
+    for bv = benchmark_vars'
+        if ~ismember(bv{1}, table_combined.Properties.VariableNames), continue, end
+        [Xb, ~, catb] = LaBGAScore_dummy_code(table_combined.(bv{1}));
+        if isempty(Xb) || rank([ones(size(Xb,1),1) Xb]) < 2, continue, end
+        mb = fitglm(Xb, yb, 'Distribution', 'binomial');
+        [~,~,~,ab] = perfcurve(yb, predict(mb, Xb), 1);
+        [~, ~, pb] = crosstab(double(catb), yb);
+        fprintf(['  BENCHMARK: ''%s'' alone predicts group at AUC %.3f (in-sample), ' ...
+                 'chi2 p = %.3g\n'], bv{1}, ab, pb);
+        if ab > 0.6
+            fprintf(['             ^ that is a real confound. Stratifying folds does NOT remove it; ' ...
+                     'use nuisance_resid_vars and/or perm_within_vars.\n']);
+        end
+    end
+end
 
 % ---- stratified fold assignment ------------------------------------------
 %
@@ -438,6 +667,22 @@ end
 cfg = decoding_defaults;
 cfg.results.dir = tdt_resultsdir;
 
+% Allow reruns. TDT defaults cfg.results.overwrite to 0 and then ERRORS if a
+% result file is already there, so without this every rerun of this script dies
+% - and it dies after loading the data and running the true decoding, not at
+% the start. Reruns are the normal case here (a changed fold seed, a different
+% contrast, a fixed bug), and the results directory is scoped per model,
+% contrast and analysis mode, so overwriting it is what is wanted. It is
+% announced rather than silent, because the previous run's maps do disappear.
+cfg.results.overwrite = 1;
+if exist(fullfile(tdt_resultsdir, ['res_' performance_metric{1} '.mat']), 'file')
+    fprintf('\n  NOTE: overwriting previous results in %s\n', tdt_resultsdir);
+end
+
+% Set for every mode: only the searchlight branch can turn it on, but the
+% guard before the inference section reads it unconditionally.
+benchmark_only = false;
+
 switch lower(analysis_mode)
 
    case 'searchlight'
@@ -446,6 +691,19 @@ switch lower(analysis_mode)
        cfg.searchlight.radius = searchlight_radius;
        cfg.searchlight.spherical = 1;
        cfg.files.mask = mask_file;
+       if ~isempty(searchlight_subset)
+           % Benchmark path. Refuse to go on to inference: see the comment at
+           % searchlight_subset for why un-run centres cannot be detected later.
+           cfg.searchlight.subset = searchlight_subset;
+           benchmark_only = true;
+           warning('LaBGAScore:decoding:benchmarkSubset', ...
+               ['searchlight_subset = %d: TIMING BENCHMARK ONLY. Centres are ' ...
+                'decimated and un-run centres return 0 (chance), not NaN, so no ' ...
+                'valid p-map, FDR or TFCE can be produced. Inference will be skipped.'], ...
+                searchlight_subset);
+       else
+           benchmark_only = false;
+       end
        fprintf('>> RUNNING SEARCHLIGHT\n');
 
    case 'roi'
@@ -463,16 +721,45 @@ switch lower(analysis_mode)
 end
 
 % Load subject images
+%
+% scaled_contrast_dir, when set, points at SECOND-LEVEL contrast images written
+% by LaBGAScore_export_scaled_contrasts - one <subjectID>.nii per subject, built
+% from z-scored (and where applicable ComBat-harmonised) condition images: the
+% features the GLM and the PDM analyse.
+%
+% Empty reproduces the original behaviour, first-level con images from datadir.
+% That is NOT equivalent - those are RAW contrasts, so the SVM would answer the
+% same question on a different feature space from every other analysis in the
+% model. Set it whenever the model's GLM uses myscaling_glm other than 'raw'.
+if ~exist('scaled_contrast_dir','var'), scaled_contrast_dir = ''; end
 cfg.files.name = cell(height(table_combined),1);
-for i = 1:height(table_combined)
-   cfg.files.name{i} = sprintf(['%s/%s/' con2use], ...
-       datadir, table_combined.(pheno_id_var){i});
+if isempty(scaled_contrast_dir)
+    fprintf('\nfeatures: FIRST-LEVEL %s from %s\n', con2use, datadir);
+    for i = 1:height(table_combined)
+        cfg.files.name{i} = sprintf(['%s/%s/' con2use], ...
+            datadir, table_combined.(pheno_id_var){i});
+    end
+else
+    if ~exist(scaled_contrast_dir,'dir')
+        error('\nscaled_contrast_dir does not exist: %s\nRun LaBGAScore_export_scaled_contrasts first.\n', scaled_contrast_dir);
+    end
+    fprintf('\nfeatures: SECOND-LEVEL scaled contrasts from %s\n', scaled_contrast_dir);
+    for i = 1:height(table_combined)
+        fn = fullfile(scaled_contrast_dir, [table_combined.(pheno_id_var){i} '.nii']);
+        if ~exist(fn,'file')
+            error('\nno exported contrast for %s at %s\n', table_combined.(pheno_id_var){i}, fn);
+        end
+        cfg.files.name{i} = fn;
+    end
 end
 
 cfg.files.chunk = table_combined.chunks;
 
-table_combined.labels(table_combined.patient==1) = 1;
-table_combined.labels(table_combined.patient==-1) = -1;
+% labels are already set in section 1 from pheno_group_var and the two group
+% codes. They used to be re-derived here from a hardcoded 'patient' column,
+% which (a) does not exist outside the study this was written for and (b) tested
+% patient==1 / patient==-1 while the fold split above used patient==0 / ==1, so
+% one class would have kept the label 0 rather than -1.
 cfg.files.label = table_combined.labels;
 
 cfg.results.output = performance_metric;
@@ -582,7 +869,139 @@ fprintf('\n=== RUNNING TRUE DECODING ===\n');
 % permutation loop previously spent nearly all of its time: it called
 % decoding(cfgPi) with only a cfg, so each of n_perms runs re-read every
 % subject's image from disk and rebuilt the searchlight index from scratch.
+t_real = tic;
 [results, cfg, passed_data, misc] = decoding(cfg);
+
+feats_modified = false;
+
+% ---- (a2) ComBat-harmonize the features on site ---------------------------
+%
+% Same placement and the same argument as the residualization below: applied to
+% the feature matrix TDT has already assembled, before any decoding, so the real
+% run and every permutation see identical features. mod is empty, so nothing
+% about the labels enters the transform.
+if ~isempty(combat_batch_var)
+
+    if isempty(which('combat'))
+        error('combat_batch_var is set but combat.m is not on the path. Add ComBatHarmonization/Matlab/scripts.');
+    end
+    if ~ismember(combat_batch_var, table_combined.Properties.VariableNames)
+        error('\ncombat_batch_var names ''%s'', not a column of the phenotype file.\n', combat_batch_var);
+    end
+
+    batch_raw = table_combined.(combat_batch_var);
+    batch_lbl = cellstr(string(batch_raw(:)));
+    [batch_names, ~, batch_idx] = unique(batch_lbl, 'stable');
+    batch_idx = double(batch_idx);
+
+    fprintf('\n=== COMBAT HARMONIZATION ON %s (mod = [], label-blind) ===\n', upper(combat_batch_var));
+
+    dat_field_cb = '';
+    for cand = {'data','dat','samples'}
+        if isfield(passed_data, cand{1}), dat_field_cb = cand{1}; break, end
+    end
+    if isempty(dat_field_cb)
+        error('\ncannot find the data matrix in passed_data (fields: %s)\n', ...
+            strjoin(fieldnames(passed_data)', ', '));
+    end
+
+    Ycb = double(passed_data.(dat_field_cb));          % samples x features
+    if size(Ycb,1) ~= numel(batch_idx)
+        error('\npassed_data has %d rows but %s has %d entries.\n', ...
+            size(Ycb,1), combat_batch_var, numel(batch_idx));
+    end
+
+    for b = 1:numel(batch_names)
+        sel = batch_idx == b;
+        cls = unique(cfg.files.label(sel));
+        fprintf('  %-12s n = %3d   classes present: %s\n', batch_names{b}, sum(sel), mat2str(cls(:)'));
+        if numel(cls) < 2
+            fprintf(['        NOTE: one class only - this site has no within-site class\n' ...
+                     '        contrast, so harmonizing it removes its class signal too.\n']);
+        end
+    end
+
+    ref_code_cb = [];
+    if ~isempty(combat_ref)
+        ref_code_cb = find(strcmp(batch_names, char(string(combat_ref))));
+        if isempty(ref_code_cb)
+            error('\ncombat_ref ''%s'' is not one of the sites present (%s).\n', ...
+                char(string(combat_ref)), strjoin(batch_names(:)', ', '));
+        end
+        fprintf('  reference site: %s (passes through unchanged)\n', batch_names{ref_code_cb});
+    else
+        fprintf('  no reference site: harmonizing to the grand mean\n');
+    end
+
+    % combat.m wants p x n; passed_data is n x p
+    cb_args = {Ycb', batch_idx, [], 1};
+    if ~isempty(ref_code_cb), cb_args = [cb_args {'ref', ref_code_cb}]; end %#ok<AGROW>
+    var_before_cb = mean(var(Ycb, 0, 1));
+    Ycb = combat(cb_args{:})';
+    var_after_cb = mean(var(Ycb, 0, 1));
+    passed_data.(dat_field_cb) = Ycb;
+    feats_modified = true;
+
+    fprintf('  mean feature variance %.4g -> %.4g\n', var_before_cb, var_after_cb);
+
+end
+
+% ---- (b) residualize features on the nuisance variables -------------------
+%
+% Done on the feature matrix TDT has already assembled, before any decoding, so
+% the real run and every permutation see identical features. The transform is
+% LABEL-BLIND - only nuisance columns enter it - which is what makes it safe to
+% fit once on all subjects rather than per training fold: no group information
+% can leak through it, and the permutation null passes through the same
+% transform. Fitting per training fold would be stricter, but TDT owns the CV
+% loop and is not to be modified.
+if ~isempty(nuisance_resid_vars)
+    Xn = [];
+    for nv = nuisance_resid_vars(:)'
+        if ~ismember(nv{1}, table_combined.Properties.VariableNames)
+            error('\nnuisance_resid_vars names ''%s'', not a column of the phenotype file.\n', nv{1});
+        end
+        Xn = [Xn LaBGAScore_dummy_code(table_combined.(nv{1}))]; %#ok<AGROW>
+    end
+    Xn = [ones(size(Xn,1),1) Xn];
+
+    fprintf('\n=== RESIDUALIZING FEATURES ON %s (%d dummy column(s)) ===\n', ...
+        upper(strjoin(nuisance_resid_vars, ', ')), size(Xn,2)-1);
+
+    dat_field = '';
+    for cand = {'data','dat','samples'}
+        if isfield(passed_data, cand{1}), dat_field = cand{1}; break, end
+    end
+    if isempty(dat_field)
+        error('\ncannot find the data matrix in passed_data (fields: %s)\n', ...
+            strjoin(fieldnames(passed_data)', ', '));
+    end
+
+    Ydat = double(passed_data.(dat_field));       % samples x features
+    if size(Ydat,1) ~= size(Xn,1)
+        error('\npassed_data has %d rows but the design has %d subjects.\n', size(Ydat,1), size(Xn,1));
+    end
+    var_before = mean(var(Ydat, 0, 1));
+    Ydat = Ydat - Xn*(Xn\Ydat);                   % keep residuals
+    var_after = mean(var(Ydat, 0, 1));
+    passed_data.(dat_field) = Ydat;
+
+    fprintf('  mean feature variance %.4g -> %.4g (%.1f%% removed)\n', ...
+        var_before, var_after, 100*(1-var_after/var_before));
+    fprintf(['  NOTE: where a nuisance level holds only one class, nuisance and group are\n' ...
+             '        collinear and the group signal goes with it.\n']);
+
+    feats_modified = true;
+end
+
+% One re-run covers both transforms: whichever of ComBat and residualization
+% ran, the decoding below sees the final feature matrix.
+if feats_modified
+    [results, cfg, passed_data, misc] = decoding(cfg, passed_data, misc);
+end
+
+t_real = toc(t_real);
+fprintf('  true decoding took %.1f s\n', t_real);
 
 % Extract vector format of real results
 outname = cfg.results.output{1};
@@ -603,7 +1022,96 @@ cfgp.decoding.train.(decoding_method).model_parameters = model_parameters;
 cfgp.scale.method = scale_method;
 cfgp.scale.estimation = scale_estimation;
 
+% Seed the permutations. Without this make_design_permutation draws from
+% whatever state the RNG happens to be in, so the null - and therefore every
+% p-value - differs between runs of the same script and cannot be regenerated.
+% cv_seed + 2 keeps it distinct from the fold assignment (cv_seed) and the
+% restricted-permutation relabelling (cv_seed + 1).
+rng(cv_seed + 2, 'twister');
+
 designs = make_design_permutation(cfgp, n_perms, 0);
+
+% ---- (c) restrict the permutation to within levels of the nuisance --------
+%
+% make_design_permutation shuffles labels freely, so the null is "what if group
+% were unrelated to anything", and the null AUC sits at chance. When a nuisance
+% predicts group that is the wrong reference: the real classifier can exploit
+% the nuisance and the null classifier cannot, so the nuisance's contribution
+% is scored as if it were signal.
+%
+% Permuting WITHIN levels keeps each level's class counts exactly as observed,
+% so a permuted classifier can exploit the nuisance just as much as the real
+% one. The null then lands where the nuisance alone puts it (in discoverie,
+% near AUC 0.745 rather than 0.5) and the p-value asks the question that
+% matters: does this beat what site structure alone would give?
+%
+% A level holding a single class contributes no permutability - permuting
+% within it is the identity - so the label contrast comes from the mixed
+% levels only. That is a property of the data, not a bug: where a level is
+% all-cases, nothing can separate group from site there.
+if ~isempty(perm_within_vars)
+    strata_perm = zeros(height(table_combined),1);
+    for pv = perm_within_vars(:)'
+        if ~ismember(pv{1}, table_combined.Properties.VariableNames)
+            error('\nperm_within_vars names ''%s'', not a column of the phenotype file.\n', pv{1});
+        end
+        [~, ~, cvp] = LaBGAScore_dummy_code(table_combined.(pv{1}));
+        strata_perm = strata_perm * 1000 + double(cvp(:));
+    end
+
+    % Cross with the CV fold. This is not optional, and leaving it out is a
+    % silent, serious error.
+    %
+    % TDT permutes WITHIN CHUNK by default (cfg.permute.exchangeable = 0),
+    % which preserves each fold's class counts exactly. That is deliberate: if
+    % a test fold ends up enriched in one class, the training folds are
+    % depleted in it, the classifier is biased against the test fold's majority
+    % class, and cross-validated performance drops BELOW chance. Preserving the
+    % per-fold counts removes that anti-correlation.
+    %
+    % Permuting within the nuisance level alone throws that away. Measured on
+    % discoverie T2 (n = 124, 1000 permutations), the AUC-minus-chance null:
+    %     free permutation (TDT, within chunk) : mean  -0.20, sd 6.92
+    %     within centre only                   : mean -10.24, sd 4.89
+    % A null centred 10 points below chance makes every observed value look
+    % good and the p-value meaningless.
+    %
+    % Crossing centre with chunk preserves BOTH: each centre keeps its
+    % case/control counts (so the nuisance stays exploitable in the null, which
+    % is the point) and each fold keeps its class counts (so no anti-learning).
+    strata_perm = strata_perm * 1000 + double(table_combined.chunks(:));
+
+    ustr = unique(strata_perm);
+
+    fprintf('\n=== RESTRICTING PERMUTATION TO WITHIN %s ===\n', upper(strjoin(perm_within_vars, ', ')));
+    for u = ustr'
+        sel = strata_perm == u;
+        npos = sum(table_combined.labels(sel) ==  1);
+        nneg = sum(table_combined.labels(sel) == -1);
+        fprintf('  stratum %g: n = %3d (%d vs %d)\n', u, sum(sel), npos, nneg);
+        if ~(npos > 0 && nneg > 0)
+            fprintf('             ^ single class, contributes no permutability\n');
+        end
+        if sum(sel) < 4
+            fprintf('             ^ only %d subject(s): crossing nuisance with fold makes cells small\n', sum(sel));
+        end
+    end
+
+    labels_obs = table_combined.labels(:);
+    rng(cv_seed + 1, 'twister');
+    for pidx = 1:numel(designs)
+        newlab = labels_obs;
+        for u = ustr'
+            sel = find(strata_perm == u);
+            newlab(sel) = labels_obs(sel(randperm(numel(sel))));
+        end
+        % write the permuted labels into every CV step of this design
+        for stp = 1:size(designs{pidx}.label, 2)
+            designs{pidx}.label(:, stp) = newlab;
+        end
+    end
+    fprintf('  %d permutation designs rebuilt within stratum\n', numel(designs));
+end
 
 
 %% ========================================================================
@@ -644,14 +1152,150 @@ afterEach(q, @(~) tracker.update());
 fprintf('Running %d permutations (%s, scaling %s, %s)...\n', ...
     n_perms, decoding_method, scale_estimation, analysis_mode);
 
-% PARFOR: decode permutations in memory only, reusing data and neighbourhoods
-parfor p = 1:n_perms
-   cfgPi = cfg_template;
-   cfgPi.design = Cdesigns.Value{p};
-   cfgPi.design.unbalanced_data = 'ok';
-   r = decoding(cfgPi, Cpassed.Value, Cmisc.Value);
-   all_perm_results(:,p) = single(r.(outname).output(:));
-   send(q,1);
+% HEARTBEAT: progress visible while the run is still going.
+%
+% publish() buffers a script's stdout until the script ENDS, so a long
+% searchlight shows nothing at all until it finishes - the 819-minute cfs run
+% was completely opaque, and a stalled run was indistinguishable from a slow
+% one. Each worker appends one line per permutation to this file, which is
+% written straight to disk and so is readable from outside while the run is
+% in flight. Cheap: one short append per permutation.
+hb_file = fullfile(tdt_resultsdir, 'progress_heartbeat.txt');
+if exist(hb_file,'file') == 2, delete(hb_file); end
+hb_t0 = datestr(now, 'yyyy-mm-dd HH:MM:SS');
+fid_hb = fopen(hb_file,'w');
+if fid_hb > 0
+    fprintf(fid_hb, 'start %s | n_perms %d | mode %s | chunks %d\n', hb_t0, n_perms, analysis_mode, perm_chunks);
+    fclose(fid_hb);
+end
+t_perm = tic;
+
+% The groups are of unequal size (that is the design, not a mistake), so TDT
+% warns about unbalanced training folds on every call. Inside the permutation
+% loop that fires twice per permutation - once per design column - and each
+% warning drags a six-line parfor stack trace with it. At 1000 permutations
+% that was 12,000 of the 17,000 lines in the published report, burying the
+% actual results. TDT resets its own warning counter on each decoding() call,
+% so its "switched off after the second time" mechanism never engages here.
+%
+% Silencing it on the workers is the only lever available without editing TDT.
+% It does NOT suppress warningv's companion fprintf, which is a plain fprintf
+% rather than a warning, so roughly one line per permutation still gets
+% through. Note this only hides an expected warning: the imbalance is real,
+% and AUC is used precisely because it is insensitive to class prevalence.
+warning('off', 'DECODING:CheckUnbalancedDataOk');
+parfevalOnAll(@() warning('off', 'DECODING:CheckUnbalancedDataOk'), 0);
+
+if perm_chunks <= 0
+
+    % ORIGINAL PATH: one decoding() call per permutation, parfor over permutations.
+    parfor p = 1:n_perms
+       cfgPi = cfg_template;
+       cfgPi.design = Cdesigns.Value{p};
+       cfgPi.design.unbalanced_data = 'ok';
+       r = decoding(cfgPi, Cpassed.Value, Cmisc.Value);
+       all_perm_results(:,p) = single(r.(outname).output(:));
+       fid_w = fopen(hb_file,'a');
+       if fid_w > 0, fprintf(fid_w,'perm %d %s\n', p, datestr(now,'HH:MM:SS')); fclose(fid_w); end
+       send(q,1);
+    end
+
+else
+
+    % COMBINED-DESIGN PATH: one call per CHUNK, permutations carried as sets.
+    %
+    % TDT's decoding loop is
+    %     for i_decoding (searchlight centre)
+    %         current_data = <extract sphere>          % once per call
+    %         kernel = kernel_function(current_data)   % once per call
+    %         for i_step (design column)
+    %             train / test using cfg.design.label(:,i_step)
+    % so everything before the step loop is repeated for every decoding() call.
+    % Putting several permutations into ONE design as sets turns them into extra
+    % step columns, which means the extraction and the kernel are paid once per
+    % centre per chunk rather than once per centre per permutation. The features
+    % are identical across permutations - only labels change - so this is pure
+    % saving, not an approximation.
+    chunk_edges = round(linspace(0, n_perms, perm_chunks + 1));
+    chunk_list  = cell(perm_chunks,1);
+    for cix = 1:perm_chunks
+        chunk_list{cix} = (chunk_edges(cix)+1):chunk_edges(cix+1);
+    end
+    chunk_list = chunk_list(~cellfun(@isempty, chunk_list));
+    n_chunks_eff = numel(chunk_list);
+
+    fprintf('  combined designs: %d chunk(s), ~%d permutation(s) each\n', ...
+        n_chunks_eff, round(n_perms/n_chunks_eff));
+
+    Cchunks = parallel.pool.Constant(chunk_list);
+    chunk_out = cell(n_chunks_eff,1);
+
+    parfor cix = 1:n_chunks_eff
+        pidx = Cchunks.Value{cix};
+        dsub = Cdesigns.Value(pidx);
+
+        % stack this chunk's designs into one, sets numbered 1..numel(pidx)
+        Lc = []; TRc = []; TEc = []; SETc = [];
+        for k = 1:numel(dsub)
+            nst = size(dsub{k}.label, 2);
+            Lc  = [Lc  dsub{k}.label];
+            TRc = [TRc dsub{k}.train];
+            TEc = [TEc dsub{k}.test];
+            SETc = [SETc k*ones(1,nst)];
+        end
+
+        cfgC = cfg_template;
+        cfgC.design       = dsub{1};
+        cfgC.design.label = Lc;
+        cfgC.design.train = TRc;
+        cfgC.design.test  = TEc;
+        cfgC.design.set   = SETc;
+        cfgC.design.n_sets = numel(dsub);
+        cfgC.design.unbalanced_data = 'ok';
+        cfgC.results.setwise = 1;
+
+        r = decoding(cfgC, Cpassed.Value, Cmisc.Value);
+
+        % one output vector per set
+        oc = zeros(size(all_perm_results,1), numel(dsub), 'single');
+        for k = 1:numel(dsub)
+            oc(:,k) = single(r.(outname).set(k).output(:));
+        end
+        chunk_out{cix} = oc;
+        fid_w = fopen(hb_file,'a');
+        if fid_w > 0, fprintf(fid_w,'chunk %d (%d perms) %s\n', cix, numel(pidx), datestr(now,'HH:MM:SS')); fclose(fid_w); end
+        send(q, numel(pidx));
+    end
+
+    for cix = 1:n_chunks_eff
+        all_perm_results(:, chunk_list{cix}) = chunk_out{cix};
+    end
+
+end
+
+t_perm = toc(t_perm);
+fprintf('\n  %d permutations took %.1f s (%.2f s each, %.1fx the true run)\n', ...
+    n_perms, t_perm, t_perm/n_perms, (t_perm/n_perms)/max(t_real,eps));
+if benchmark_only
+    % Project the full-searchlight cost from the decimated one. Cost scales
+    % with the number of centres actually decoded, which subset divides.
+    % Two separate scalings: the centre count, and the permutation count.
+    % The centre factor is total centres / centres actually decoded - NOT the
+    % value of searchlight_subset, which is a list of indices rather than a
+    % divisor. numel(real_vec) is the number of centres this run decoded.
+    n_perms_target  = 200;
+    n_centres_run   = numel(real_vec);
+    n_centres_total = sum(logical(mask_obj.dat(:)));
+    centre_factor   = n_centres_total / max(n_centres_run,1);
+    per_perm_full   = (t_perm/n_perms) * centre_factor;
+    fprintf('  PROJECTED for the full searchlight:\n');
+    fprintf('    centres decoded here  : %d of %d (factor %.1fx)\n', ...
+        n_centres_run, n_centres_total, centre_factor);
+    fprintf('    true run              ~ %.1f min\n', t_real*centre_factor/60);
+    fprintf('    per permutation       ~ %.1f s\n', per_perm_full);
+    fprintf('    %d permutations      ~ %.1f h\n', n_perms_target, per_perm_full*n_perms_target/3600);
+    fprintf('    NOTE: permutations run single-threaded per worker while the true\n');
+    fprintf('          run above gets several cores, so this UNDERSTATES per-perm cost.\n');
 end
 
 save(fullfile(tdt_resultsdir,'combined_permutations.mat'), ...
@@ -663,6 +1307,16 @@ fprintf('\nCombined null distribution saved.\n');
 %% ========================================================================
 % 6. VOXELWISE P-VALUES
 % ========================================================================
+
+% Stop here on a benchmark run. Everything past this point assumes every
+% centre in the mask was actually decoded; with a decimated searchlight the
+% un-run centres are zeros indistinguishable from chance-level results.
+if benchmark_only
+    fprintf(['\n=== BENCHMARK RUN (searchlight_subset = %d): STOPPING BEFORE ' ...
+             'INFERENCE ===\n'], searchlight_subset);
+    fprintf('  timings above are valid; the maps are NOT. Clear searchlight_subset for a real run.\n');
+    return
+end
 
 fprintf('\n=== COMPUTING VOXELWISE P-VALUES ===\n');
 
@@ -678,15 +1332,67 @@ switch analysis_mode
         results.(performance_metric{1}).p_perm = p_unc;
         save(fullfile(tdt_resultsdir,['res_' performance_metric{1} '.mat']),'results','-append');
         
+        % Report the result. Without this the mode runs n_perms permutations
+        % and prints nothing at all: the headline number - does the classifier
+        % separate the groups? - was recoverable only by loading the .mat by
+        % hand. TDT returns most metrics multiplied by 100 and stores the
+        % matching chancelevel (50 for AUC), so convert back before printing
+        % rather than hardcoding a factor. See decoding_statistics.m.
+        chance_pct = results.(performance_metric{1}).chancelevel;
+        stat_pct   = real_vec(1);
+        fprintf('\n=== %s: %s vs %s, n = %d ===\n', ...
+            upper(analysis_mode), group_pos_name, group_neg_name, numel(cfg.files.label));
+        fprintf('  %-22s %+.2f (chance %g)\n', performance_metric{1}, stat_pct, chance_pct);
+        fprintf('  %-22s %.4f\n', 'AUC', (stat_pct + chance_pct)/100);
+        fprintf('  %-22s %.4f  (%d permutations)\n', 'permutation p', p_unc(1), P);
+        fprintf('  %-22s %.1f\n', 'percentile of null', 100*mean(all_perm_results(1,:) < stat_pct));
+
+        % Report where the null actually sits. It is NOT always at chance, and
+        % when it is not, the raw metric cannot be read at face value.
+        %
+        % Residualizing on nuisance variables fitted over the whole sample
+        % couples train and test: within a nuisance level the residuals sum to
+        % zero, so subjects in the training folds and subjects in the test fold
+        % are pushed in opposite directions. A permutation that preserves the
+        % nuisance-label structure aligns that coupling with the labels and the
+        % whole null moves below chance. Measured on discoverie T2 (n = 124):
+        % the null sat at -9.85 AUC-points with centre residualization plus
+        % centre x fold permutation, against -0.20 with free permutation.
+        %
+        % The TEST is unaffected: observed and null pass through the same
+        % pipeline, so they stay exchangeable under H0. Simulated at n = 124
+        % over 120 datasets, P(p < .05) came out at 0.050 with a mean p of
+        % 0.512, i.e. exactly nominal, and per-training-fold residualization
+        % gave the same 0.050. What shifts is the point estimate, not the
+        % inference - so read the p-value and the distance from the null, not
+        % the AUC on its own.
+        null_mu_report = mean(all_perm_results(1,:));
+        fprintf('  %-22s %+.2f (sd %.2f)\n', 'null mean', null_mu_report, std(all_perm_results(1,:)));
+        if abs(null_mu_report) > 2
+            fprintf(['  NOTE: the null is centred %+.2f, not at chance, so the %s above is\n' ...
+                     '        shifted by roughly that much. The p-value is still valid; the raw\n' ...
+                     '        metric is not comparable to a run with a different null.\n'], ...
+                     null_mu_report, performance_metric{1});
+        end
+        
     case 'roi'
         
         results.(performance_metric{1}).p_perm_unc = p_unc;
         
-        % Apply Storey's FDR
-        [~, q_fdr, aprioriprob] = mafdr(p_unc);
+        % FDR through the lab's canonical implementation, so this script and
+        % prep_3a cannot drift apart. It estimates pi0 from Storey's fixed-lambda
+        % estimator over a grid, judges whether pi0 is identifiable at all, and
+        % returns Benjamini-Hochberg when it is not.
+        %
+        % The previous inline version took mafdr's spline pi0 and guarded only
+        % aprioriprob > 0.99. That catches the conservative failure, not pi0 -> 0:
+        % on 8 roi p-values from proj_cfs the spline returned pi0 = 0.012, every q
+        % fell below its own p, and the q >= p floor turned the column back into
+        % the RAW p-values under the name q. See LaBGAScore_Storey_FDR for the
+        % measurements and for how this relates to SAS proc multtest's PFDR.
+        [q_fdr, aprioriprob, storey_info] = LaBGAScore_Storey_FDR(p_unc);
 
-        % If aprioriprob > 0.99, fallback to BenjaminiHochberg
-        if aprioriprob > 0.99
+        if ~storey_info.reliable
             p_fdr = mafdr(p_unc, 'BHFDR', true);
             results.(performance_metric{1}).p_perm_fdr = p_fdr;
         else
@@ -700,6 +1406,41 @@ switch analysis_mode
         end
         
         save(fullfile(tdt_resultsdir,['res_' performance_metric{1} '.mat']),'results','-append');
+        
+        % Report per ROI, for the same reason as the wholebrain branch above.
+        chance_pct = results.(performance_metric{1}).chancelevel;
+        if isfield(results.(performance_metric{1}),'q_perm_fdr')
+            corr_vec = results.(performance_metric{1}).q_perm_fdr; corr_lbl = 'q_FDR';
+        else
+            corr_vec = results.(performance_metric{1}).p_perm_fdr; corr_lbl = 'p_FDR';
+        end
+        roi_short = cell(numel(roi_list),1);
+        for rr = 1:numel(roi_list), [~, roi_short{rr}] = fileparts(roi_list{rr}); end
+        fprintf('\n=== ROI: %s vs %s, n = %d, %d permutations ===\n', ...
+            group_pos_name, group_neg_name, numel(cfg.files.label), P);
+        % 'null' and 'vs null' are not decoration. When nuisance residualization
+        % is on, the whole null moves off chance and the raw AUC cannot be read
+        % literally: in discoverie T3 the null sat at -23.8 AUC-points, so every
+        % roi printed an AUC near 0.33 and looked strongly anti-predictive when
+        % in fact each was close to its own null. Print where the null is, and
+        % the distance from it, so the table cannot be misread.
+        null_mu_roi = mean(all_perm_results, 2);
+        null_sd_roi = std(all_perm_results, 0, 2);
+        fprintf('  %-42s %8s %8s %8s %9s %9s %9s\n', ...
+            'ROI', 'metric', 'AUC', 'null', 'vs null', 'p_unc', corr_lbl);
+        for rr = 1:numel(real_vec)
+            z_vs_null = (real_vec(rr) - null_mu_roi(rr)) / max(null_sd_roi(rr), eps);
+            fprintf('  %-42s %+8.2f %8.4f %+8.2f %+9.2f %9.4f %9.4f\n', ...
+                roi_short{min(rr,numel(roi_short))}(1:min(42,end)), real_vec(rr), ...
+                (real_vec(rr) + chance_pct)/100, null_mu_roi(rr), z_vs_null, ...
+                p_unc(rr), corr_vec(rr));
+        end
+        if any(abs(null_mu_roi) > 2)
+            fprintf(['\n  NOTE: the null is not centred at chance (mean %+.2f over rois), so the AUC\n' ...
+                     '        column is offset by roughly that much and is NOT comparable across runs\n' ...
+                     '        with different nuisance handling. Read ''vs null'' (in null SDs) and p.\n'], ...
+                     mean(null_mu_roi));
+        end
         
         
     case 'searchlight'
@@ -731,6 +1472,12 @@ switch analysis_mode
         
         [AUC_stat_obj, AUC_fmri_data, AUC_region_obj, AUC_region_table] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_uncorrected.nii'), results.(performance_metric{1}).output, ...
             mask_obj, atlas, unc_p, ['right-tailed uncorrected p-values based on ' num2str(n_perms) ' permutations'], 'AUC', 'unc', unc_k_auc);
+        % Montage of whatever survived. The thresholding function returns a
+        % region object and a table but draws nothing, so a surviving result
+        % would otherwise be reported as numbers only. The helper returns
+        % immediately when there is nothing suprathreshold, so this costs
+        % nothing on a null analysis and leaves no empty figures.
+        LaBGAScore_blob_montage(AUC_fmri_data, AUC_region_obj, 'AUC unc-thresholded');
 
 
         %% ========================================================================
@@ -741,11 +1488,20 @@ switch analysis_mode
         
         fmap = nan(size(nii.img));
 
-        % Apply Storey's FDR
-        [~, q_fdr, aprioriprob] = mafdr(p_unc);
+        % FDR through the lab's canonical implementation, so this script and
+        % prep_3a cannot drift apart. It estimates pi0 from Storey's fixed-lambda
+        % estimator over a grid, judges whether pi0 is identifiable at all, and
+        % returns Benjamini-Hochberg when it is not.
+        %
+        % The previous inline version took mafdr's spline pi0 and guarded only
+        % aprioriprob > 0.99. That catches the conservative failure, not pi0 -> 0:
+        % on 8 roi p-values from proj_cfs the spline returned pi0 = 0.012, every q
+        % fell below its own p, and the q >= p floor turned the column back into
+        % the RAW p-values under the name q. See LaBGAScore_Storey_FDR for the
+        % measurements and for how this relates to SAS proc multtest's PFDR.
+        [q_fdr, aprioriprob, storey_info] = LaBGAScore_Storey_FDR(p_unc);
 
-        % If aprioriprob > 0.99, fallback to BenjaminiHochberg
-        if aprioriprob > 0.99
+        if ~storey_info.reliable
             p_fdr = mafdr(p_unc, 'BHFDR', true);
             results.(performance_metric{1}).p_perm_fdr = p_fdr;
             fmap(mask_idx(valid_idx)) = p_fdr;
@@ -753,6 +1509,12 @@ switch analysis_mode
             save_nii(nii, fullfile(tdt_resultsdir,'p_FDR.nii'));
             [AUC_stat_obj_fdr, AUC_fmri_data_fdr, AUC_region_obj_fdr, AUC_region_table_fdr] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_FDR.nii'), results.(performance_metric{1}).output, ...
                 mask_obj, atlas, fdr_p, ['right-tailed FDR-corrected p-values based on ' num2str(n_perms) ' permutations'], 'AUC', 'fdr', fdr_k_auc);
+            % Montage of whatever survived. The thresholding function returns a
+            % region object and a table but draws nothing, so a surviving result
+            % would otherwise be reported as numbers only. The helper returns
+            % immediately when there is nothing suprathreshold, so this costs
+            % nothing on a null analysis and leaves no empty figures.
+            LaBGAScore_blob_montage(AUC_fmri_data_fdr, AUC_region_obj_fdr, 'AUC fdr-thresholded');
         else
             % Enforce constraint q >= p (as in SAS proc multtest)
             for j = 1:length(q_fdr)
@@ -766,6 +1528,12 @@ switch analysis_mode
             save_nii(nii, fullfile(tdt_resultsdir,'q_FDR.nii'));
             [AUC_stat_obj_fdr, AUC_fmri_data_fdr, AUC_region_obj_fdr, AUC_region_table_fdr] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'q_FDR.nii'), results.(performance_metric{1}).output, ...
                 mask_obj, atlas, fdr_p, ['right-tailed FDR-corrected q-values based on ' num2str(n_perms) ' permutations'], 'AUC', 'fdr', fdr_k_auc);
+            % Montage of whatever survived. The thresholding function returns a
+            % region object and a table but draws nothing, so a surviving result
+            % would otherwise be reported as numbers only. The helper returns
+            % immediately when there is nothing suprathreshold, so this costs
+            % nothing on a null analysis and leaves no empty figures.
+            LaBGAScore_blob_montage(AUC_fmri_data_fdr, AUC_region_obj_fdr, 'AUC fdr-thresholded');
         end
 
         %% ========================================================================
@@ -904,6 +1672,12 @@ switch analysis_mode
         
         [TFCE_stat_obj, TFCE_fmri_data, TFCE_region_obj, TFCE_region_table] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_TFCE_voxelwise.nii'), results.(performance_metric{1}).real_TFCE, ...
             mask_obj, atlas, unc_p, ['right-tailed uncorrected TFCE p-values based on ' num2str(n_perms) ' permutations'], 'TFCE', 'unc', unc_k_tfce);
+        % Montage of whatever survived. The thresholding function returns a
+        % region object and a table but draws nothing, so a surviving result
+        % would otherwise be reported as numbers only. The helper returns
+        % immediately when there is nothing suprathreshold, so this costs
+        % nothing on a null analysis and leaves no empty figures.
+        LaBGAScore_blob_montage(TFCE_fmri_data, TFCE_region_obj, 'TFCE unc-thresholded');
 
         % ========================================================================
         % 5. FDR-CORRECTED TFCE p-MAP
@@ -913,11 +1687,20 @@ switch analysis_mode
         
         fmap = nan(size(nii.img));
 
-        % Apply Storey's FDR
-        [~, q_TFCE_FDR, aprioriprob] = mafdr(p_TFCE_voxelwise);
+        % FDR through the lab's canonical implementation, so this script and
+        % prep_3a cannot drift apart. It estimates pi0 from Storey's fixed-lambda
+        % estimator over a grid, judges whether pi0 is identifiable at all, and
+        % returns Benjamini-Hochberg when it is not.
+        %
+        % The previous inline version took mafdr's spline pi0 and guarded only
+        % aprioriprob > 0.99. That catches the conservative failure, not pi0 -> 0:
+        % on 8 roi p-values from proj_cfs the spline returned pi0 = 0.012, every q
+        % fell below its own p, and the q >= p floor turned the column back into
+        % the RAW p-values under the name q. See LaBGAScore_Storey_FDR for the
+        % measurements and for how this relates to SAS proc multtest's PFDR.
+        [q_TFCE_FDR, aprioriprob, storey_info] = LaBGAScore_Storey_FDR(p_TFCE_voxelwise);
 
-        % If aprioriprob > 0.99, fallback to Benjamini-Hochberg
-        if aprioriprob > 0.99
+        if ~storey_info.reliable
             p_TFCE_FDR = mafdr(p_TFCE_voxelwise, 'BHFDR', true);
             results.(performance_metric{1}).p_TFCE_FDR = p_TFCE_FDR;
             pmap_FDR = nan(size(nii.img), 'single');
@@ -927,6 +1710,12 @@ switch analysis_mode
             
             [TFCE_stat_obj_fdr, TFCE_fmri_data_fdr, TFCE_region_obj_fdr, TFCE_region_table_fdr] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_TFCE_FDR_voxelwise.nii'), results.(performance_metric{1}).real_TFCE, ...
                 mask_obj, atlas, fdr_p, ['right-tailed fdr-corrected TFCE p-values based on ' num2str(n_perms) ' permutations'], 'TFCE', 'fdr', fdr_k_tfce);
+            % Montage of whatever survived. The thresholding function returns a
+            % region object and a table but draws nothing, so a surviving result
+            % would otherwise be reported as numbers only. The helper returns
+            % immediately when there is nothing suprathreshold, so this costs
+            % nothing on a null analysis and leaves no empty figures.
+            LaBGAScore_blob_montage(TFCE_fmri_data_fdr, TFCE_region_obj_fdr, 'TFCE fdr-thresholded');
 
         else
             % Enforce constraint q >= p (as in SAS proc multtest)
@@ -943,6 +1732,12 @@ switch analysis_mode
             
             [TFCE_stat_obj_fdr, TFCE_fmri_data_fdr, TFCE_region_obj_fdr, TFCE_region_table_fdr] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'q_TFCE_FDR_voxelwise.nii'), results.(performance_metric{1}).real_TFCE, ...
                 mask_obj, atlas, fdr_p, ['right-tailed fdr-corrected TFCE q-values based on ' num2str(n_perms) ' permutations'], 'TFCE', 'fdr', fdr_k_tfce);
+            % Montage of whatever survived. The thresholding function returns a
+            % region object and a table but draws nothing, so a surviving result
+            % would otherwise be reported as numbers only. The helper returns
+            % immediately when there is nothing suprathreshold, so this costs
+            % nothing on a null analysis and leaves no empty figures.
+            LaBGAScore_blob_montage(TFCE_fmri_data_fdr, TFCE_region_obj_fdr, 'TFCE fdr-thresholded');
 
         end
         
@@ -975,6 +1770,12 @@ switch analysis_mode
         
         [TFCE_stat_obj_fwe, TFCE_fmri_data_fwe, TFCE_region_obj_fwe, TFCE_region_table_fwe] = thresholded_fmri_data_from_pval_nii(fullfile(tdt_resultsdir,'p_TFCE_FWE_voxelwise.nii'), results.(performance_metric{1}).real_TFCE, ...
             mask_obj, atlas, fwe_p, ['right-tailed fwe-corrected TFCE p-values (max statistic) based on ' num2str(n_perms) ' permutations'], 'TFCE', 'fwe', fwe_k_tfce);
+        % Montage of whatever survived. The thresholding function returns a
+        % region object and a table but draws nothing, so a surviving result
+        % would otherwise be reported as numbers only. The helper returns
+        % immediately when there is nothing suprathreshold, so this costs
+        % nothing on a null analysis and leaves no empty figures.
+        LaBGAScore_blob_montage(TFCE_fmri_data_fwe, TFCE_region_obj_fwe, 'TFCE fwe-thresholded');
         
         fprintf('Voxel-wise TFCE FWE-corrected map saved.\n');
 
