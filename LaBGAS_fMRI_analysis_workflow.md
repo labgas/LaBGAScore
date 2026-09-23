@@ -167,6 +167,43 @@ Follow [these instructions](http://handbook.datalad.org/en/latest/intro/installa
 
 **NOTE:** it is recommended (but not compulsory) to use the same username and e-mail as the one you use for your Github and GIN accounts!
 
+### 7. Set up Claude Code with the MATLAB Agentic Toolkit (optional but recommended)
+
+If you use [Claude Code](https://claude.com/claude-code), MathWorks' **[MATLAB Agentic Toolkit](https://github.com/matlab/matlab-agentic-toolkit)** lets it run and check MATLAB code directly (execute a script, run `checkcode`, run unit tests, list your installed toolboxes) instead of only reading it. This is per-person setup — the MCP server is a native binary tied to your own MATLAB install and OS, so there is nothing to pull from this repo; run the following once on your own machine.
+
+1. **Install the MCP server.** From MATLAB, run:
+
+   ```matlab
+   setupAgenticToolkit("install")
+   ```
+
+   This downloads the server, points it at your local MATLAB installation, and registers it with Claude Code (and any other supported agent it detects) automatically.
+
+2. **Add the skills marketplace and the required base group:**
+
+   ```bash
+   claude plugin marketplace add "https://github.com/matlab/matlab-agentic-toolkit"
+   claude plugin install matlab-core@matlab-agentic-toolkit
+   ```
+
+3. **Add the skill groups relevant to LaBGAS work.** Install only what you need — MathWorks' own guidance is that installing every group makes Claude less reliable at auto-triggering the right skill. For our scripting/toolbox/parallel-computing-heavy MATLAB workflow, add:
+
+   ```bash
+   claude plugin install matlab-data-import-and-analysis@matlab-agentic-toolkit
+   claude plugin install matlab-software-development@matlab-agentic-toolkit
+   claude plugin install parallel-computing@matlab-agentic-toolkit
+   ```
+
+   - `matlab-data-import-and-analysis` — tables/timetables, useful for behavioral and covariate data.
+   - `matlab-software-development` — toolbox packaging, dependency analysis, performance/memory optimization; pairs with this repo's own `clean/LaBGAScore_dep_*.m` tooling.
+   - `parallel-computing` — `parfor`/cluster/GPU setup; pairs with `clean/LaBGAScore_smart_parallel_pool_setup.m` and the bootstrapping/permutation-heavy second-level scripts.
+
+   Skip the domain-specific groups that don't apply here (aerospace, automotive, RF/wireless, robotics, signal processing/audio, hardware test-and-measurement, etc.).
+
+4. Choose the **global** or **per-user** scope when prompted, not per-project — the MCP server config lives outside this repo either way.
+
+Troubleshooting and the full skill catalogue are in the toolkit's own [`Configuration_and_Troubleshooting.md`](https://github.com/matlab/matlab-agentic-toolkit/blob/main/Configuration_and_Troubleshooting.md) and [`skills-catalog/README.md`](https://github.com/matlab/matlab-agentic-toolkit/blob/main/skills-catalog/README.md).
+
 ## Data storage
 
 ### 1. Export your sourcedata and logfiles
