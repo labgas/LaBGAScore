@@ -51,16 +51,11 @@ if nsig == 0
 end
 
 % ---- overview montage ---------------------------------------------------
-% PDM weights are signed. The sign of a whole PDM is arbitrary, but the
-% RELATIVE sign across voxels is meaningful, so split the colour map rather
-% than showing magnitude only.
-o2 = canlab_results_fmridisplay([], 'compact');
-o2 = addblobs(o2, region(d), 'splitcolor', {[.1 .8 .8] [.1 .1 .8] [.9 .4 0] [1 1 0]});
-[o2, th] = title_montage(o2, 5, sprintf('%s (%d voxels)', label, nsig)); %#ok<ASGLU>
-if all(ishandle(th)), set(th, 'FontSize', get(th(1),'FontSize') * fontscale); end
-set(gcf, 'Tag', [matlab.lang.makeValidName(label) '_montage']);
-plugin_set_figure_size;
-drawnow, snapnow
+% Delegated to LaBGAScore_blob_montage, which the SVM scripts also use, so the
+% montage styling, font scaling, figure tagging and sizing live in ONE place.
+% 'noregioncenters' here: the regioncenters montage comes after the table below.
+LaBGAScore_blob_montage(d, region(d), sprintf('%s (%d voxels)', label, nsig), ...
+    'fontscale', fontscale, 'max_regioncenters', max_regioncenters, 'noregioncenters');
 
 % ---- region table -------------------------------------------------------
 r = region(d);
@@ -91,23 +86,9 @@ end
 out.region = r; out.table = r_table; out.table_cov = r_table_cov;
 
 % ---- regioncenters montage ---------------------------------------------
-% One titled panel per region: unreadable and slow once there are many, so
-% gate it exactly as c2a does.
-if numel(r) < max_regioncenters
-    fprintf('\n  MONTAGE REGIONCENTERS, %s, %d regions\n\n', label, numel(r));
-    o3 = montage(r, 'regioncenters', 'splitcolor', {[.1 .8 .8] [.1 .1 .8] [.9 .4 0] [1 1 0]}); %#ok<NASGU>
-    % regioncenter panel titles are the worst offenders at the headless canvas
-    % size, so scale them too.
-    tt = findobj(gcf, 'Type', 'text');
-    for z = 1:numel(tt)
-        try, set(tt(z), 'FontSize', get(tt(z),'FontSize') * fontscale); catch, end %#ok<CTCH>
-    end
-    set(gcf, 'Tag', [matlab.lang.makeValidName(label) '_regioncenters']);
-    plugin_set_figure_size;
-    drawnow, snapnow
-else
-    fprintf('\n  regioncenters montage skipped: %d regions, at or above the display limit of %d\n\n', ...
-        numel(r), max_regioncenters);
-end
+% Same delegation; 'regioncentersonly' skips the overview montage already drawn
+% above, so the reporting order stays montage -> table -> regioncenters.
+LaBGAScore_blob_montage(d, r, label, 'fontscale', fontscale, ...
+    'max_regioncenters', max_regioncenters, 'regioncentersonly');
 
 end

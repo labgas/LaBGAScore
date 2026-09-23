@@ -30,13 +30,16 @@ function LaBGAScore_blob_montage(dat, r, label, varargin)
 % by: Lukas Van Oudenhove  |  KU Leuven, September 2026
 % LaBGAScore_blob_montage.m   v1.0   last modified: 2026/09/17
 
-max_regioncenters = 21; fontscale = 2/3; doregioncenters = true;
+max_regioncenters = 21; fontscale = 2/3; doregioncenters = true; doblobs = true;
 for i = 1:numel(varargin)
     if ~ischar(varargin{i}) && ~isstring(varargin{i}), continue, end
     switch lower(char(varargin{i}))
         case 'max_regioncenters', max_regioncenters = varargin{i+1};
         case 'fontscale',         fontscale = varargin{i+1};
         case 'noregioncenters',   doregioncenters = false;
+        case 'regioncentersonly', doblobs = false;   % skip the overview montage;
+                                  % lets a caller interleave its own output between
+                                  % the two montages without duplicating either
     end
 end
 
@@ -48,6 +51,13 @@ end
 splitc = {[.1 .8 .8] [.1 .1 .8] [.9 .4 0] [1 1 0]};
 
 % ---- overview montage ---------------------------------------------------
+if doblobs
+% canlab_results_fmridisplay's 'compact' layout only calls axes('Position',...);
+% unlike 'multirow' it never opens a figure of its own, so it draws into whatever
+% figure is current - the previous montage, or whatever the calling script left
+% open. Without this the montages snap on top of each other when publishing.
+% Same fix, and same reason, as in c2a_second_level_regression.
+figure;
 o2 = canlab_results_fmridisplay([], 'compact');
 o2 = addblobs(o2, r, 'splitcolor', splitc);
 [o2, th] = title_montage(o2, 5, label); %#ok<ASGLU>
@@ -57,6 +67,8 @@ end
 set(gcf, 'Tag', [matlab.lang.makeValidName(label) '_montage']);
 plugin_set_figure_size;
 drawnow, snapnow
+
+end   % if doblobs
 
 % ---- regioncenters montage ---------------------------------------------
 if ~doregioncenters, return, end

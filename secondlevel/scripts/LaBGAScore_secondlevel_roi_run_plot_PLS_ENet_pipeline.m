@@ -61,9 +61,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_secondlevel_roi_run_plot_PLS_ENet_pipeline.m          v1.3
+% LaBGAScore_secondlevel_roi_run_plot_PLS_ENet_pipeline.m          v1.4
 %
-% last modified: 2026/08/25
+% last modified: 2026/09/17
 
 
 %% ========================================================================
@@ -78,8 +78,32 @@ do_enet = false;
 
 % INPUT DIRECTORIES
 
+% Remember where the study's own setup put the results, so the call below can be
+% checked against it (see the guard immediately after).
+resultsdir_before_setup = '';
+if exist('resultsdir','var'), resultsdir_before_setup = resultsdir; end
+
+
 LaBGAScore_prep_s0_define_directories;
 a_set_up_paths_always_run_first;
+
+% GUARD: did the path setup just move the output directory?
+%
+% The call above is meant to be replaced, in a study's copy, by that study's own
+% s0 (e.g. mystudy_secondlevel_m2a_s0_a_set_up_paths_always_run_first). Left as
+% the generic call, it RE-DERIVES resultsdir - typically from the FIRST-LEVEL
+% model name - and silently overwrites whatever the study's setup had already
+% set. Every result then lands in a different model's directory while the
+% published report still goes to the right one, so the split is easy to miss.
+if ~isempty(resultsdir_before_setup) && ~strcmp(resultsdir_before_setup, resultsdir)
+    error(['\nPATH SETUP MOVED THE RESULTS DIRECTORY.\n\n' ...
+           '  before: %s\n  after : %s\n\n' ...
+           'The generic a_set_up_paths_always_run_first re-derived resultsdir and\n' ...
+           'discarded the one your study setup had set. In your copy of this script,\n' ...
+           'replace that call with your study''s own s0 path script.\n'], ...
+           resultsdir_before_setup, resultsdir);
+end
+
 load(fullfile(resultsdir,'image_names_and_setup.mat'));
 
 group_ID = 'group'; % name of variable indicating group membership in ['roi_stats_', mygroupnamefield, '_', scaling_string, '_', results_suffix, '.mat']
@@ -170,6 +194,27 @@ if ~isempty(covariate_names)
         error('covariate_names not found in roi_stats table: %s', strjoin(missing, ', '));
     end
     varnames = setdiff(varnames, covariate_names, 'stable');
+end
+
+% Hard guard on the leakage bug this script was rewritten to fix: whatever
+% route built varnames above, the outcome and every covariate must be absent
+% from the final feature list. The original code dropped the outcome by
+% POSITION (1:end-1), which is only correct when prep_3a wrote no covariate
+% column after it - where it did, the model was handed the group variable as a
+% predictor of itself and reported near-perfect accuracy. Asserted rather than
+% assumed, and echoed to the log so the features are visible in the report.
+assert(~ismember(group_ID, varnames), ...
+    'LEAKAGE: outcome ''%s'' is still in the feature list.', group_ID);
+if ~isempty(covariate_names)
+    leaked = intersect(covariate_names, varnames);
+    assert(isempty(leaked), 'LEAKAGE: covariate(s) %s still in the feature list.', strjoin(leaked, ', '));
+end
+fprintf('\n%d features: %s\n', numel(varnames), strjoin(varnames, ', '));
+fprintf('outcome: %s (not among the features)\n', group_ID);
+if isempty(covariate_names)
+    fprintf('fold-wise covariates: none\n\n');
+else
+    fprintf('fold-wise covariates: %s\n\n', strjoin(covariate_names, ', '));
 end
 
 % create cell arrays with X vars, and define single Y var

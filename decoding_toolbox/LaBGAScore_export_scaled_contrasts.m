@@ -24,6 +24,9 @@ function outdir = LaBGAScore_export_scaled_contrasts(resultsdir, conidx, outdir,
 %                   ('DATA_OBJ_CON' raw, 'DATA_OBJ_CONsc' z-scored conditions,
 %                    'DATA_OBJ_CONscc' l2norm-scaled contrasts)
 %   **'overwrite'** default false; refuse to clobber an existing non-empty dir
+%   **'tag'**       default ''; suffix on the contrast-objects filename, so a model
+%                   holding more than one harmonisation path can be exported from the
+%                   right one (e.g. 'labelblind' -> contrast_data_objects_labelblind.mat)
 %
 % :Output:
 %   **outdir**      the directory written, one <subjectID>.nii per subject
@@ -34,15 +37,17 @@ function outdir = LaBGAScore_export_scaled_contrasts(resultsdir, conidx, outdir,
 
 objname   = 'DATA_OBJ_CONsc';
 overwrite = false;
+objtag    = '';
 for i = 1:2:numel(varargin)
     switch lower(varargin{i})
         case 'object',    objname   = varargin{i+1};
         case 'overwrite', overwrite = varargin{i+1};
+        case 'tag',       objtag    = varargin{i+1};
         otherwise, error('unknown option %s', varargin{i});
     end
 end
 
-f_obj = fullfile(resultsdir, 'contrast_data_objects.mat');
+f_obj = fullfile(resultsdir, ['contrast_data_objects' objtag '.mat']);
 f_dat = fullfile(resultsdir, 'image_names_and_setup.mat');
 if ~exist(f_obj,'file'), error('not found: %s', f_obj); end
 if ~exist(f_dat,'file'), error('not found: %s', f_dat); end

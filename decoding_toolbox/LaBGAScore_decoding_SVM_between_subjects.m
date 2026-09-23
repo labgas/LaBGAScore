@@ -147,6 +147,32 @@
 % * unc_p / unc_k            uncorrected p-value / extent threshold for output fmri_data objects
 % * fdr_p / fdr_k            FDR-corrected p-value / extent threshold for output fmri_data objects
 % * fwe_p / fwe_k            TFCE FWE-corrected p-value / extent threshold for output fmri_data objects
+% * combat_batch_var        phenotype column holding site/batch labels, e.g. 'center'; empty disables
+%                           ComBat. Harmonisation here is LABEL-BLIND (mod = []) by design: telling
+%                           ComBat to preserve the variable being decoded would leak labels into the
+%                           features. Features that are constant across all samples, or constant
+%                           within any one site, are excluded from harmonisation and passed through
+%                           untouched - combat.m errors on the first and returns NaN on the second.
+% * combat_ref              site label to harmonise towards; empty harmonises to the grand mean
+% * export_conidx           contrast index to export when scaled_contrast_dir is empty;
+%                           defaults to con2use when that is a scalar index
+% * export_object           contrast object to export: 'DATA_OBJ_CON' (raw),
+%                           'DATA_OBJ_CONsc' (z-scored conditions) or 'DATA_OBJ_CONscc'.
+%                           Defaults from myscaling_glm, so it matches the GLM by default
+% * scaled_contrast_dir     directory of per-subject contrast NIfTIs written by
+%                           LaBGAScore_export_scaled_contrasts. Set this to decode the SAME images the
+%                           second-level GLM used; leave empty to read raw first-level
+%                           contrasts. If the directory is empty or absent it is POPULATED
+%                           automatically by LaBGAScore_export_scaled_contrasts
+% * contrast_objects_tag    default ''; suffix identifying WHICH set of contrast objects to
+%                           export features from, for a model that harmonises more than one way.
+%                           A GLM path harmonised with combat_mod = {'group'} is not a valid
+%                           feature source for a classifier: ComBat adds the fitted group effect
+%                           back into its own output, so every image carries a term proportional
+%                           to its own subject's label. Point this at the label-blind path.
+% * scaling_regime          'kernel' (TDT's recommended estimation = 'all', precomputed kernel reused
+%                           across permutations) or 'strict' ('across', train-fold-only scaling;
+%                           measured 12-25x slower because the kernel cannot be reused)
 %
 %
 % *DEPENDENCIES*
@@ -218,7 +244,7 @@
 %
 % LaBGAScore_decoding_SVM_between_subjects.m
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/17
 %
 %
 %% ========================================================================
@@ -227,7 +253,31 @@
 
 % INPUT DIRECTORIES
 
+% Remember where the study's own setup put the results, so the call below can be
+% checked against it (see the guard immediately after).
+resultsdir_before_setup = '';
+if exist('resultsdir','var'), resultsdir_before_setup = resultsdir; end
+
+
 a_set_up_paths_always_run_first
+
+% GUARD: did the path setup just move the output directory?
+%
+% The call above is meant to be replaced, in a study's copy, by that study's own
+% s0 (e.g. mystudy_secondlevel_m2a_s0_a_set_up_paths_always_run_first). Left as
+% the generic call, it RE-DERIVES resultsdir - typically from the FIRST-LEVEL
+% model name - and silently overwrites whatever the study's setup had already
+% set. Every result then lands in a different model's directory while the
+% published report still goes to the right one, so the split is easy to miss.
+if ~isempty(resultsdir_before_setup) && ~strcmp(resultsdir_before_setup, resultsdir)
+    error(['\nPATH SETUP MOVED THE RESULTS DIRECTORY.\n\n' ...
+           '  before: %s\n  after : %s\n\n' ...
+           'The generic a_set_up_paths_always_run_first re-derived resultsdir and\n' ...
+           'discarded the one your study setup had set. In your copy of this script,\n' ...
+           'replace that call with your study''s own s0 path script.\n'], ...
+           resultsdir_before_setup, resultsdir);
+end
+
     
 % WHICH TDT IS ACTUALLY BEING USED
 %
@@ -467,13 +517,31 @@ end
 % a single design holding its permutations as SETS, and makes one decoding()
 % call per chunk with cfg.results.setwise = 1. The sphere extraction and the
 % kernel then happen once per centre per chunk instead of once per permutation,
-% while parfor still runs the chunks in parallel. Set it to the worker count
-% (or a small multiple) to keep every worker busy.
+% while parfor still runs the chunks in parallel.
+%
+%   -1  (default) AUTO: one chunk per parallel worker, resolved from the live
+%       pool once it exists. This is the optimum and there is no reason to
+%       depart from it - see below.
+%    0  the original path, one decoding() call per permutation. Kept as the
+%       reference implementation to validate the chunked path against.
+%   >0  an explicit chunk count.
+%
+% WHY ONE CHUNK PER WORKER IS OPTIMAL, and why more is actively worse:
+%   * parfor runs at most one chunk per worker at a time, so chunks beyond the
+%     worker count queue into a second wave, a third, and so on.
+%   * total extraction work is PROPORTIONAL TO THE CHUNK COUNT, because the
+%     sphere extraction and kernel are paid once per chunk per centre. Extra
+%     chunks are extra work, not merely extra scheduling.
+%   Both costs are paid at once. proj_cfs ran a whole-GM searchlight with
+%   perm_chunks = 105 on a 21-worker pool - 5 waves and 5x the extraction - and
+%   it took 5.4 days. proj_moodbugs ran the same mask with 21 chunks on 21
+%   workers, a single wave, in well under a day.
+%   Fewer chunks than workers is the opposite error: idle workers.
 %
 % The arithmetic is identical either way - same designs, same labels, same
 % classifier - so results must match the per-permutation path. Verify that on a
 % small run before trusting a long one.
-perm_chunks = 0;
+perm_chunks = -1;
 
 n_perms = 1000;
 
@@ -533,47 +601,70 @@ fwe_k_tfce = 0;
 % 1. BUILD CV DESIGN
 % ========================================================================
 
-% Group membership, using the configured column and codes.
-grp_raw = phenotype.(pheno_group_var);
+% The sample is restricted FIRST and the group codes validated afterwards, on
+% the rows that remain. The other order made a label variable with a third
+% level unusable: the "every row is pos or neg" check fired before
+% subject_filter could drop that level, which is exactly what a within-group
+% site check needs to do (decode centre A vs B among patients only).
+table_combined = phenotype;
+
+% ---- (a) restrict the sample ---------------------------------------------
+if ~isempty(subject_filter)
+    % Two accepted forms, matching prep_3a:
+    %   {var, vals}                      one criterion
+    %   {{var, vals}, {var, vals}, ...}  several, combined with AND
+    % The second form is what a within-group site check needs - patients only
+    % AND two centres only - which a single criterion cannot express.
+    if iscell(subject_filter{1})
+        filter_list = subject_filter;
+    else
+        filter_list = {subject_filter};
+    end
+
+    keep = true(height(table_combined),1);
+    for fi = 1:numel(filter_list)
+        filt_var = filter_list{fi}{1};
+        filt_val = filter_list{fi}{2};
+        if ~iscell(filt_val), filt_val = num2cell(filt_val); end
+        if ~ismember(filt_var, table_combined.Properties.VariableNames)
+            error('\nsubject_filter names ''%s'', which is not a column of the phenotype file.\n', filt_var);
+        end
+        fv = table_combined.(filt_var);
+        if isnumeric(fv)
+            keep_i = ismember(fv, cell2mat(filt_val(:)'));
+        else
+            if ~iscell(fv), fv = cellstr(string(fv)); end
+            keep_i = ismember(fv, cellfun(@(x) char(string(x)), filt_val, 'UniformOutput', false));
+        end
+        valstr = strjoin(cellfun(@(x) char(string(x)), filt_val, 'UniformOutput', false), ',');
+        fprintf('\nsubject_filter: %s = %s keeps %d of %d\n', ...
+            filt_var, valstr, sum(keep_i), numel(keep_i));
+        keep = keep & keep_i;
+    end
+
+    if ~any(keep)
+        error('\nsubject_filter left 0 subjects.\n');
+    end
+    fprintf('subject_filter: %d of %d subjects kept after all criteria\n', sum(keep), numel(keep));
+    table_combined = table_combined(keep,:);
+end
+
+% Group membership, using the configured column and codes, on the RETAINED rows.
+grp_raw = table_combined.(pheno_group_var);
 if iscell(grp_raw) || isstring(grp_raw), grp_raw = double(string(grp_raw)); else, grp_raw = double(grp_raw); end
 
 is_pos = grp_raw == group_pos_code;
 is_neg = grp_raw == group_neg_code;
 
 if ~all(is_pos | is_neg)
-    error(['%d of %d rows in %s are neither group_pos_code (%g) nor group_neg_code (%g).\n' ...
-           'Check pheno_group_var and the two codes before proceeding.'], ...
+    error(['%d of %d retained rows in %s are neither group_pos_code (%g) nor group_neg_code (%g).\n' ...
+           'Check pheno_group_var, the two codes, and whether subject_filter drops the other level(s).'], ...
            sum(~(is_pos|is_neg)), numel(grp_raw), pheno_group_var, group_pos_code, group_neg_code);
 end
 
-table_combined = phenotype;
 table_combined.labels = zeros(height(table_combined),1);
 table_combined.labels(is_pos) = 1;
 table_combined.labels(is_neg) = -1;
-
-% ---- (a) restrict the sample ---------------------------------------------
-if ~isempty(subject_filter)
-    filt_var = subject_filter{1};
-    filt_val = subject_filter{2};
-    if ~iscell(filt_val), filt_val = {filt_val}; end
-    if ~ismember(filt_var, table_combined.Properties.VariableNames)
-        error('\nsubject_filter names ''%s'', which is not a column of the phenotype file.\n', filt_var);
-    end
-    fv = table_combined.(filt_var);
-    if isnumeric(fv)
-        keep = ismember(fv, cell2mat(filt_val(:)'));
-    else
-        if ~iscell(fv), fv = cellstr(string(fv)); end
-        keep = ismember(fv, cellfun(@(x) char(string(x)), filt_val, 'UniformOutput', false));
-    end
-    if ~any(keep)
-        error('\nsubject_filter left 0 subjects (%s in %s).\n', filt_var, strjoin(cellfun(@(x) char(string(x)), filt_val, 'UniformOutput', false), ', '));
-    end
-    fprintf('\nsubject_filter: keeping %d of %d subjects (%s = %s)\n', ...
-        sum(keep), numel(keep), filt_var, strjoin(cellfun(@(x) char(string(x)), filt_val, 'UniformOutput', false), ', '));
-    table_combined = table_combined(keep,:);
-    is_pos = is_pos(keep); is_neg = is_neg(keep);
-end
 
 fprintf('\n%s (label +1): n = %d\n%s (label -1): n = %d\n', ...
     group_pos_name, sum(is_pos), group_neg_name, sum(is_neg));
@@ -740,10 +831,74 @@ if isempty(scaled_contrast_dir)
             datadir, table_combined.(pheno_id_var){i});
     end
 else
-    if ~exist(scaled_contrast_dir,'dir')
-        error('\nscaled_contrast_dir does not exist: %s\nRun LaBGAScore_export_scaled_contrasts first.\n', scaled_contrast_dir);
+    % Export on demand rather than requiring a separate script to have been run
+    % first. The images are a deterministic function of the contrast objects, so
+    % there is nothing to be gained by making the user remember an ordering
+    % dependency - and everything to lose if they forget, because the fallback
+    % is to silently decode raw FIRST-LEVEL images, which are a different
+    % quantity from what the GLM analysed.
+    %
+    % export_conidx  which contrast to export (defaults to the decoded contrast)
+    % export_object  which contrast object: 'DATA_OBJ_CON' matches a GLM run with
+    %                myscaling_glm = 'raw', 'DATA_OBJ_CONsc' one run on z-scored
+    %                conditions, 'DATA_OBJ_CONscc' l2norm-scaled contrasts.
+    if ~exist('export_conidx','var') || isempty(export_conidx)
+        if exist('con2use','var') && isnumeric(con2use) && isscalar(con2use)
+            export_conidx = con2use;
+        else
+            export_conidx = 1;
+        end
     end
-    fprintf('\nfeatures: SECOND-LEVEL scaled contrasts from %s\n', scaled_contrast_dir);
+    if ~exist('export_object','var') || isempty(export_object)
+        if exist('myscaling_glm','var') && strcmp(myscaling_glm,'scaled')
+            export_object = 'DATA_OBJ_CONsc';
+        else
+            export_object = 'DATA_OBJ_CON';
+        end
+    end
+
+    n_exported = 0;
+    if exist(scaled_contrast_dir,'dir')
+        n_exported = numel(dir(fullfile(scaled_contrast_dir,'*.nii')));
+    end
+    % Name the contrast being exported, not just its number. The index comes from
+    % a guarded default that silently falls back to 1 when con2use is a filename
+    % string - which it always is - so the number alone gives the reader nothing
+    % to check against. The name makes a mismatch with the intended analysis
+    % obvious in the report.
+    % DAT is NOT in this script's workspace: the decoding chain never loads
+    % image_names_and_setup.mat, so exist('DAT','var') was false on every run
+    % and the name below always printed '<name unavailable>' - the block never
+    % once did the job it exists for. Look it up instead.
+    if ~exist('DAT','var') && exist(fullfile(resultsdir,'image_names_and_setup.mat'),'file')
+        S_conname = load(fullfile(resultsdir,'image_names_and_setup.mat'),'DAT');
+        if isfield(S_conname,'DAT'), DAT = S_conname.DAT; end
+        clear S_conname
+    end
+    if exist('DAT','var') && isfield(DAT,'contrastnames') && ...
+            export_conidx >= 1 && export_conidx <= numel(DAT.contrastnames)
+        export_conname = DAT.contrastnames{export_conidx};
+    else
+        export_conname = '<name unavailable>';
+    end
+
+    if n_exported == 0
+        fprintf(['\nno exported contrasts found in %s\n' ...
+                 '  exporting SECOND-LEVEL contrast %d (%s) from %s now\n'], ...
+                 scaled_contrast_dir, export_conidx, export_conname, export_object);
+        % contrast_objects_tag picks which harmonisation path to decode when a model
+        % holds more than one. Where the GLM path is ComBat'd with mod = {'group'},
+        % its images carry a term proportional to each subject's own label and are
+        % NOT valid classifier features - point this at the label-blind path instead.
+        if ~exist('contrast_objects_tag','var') || isempty(contrast_objects_tag)
+            contrast_objects_tag = '';
+        end
+        scaled_contrast_dir = LaBGAScore_export_scaled_contrasts(resultsdir, ...
+            export_conidx, scaled_contrast_dir, 'object', export_object, ...
+            'tag', contrast_objects_tag);
+    end
+    fprintf('\nfeatures: SECOND-LEVEL contrast %d (%s), scaled contrasts from %s\n', ...
+            export_conidx, export_conname, scaled_contrast_dir);
     for i = 1:height(table_combined)
         fn = fullfile(scaled_contrast_dir, [table_combined.(pheno_id_var){i} '.nii']);
         if ~exist(fn,'file')
@@ -825,6 +980,11 @@ cfg.verbose = 0;
 % constraint here. Switch to 'strict' if you want train-only scaling and can
 % afford it.
 scaling_regime = 'kernel';    % 'kernel' | 'strict'
+                              % 'kernel' is TDT's own recommended estimation = 'all': label-blind
+                              % scaling cannot carry category information across the train/test
+                              % split, and the precomputed kernel is reused across permutations.
+                              % 'strict' ('across') re-derives the linear kernel on every fold of
+                              % every permutation - measured 12-25x slower on a whole-brain run.
 
 switch scaling_regime
     case 'kernel'
@@ -933,12 +1093,34 @@ if ~isempty(combat_batch_var)
         fprintf('  no reference site: harmonizing to the grand mean\n');
     end
 
+    % combat.m refuses features that are constant across samples, and a feature
+    % that is constant WITHIN a site drives that site's variance estimate to zero,
+    % which yields NaN/Inf silently instead of erroring. So harmonise only the
+    % features that are safe on both counts. Constant features carry no
+    % information by construction, so passing them through untouched changes
+    % nothing the classifier could have used. On a whole-brain GM mask this is
+    % typically a small number of edge voxels that are zero in every image.
+    sd_all_cb = std(Ycb, 0, 1);
+    sd_min_cb = inf(1, size(Ycb, 2));
+    for b = 1:numel(batch_names)
+        sd_min_cb = min(sd_min_cb, std(Ycb(batch_idx == b, :), 0, 1));
+    end
+    cb_ok = sd_all_cb > 0 & sd_min_cb > 0;
+    if ~any(cb_ok)
+        error('\nevery feature is constant across samples; nothing to harmonize.\n');
+    end
+    if ~all(cb_ok)
+        fprintf(['  %d of %d features constant (globally or within a site):\n' ...
+                 '        passed through UNHARMONIZED, they carry no information\n'], ...
+                 sum(~cb_ok), numel(cb_ok));
+    end
+
     % combat.m wants p x n; passed_data is n x p
-    cb_args = {Ycb', batch_idx, [], 1};
+    cb_args = {Ycb(:, cb_ok)', batch_idx, [], 1};
     if ~isempty(ref_code_cb), cb_args = [cb_args {'ref', ref_code_cb}]; end %#ok<AGROW>
-    var_before_cb = mean(var(Ycb, 0, 1));
-    Ycb = combat(cb_args{:})';
-    var_after_cb = mean(var(Ycb, 0, 1));
+    var_before_cb = mean(var(Ycb(:, cb_ok), 0, 1));
+    Ycb(:, cb_ok) = combat(cb_args{:})';
+    var_after_cb = mean(var(Ycb(:, cb_ok), 0, 1));
     passed_data.(dat_field_cb) = Ycb;
     feats_modified = true;
 
@@ -1122,6 +1304,34 @@ fprintf('\n=== RUNNING %d PERMUTATIONS WITHOUT WRITING FILES ===\n', n_perms);
 
 % Start pool if needed
 LaBGAScore_smart_parallel_pool_setup
+
+% Resolve perm_chunks = -1 (AUTO) to exactly one chunk per worker. Done here
+% because the pool does not exist before this line. One wave, every worker busy,
+% and the minimum extraction cost consistent with using the whole pool - see the
+% option documentation above for why more chunks is worse on both counts.
+if exist('perm_chunks','var') && perm_chunks < 0
+    % Prefer the LIVE pool: it is what parfor will actually use, which can differ
+    % from what was requested. LaBGAScore_smart_parallel_pool_setup is a SCRIPT,
+    % so it leaves nWorkers behind in this workspace - a sound second source.
+    % Do NOT use its `pool` variable: that was captured BEFORE parpool and is
+    % stale whenever the pool was created or resized.
+    pool_now = gcp('nocreate');
+    if ~isempty(pool_now)
+        perm_chunks = pool_now.NumWorkers;
+        chunk_src = 'live pool';
+    elseif exist('nWorkers','var') && ~isempty(nWorkers) && nWorkers >= 1
+        perm_chunks = nWorkers;
+        chunk_src = 'nWorkers from the pool setup';
+    else
+        perm_chunks = 1;
+        chunk_src = 'fallback, no pool found';
+        warning(['perm_chunks = -1 (auto) but no parallel pool exists; ' ...
+                 'falling back to a single chunk.']);
+    end
+    fprintf('  perm_chunks auto-set to %d (%s): one chunk per worker, single wave\n', ...
+            perm_chunks, chunk_src);
+end
+
 
 Cdesigns    = parallel.pool.Constant(designs);
 
@@ -1414,6 +1624,12 @@ switch analysis_mode
         else
             corr_vec = results.(performance_metric{1}).p_perm_fdr; corr_lbl = 'p_FDR';
         end
+        % Straight Benjamini-Hochberg, printed alongside. LaBGAScore_Storey_FDR
+        % asks for exactly this at m < 100, and the 'sas' method carries no guard
+        % by design - it must reproduce SAS proc multtest - so a spline pi0 well
+        % below 1 is USED and shrinks q towards p. Showing both makes that
+        % visible instead of leaving the reader one anti-conservative column.
+        bh_vec = storey_info.q_BH(:);
         roi_short = cell(numel(roi_list),1);
         for rr = 1:numel(roi_list), [~, roi_short{rr}] = fileparts(roi_list{rr}); end
         fprintf('\n=== ROI: %s vs %s, n = %d, %d permutations ===\n', ...
@@ -1426,14 +1642,14 @@ switch analysis_mode
         % the distance from it, so the table cannot be misread.
         null_mu_roi = mean(all_perm_results, 2);
         null_sd_roi = std(all_perm_results, 0, 2);
-        fprintf('  %-42s %8s %8s %8s %9s %9s %9s\n', ...
-            'ROI', 'metric', 'AUC', 'null', 'vs null', 'p_unc', corr_lbl);
+        fprintf('  %-42s %8s %8s %8s %9s %9s %9s %9s\n', ...
+            'ROI', 'metric', 'AUC', 'null', 'vs null', 'p_unc', corr_lbl, 'q_BH');
         for rr = 1:numel(real_vec)
             z_vs_null = (real_vec(rr) - null_mu_roi(rr)) / max(null_sd_roi(rr), eps);
-            fprintf('  %-42s %+8.2f %8.4f %+8.2f %+9.2f %9.4f %9.4f\n', ...
+            fprintf('  %-42s %+8.2f %8.4f %+8.2f %+9.2f %9.4f %9.4f %9.4f\n', ...
                 roi_short{min(rr,numel(roi_short))}(1:min(42,end)), real_vec(rr), ...
                 (real_vec(rr) + chance_pct)/100, null_mu_roi(rr), z_vs_null, ...
-                p_unc(rr), corr_vec(rr));
+                p_unc(rr), corr_vec(rr), bh_vec(min(rr,numel(bh_vec))));
         end
         if any(abs(null_mu_roi) > 2)
             fprintf(['\n  NOTE: the null is not centred at chance (mean %+.2f over rois), so the AUC\n' ...
