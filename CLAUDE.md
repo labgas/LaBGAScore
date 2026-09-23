@@ -97,7 +97,7 @@ detail in `clean/README_provenance.md`; the essentials:
   `clean/LaBGAScore_dep_report.m`. Never hand-edit them. The LaBGAS website collects the
   `.yml` via `scripts/refresh_dependencies.py`. In this repo they sit at the root and cover
   all ~130 files; in `CANlab_help_examples` they sit in
-  `Second_level_analysis_template_scripts/` and cover exactly the 19 scripts listed in that
+  `Second_level_analysis_template_scripts/` and cover exactly the 20 scripts listed in that
   folder's README, not the ~113 scripts present.
 - **`LaBGAScore_check_display`** reports whether the current X2go session can produce a
   full-size report figure, and what to change if not. It applies to the **interactive**
@@ -123,9 +123,21 @@ second-level record from 1639 rows to 552 and removed BrainSpace, gift, cocoanCO
 ExploreASL and others that nothing here calls. See `clean/README_provenance.md` — do not
 relax these without re-checking the negative controls documented there.
 
-**State as of 2026-09-01:** the retrospective has been run over `proj_cfs` and
-`proj_discoverie` (second and first level). Those outputs are written but **not committed**
-in the `proj_*` datasets, pending review.
+**State as of 2026-09-23:** the retrospective has been run over `proj_cfs` and
+`proj_discoverie`, second and first level. Commit status differs per dataset and was
+re-checked on this date:
+
+| dataset | provenance sidecars tracked | untracked |
+|---|---|---|
+| `proj_discoverie/secondlevel` | **46** | 0 |
+| `proj_discoverie/firstlevel` | 0 | 332 |
+| `proj_cfs/secondlevel` | 0 | 57 |
+| `proj_cfs/firstlevel` | 0 | 137 |
+
+So `proj_discoverie/secondlevel` is committed; the other three are still written-but-not-committed,
+pending review. Re-derive these counts rather than trusting them — `git ls-files | grep -c provenance`
+against `git status --porcelain | grep -c provenance` in each subdataset — since they move whenever
+someone runs a `datalad save`.
 
 ## Running scripts and publishing reports
 
@@ -157,9 +169,39 @@ wanted. See "Running scripts and publishing reports" in `README.md` and section 
   a MATLAB `%` comment swallow the rest of the command and runs `for`/`if` headers into
   their bodies.
 
-## Static analysis
+## Static analysis and the script checkers
 
 `clean/LaBGAScore_check_all_scripts.m` runs MATLAB's built-in Code Analyzer (`checkcode`) across every `.m` file in the repo (or a subtree passed as its `rootdir` argument) and prints a report, separating genuine syntax errors from style/performance suggestions. Calibrated against real bugs found during the accuracy pass above: `checkcode` reliably catches parse errors (e.g. it did catch the `sort{}` syntax bug fixed in commit `27d8d8a`) but does **not** catch undefined variables used at runtime, calls to functions that don't exist or aren't on the path, or logic bugs (e.g. wrong array indexing) — those all had to be found by reading the code, not by static analysis. Treat it as a fast baseline check run before committing, not a substitute for the kind of full read-through that found the 19 defects above.
+
+`checkcode` is blind to two *ordering* failures that cost hours each when they
+happened, so `clean/` carries a Python checker for each. Run both on a study's
+model script directory before launching any long chain.
+
+- **`clean/use_before_def.py`** — an option **read above the line that defines
+  it**. A guarded default only protects an option if it runs before every read;
+  guard it beside one use and miss an earlier one and the script dies on
+  *"Unrecognized function or variable"* at the earlier line. Real case:
+  `contrast_objects_tag` guarded beside `savefilenamedata` while a `printhdr`
+  eight lines above also read it — `prep_3` died there after 75 minutes, having
+  saved nothing.
+- **`clean/set_after_use.py`** — an option **set below the line that already
+  consumed it**. Nothing errors; the default is simply what runs. Real case: a
+  study copy set `results_tag` ~290 lines below the block that builds
+  `tdt_resultsdir` from it, so eleven decoding runs wrote into the same untagged
+  directory and overwrote each other's maps. Statistics were unaffected
+  (`cfg.results.overwrite = 1`), the artefacts were not. **Advisory, not a
+  gate** — a variable legitimately reused for successive outputs
+  (`savefilename`, `figtitle`, `varnames`) trips it; expect a handful per model
+  and read them rather than chase them.
+
+Both ship positive controls in `clean/checker_positive_controls/`, run by
+`run_controls.sh`, which asserts that each checker flags its own control and
+ignores the other's. **`checkcode` reports zero messages on either control
+file** — measured, not assumed — which is precisely why these exist alongside
+it. If a change to a checker makes its control pass, the checker is broken.
+
+These two automate traps 6 and 7 of the ten catalogued in
+`LaBGAS_fMRI_analysis_workflow.md`; the rest still need reading.
 
 `matlab.codetools.requiredFilesAndProducts` is **not** usable in this tree and should not
 be re-attempted: it aborts entirely on a syntax error anywhere in the transitive closure,

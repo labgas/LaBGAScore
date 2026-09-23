@@ -1292,6 +1292,204 @@ When copying the html address of a script from Github, you need the *raw* versio
 
 Scripts under `b_copy_to_local_scripts_dir_and_modify/` are always study-specific and need to be copied and adapted; scripts under `core_scripts_to_run_without_modifying/` are largely generic and typically only need small, targeted adaptations (or none at all). The table below gives the typical order of execution and a short description of each script.
 
+#### Re-running prep_2 or prep_3 destroys the signature results
+
+`prep_4_apply_signatures_and_save` appends `DAT.SIG_conditions` and
+`DAT.SIG_contrasts` to `image_names_and_setup.mat`. `prep_2` and `prep_3` rebuild
+`DAT` from `prep_1`/`prep_1b` and write it back with
+
+```matlab
+save(savefilename, '-append', 'DAT');
+```
+
+`-append` replaces the whole `DAT` variable, so the in-memory copy — which has no
+`SIG_*` fields — overwrites the stored one and the signature results are gone. No
+error, nothing in the published report, and the loss is only visible later when a
+signature script finds no data to read.
+
+This is not hypothetical: `proj_moodbugs` `model_1b_basic` lost its entire
+signature analysis this way. `prep_4` ran and published on 2026-09-08; `prep_2`
+and `prep_3` were re-run on 2026-09-09; `image_names_and_setup.mat` has carried no
+`SIG_*` fields since, while the `prep_4` html report still sits in `results/html`
+suggesting the analysis exists.
+
+`prep_2` and `prep_3` now warn when this is about to happen, naming the fields
+being discarded. The warning deliberately does **not** restore them: the image
+objects have just been rebuilt, so any signature response computed from the
+previous ones is stale, and silently keeping a stale value is worse than losing
+it. **The rule is simply: any time you re-run `prep_2` or `prep_3`, re-run
+`prep_4` and everything downstream of it.**
+
+#### Ten traps when adapting a template
+
+Traps 1, 2, 3, 6, 7 and 8 fail *silently* — the script runs to completion and publishes a
+report, but the analysis is not the one you specified. Between them they account
+for eight wrong-but-clean runs during recent model builds, so they are worth
+knowing before you edit anything. Traps 4, 5 and 10 are the exception: they raise an
+error or print a visibly wrong label, but all point away from the real cause.
+Traps 6 to 9 were found during the discoverie model_2h build, trap 10 during model_2i.
+
+**1. Where you put your option overrides.** Set every study option by
+**replacing the template's own assignment line, in place**. Do not add a block
+of settings after the `a_set_up_paths_always_run_first` (`s0`) call, which is
+the intuitive place to put them and is wrong:
+
+```matlab
+% WRONG - silently discarded
+mystudy_secondlevel_m3_s0_a_set_up_paths_always_run_first;
+results_suffix = 'vox_gm';        % s0 runs a2, and the template reassigns
+pheno_file     = 'participants.tsv';   % this further down. Both are lost.
+
+% RIGHT - edit the template's own line, where it already stands
+results_suffix = 'vox_gm';   % was '' in the template
+```
+
+`s0` runs `a2_set_default_options`, which reassigns every a2 option; each core
+script then reassigns its own options again in its mandatory-options block.
+Anything set above those points is overwritten with no error and no warning.
+This has produced a `prep_3a` variant that overwrote the results of the variant
+before it (`results_suffix` reverted to `''`), an SVM that ran on another
+study's phenotype file and group codes (all 14 settings reverted), and a PLS-DA
+that silently analysed all five contrasts of the wrong first-level model.
+
+After adapting a script, check it: list every variable assigned more than once
+at the top level and confirm each later assignment is *guarded*
+(`if ~exist('x','var')` or `if isempty(x)`), which is safe, rather than
+unconditional, which clobbers.
+
+**2. Leaving the generic `s0` call in place.** Every core script calls the path
+setup, and that call must be replaced by *your study's* `s0`. Left generic, it
+re-derives `resultsdir` — usually from the **first-level** model name — and
+discards whatever your own setup had already set. Results then land in a
+different model's directory while the published report still goes to the right
+one, so the split is easy to miss; it has happened three times. The core scripts
+now carry a guard that errors out if the setup call moves `resultsdir`, so this
+one at least announces itself:
+
+```
+PATH SETUP MOVED THE RESULTS DIRECTORY.
+  before: .../secondlevel/model_3_basic/results
+  after : .../secondlevel/model_1_basic/results
+```
+
+If you see that error, replace the `a_set_up_paths_always_run_first` call in
+that script with your study's own `s0`. Note the guard needs both of its lines —
+if you copy scripts with a generator, make sure
+`resultsdir_before_setup = '';` survives alongside the `if exist(...)` line
+below it, or the guard itself will crash on a standalone (interactive) run.
+
+
+**3. Output filenames that do not include everything that varies.** A results
+table is usually named from the metric, the scaling and the contrast. If you run
+the same script twice over a *different* subset — the six-signature panel, then
+an NPS positive/negative decomposition — none of those three change, so the
+second run silently overwrites the first. Nothing errors; you are simply left
+with one table where you expected two. `h_signature_responses_group_diff` now
+takes an optional `sig_results_tag`, empty by default, appended to both the
+`.csv` and the `.mat`. Set it whenever a script is run more than once over the
+same contrast. The general rule: if two runs of a script differ in a way the
+filename does not encode, the filename is wrong, not the run.
+
+**4. `isempty` on a CANlab object array.** Several results fields hold an *array*
+of objects — `parcelwise_stats.BF`, for instance, is a `1 x nregressors`
+`statistic_image`. Writing the obvious test
+
+```matlab
+if ~isempty(results{c}.BF)          % WRONG for an object array
+```
+
+dispatches to `image_vector/isempty`, whose body is
+`isempty(obj.dat) || isempty(obj.volInfo) || ...`. With an array, `obj.dat`
+expands into a comma-separated list, so `isempty` is called with *n* arguments
+and the script dies with `Too many input arguments` — pointing at a line inside
+CanlabCore rather than at yours. Use `numel(x) > 0` instead. The line reads as
+completely ordinary MATLAB, and `checkcode` cannot see it.
+
+**5. Assuming `DAT` is in the workspace.** Only the `prep_*`/`c2*` chain loads
+`image_names_and_setup.mat`. The decoding and PLS/ENet scripts never do, so
+`exist('DAT','var')` is false there and any `DAT.`-guarded branch takes its
+fallback on *every* run. This is how the SVM scripts printed
+`contrast 1 (<name unavailable>)` for months: the lookup existed precisely so a
+contrast mismatch would be visible, and it never once resolved. If a script needs
+`DAT`, load it explicitly from `resultsdir` rather than testing for it.
+
+
+**6. Setting an option BELOW the line that consumes it.** Distinct from trap 1,
+and harder to see: the variable *is* defined before use, just with the wrong
+value, because the assignment you think is the setting sits under the consumer.
+`results_tag` is built into `tdt_resultsdir` at the `% OUTPUT DIRECTORIES` block
+near the top of the decoding script. An assignment placed further down - beside
+`scaled_contrast_dir`, say - is read after the directory has already been
+decided, so the tag silently does nothing and every variant writes to
+`TDT/<contrast>/<mode>`, overwriting the last. Eleven runs did exactly this
+before it was noticed; the printed statistics were unaffected (results are
+always recomputed) but the saved maps were lost. `clean/set_after_use.py` flags the
+pattern *definition -> use -> top-level setting*. It is advisory rather than a
+gate: a variable legitimately reused for a second output (`savefilename`,
+`figtitle`) trips it too, so expect a handful of benign hits per model.
+
+**7. A constant column in a `custom` design.** With
+`design_matrix_type = 'custom'`, `prep_3a` puts EVERY column of
+`DAT.BETWEENPERSON.contrasts{c}` in the design; `nuisance_covs` only *labels*
+columns, it does not select them. **`covs2use` is the switch that selects.**
+This matters when a `subject_filter` makes a covariate constant - restrict to
+one site and the centre dummies become all-zero. The design checker then reads
+a constant column as a manually added intercept, prints
+
+```
+Warning: An intercept appears to be added manually...
+Warning: Skipping this contrast.
+```
+
+and the script **saves empty results and exits 0** with a clean-looking report.
+Set `covs2use = {'group'}` (plus whatever genuinely belongs) whenever the covs
+table carries anything the design should not.
+
+**8. A mask that is named but not present.** `prep_3a` guards its mask block on
+`exist(maskname_glm,'file')`. A missing file does not error - masking is simply
+skipped, one line says *"Showing voxelwise results without masking"*, and the
+run continues on the whole volume. The per-voxel GLM is unaffected, but any
+FWE inference is then computed against the wrong search volume. Check the voxel
+count in the report against what the mask should give.
+
+**9. `covs2use` also decides what reaches `roi_means_table`.** The same switch
+subsets the table appended to the ROI means, which is what PLS-DA and Elastic
+Net read. Restricting the design to `{'group'}` therefore removes the centre
+column those pipelines need for fold-wise residualising, and they fail with
+*"covariate_names not found in roi_stats table"*. Where a `prep_3a` run exists
+only to generate features, widen `covs2use` - its own GLM output is not the
+model's result, and the ROI means come from `apply_parcellation`, independent
+of the design.
+
+**10. A model whose sample IS a subset.** `prep_2` subsets
+`DAT.BETWEENPERSON.group` itself, using the exclusion mask it builds from
+`subjs2exclude_data`. That assumes `prep_1b` always built the design on the
+**full** subject list. It is a fair assumption for a model that analyses
+everyone, and wrong for one whose sample is a subset by definition — patients
+only, one site only, completers only. Build the design on 96 subjects in
+`prep_1b`, and `prep_2` indexes it with the 158-element mask:
+
+```
+The logical indices in position 1 contain a true value outside of the array bounds.
+Error in ..._prep_2_load_image_data_and_save (line 174)
+    DAT.BETWEENPERSON.group = DAT.BETWEENPERSON.group(idx_include,:);
+```
+
+The error names `prep_2`, but nothing is wrong there — the mismatch was created
+in `prep_1b`, one script earlier. Worse, the unguarded version would *silently
+mis-align* rather than error whenever the two lengths happen to be compatible.
+Note also that `prep_2` subsets only `.group` and `.BEHAVIOR.behavioral_data_table`;
+the design tables in `.BETWEENPERSON.conditions{}` / `.contrasts{}` are never
+touched, so `prep_1b` is their only author and must build them on the retained
+sample regardless.
+
+The template now decides by length — full length means subset, retained length
+means `prep_1b` already did it, anything else errors with both counts named —
+and separately checks the design tables against the retained count rather than
+letting `prep_3a` discover the mismatch. Either convention works, so long as
+`prep_1b` and `prep_2` agree on which one is in force.
+
+
 | # | Script | Description |
 |---|---|---|
 | 1 | [`a_set_up_paths_always_run_first`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/b_copy_to_local_scripts_dir_and_modify/a_set_up_paths_always_run_first.m) | Straightforward, mostly generic script defining the path of, and creating subdirs within, your model-specific second-level directory — the second-level equivalent of `LaBGAScore_prep_s0_define_directories.m`. The only study-specific modification needed is the reference to the correct prep and firstlevel scripts for the model, and to the correct secondlevel script to set the options (`<study_name>_prep_s0_define_directories.m`, `<study_name>_firstlevel_<mx>_s1_options_dsgn_struct.m`, `<study_name>_secondlevel_<mx>_s1_a2_set_default_options.m`). Must be run each time before running any of the following scripts; also creates the output dirs of the second-level GLM when you modify the model name. |
@@ -1308,16 +1506,23 @@ Scripts under `b_copy_to_local_scripts_dir_and_modify/` are always study-specifi
 | 12 | [`prep_3f_create_fmri_data_single_trial_object`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/prep_3f_create_fmri_data_single_trial_object.m) | Creates and saves an `fmri_data_st` object of single-trial con images and per-trial variance inflation factors (VIFs) from firstlevel results, attaches single-trial ratings, excludes high-VIF trials, and runs sanity checks that trial/subject identifiers line up. Inspect the VIF plots in the html report — high-VIF trials indicate multicollinearity with noise regressors and are auto-excluded. |
 | 13 | [`c2f_run_MVPA_regression_single_trial`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/c2f_run_MVPA_regression_single_trial.m) | Runs MVPA regression (default cross-validated PCR, adaptable to PLS or other algorithms) on a continuous outcome using the `prep_3f_` single-trial object, via either CANlab's classic `predict` function or Bogdan's object-oriented `ooFmriDataObjML` toolbox; supports optional bootstrapping, permutation testing, and source reconstruction ("structure coefficients"). |
 | 14 | [`c2g_run_multivariate_mediation_single_trial`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/c2g_run_multivariate_mediation_single_trial.m) | Runs multivariate (PDM) mediation analysis on a continuous outcome using the `prep_3f_` single-trial object, via CANlab's `multivariateMediation` function; supports optional bootstrapping and source reconstruction. |
-| 15 | [`prep_4_apply_signatures_and_save`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/prep_4_apply_signatures_and_save.m) | Calculates selected CANlab signature responses (via `apply_all_signatures()`) for all conditions/contrasts in DAT and saves them to `DAT.SIG_conditions`/`DAT.SIG_contrasts`; additionally computes NPS subregion responses via `apply_nps()` if `'nps'` is among `keyword_sigs`. Choose which signatures to analyze by looking at [this site](https://sites.google.com/dartmouth.edu/canlab-brainpatterns/multivariate-brain-signatures). |
-| 16 | [`d_signature_responses_generic`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/d_signature_responses_generic.m) | Plots and tests significance of selected signature responses (from `prep_4_apply_signatures_and_save.m`) for conditions/contrasts in DAT — for individual signatures or, by default, all signatures in `keyword_sigs` — via `plugin_signature_condition_contrast_plot`. |
-| 17 | [`d10_signature_riverplots`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/d10_signature_riverplots.m) | Generates cosine-similarity riverplots of signature responses (loaded via `load_image_set`) against condition and contrast images in DAT, showing statistically significant associations only. Unlike `d_signature_responses_generic.m`, works only on signature groups, not individual signatures. |
-| 18 | [`h_signature_responses_group_diff`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/h_signature_responses_group_diff.m) | Runs a two-sample t-test for selected signature responses per contrast, plotting group differences and printing between-group test statistics for each (group membership from `DAT.BETWEENPERSON.group`, binarized via median split if continuous). Note: unlike other Group 2 scripts, this script does not call `a_set_up_paths_always_run_first` or reload DAT/DATA_OBJ from saved .mat files itself; it assumes these are already in the workspace from a previous script run earlier in the same Matlab session (e.g. `prep_4_apply_signatures_and_save.m`). Run this with a `publish` command. |
-| 19 | [`e1_corr_patterns`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/e1_corr_patterns.m) | Calculates, thresholds, and plots pairwise searchlight correlation maps between all condition or contrast images in DAT via CANlab's `searchlight_correlation()` function, optionally masked/restricted to an atlas. Independent of `prep_4`/signatures. |
+| 15 | [`c2h_run_multivariate_mediation`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/c2h_run_multivariate_mediation.m) | Runs multivariate (PDM) mediation on a SECOND-LEVEL contrast rather than on single trials: the mediator is the per-subject contrast image from `prep_3`, the outcome a between-subject variable from `prep_1b`. Use this when the mediation question is between subjects; use `c2g_` when it is within subject across trials. Supports covariate residualisation of the mediator (`pdm_covs`), bootstrap inference on |w| and masking of the mediator before the PDM. **NOTE:** inference on the path coefficients is deliberately NOT reported — path a is fixed positive by the method, so testing its sign is not meaningful. |
+| 16 | [`prep_4_apply_signatures_and_save`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/prep_4_apply_signatures_and_save.m) | Calculates selected CANlab signature responses (via `apply_all_signatures()`) for all conditions/contrasts in DAT and saves them to `DAT.SIG_conditions`/`DAT.SIG_contrasts`; additionally computes NPS subregion responses via `apply_nps()` if `'nps'` is among `keyword_sigs`. Choose which signatures to analyze by looking at [this site](https://sites.google.com/dartmouth.edu/canlab-brainpatterns/multivariate-brain-signatures). |
+| 17 | [`d_signature_responses_generic`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/d_signature_responses_generic.m) | Plots and tests significance of selected signature responses (from `prep_4_apply_signatures_and_save.m`) for conditions/contrasts in DAT — for individual signatures or, by default, all signatures in `keyword_sigs` — via `plugin_signature_condition_contrast_plot`. |
+| 18 | [`d10_signature_riverplots`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/d10_signature_riverplots.m) | Generates cosine-similarity riverplots of signature responses (loaded via `load_image_set`) against condition and contrast images in DAT, showing statistically significant associations only. Unlike `d_signature_responses_generic.m`, works only on signature groups, not individual signatures. |
+| 19 | [`h_signature_responses_group_diff`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/h_signature_responses_group_diff.m) | Runs a two-sample t-test for selected signature responses per contrast (`subsets_i_want`), plotting group differences and printing between-group statistics; optionally repeats each test adjusted for covariates named in `adjust_for_covs`, with a companion plot. Corrects across the signature family using the methods listed in `corrections_i_want` — Benjamini-Hochberg and Storey by default, with `adaptiveFDR`, `BKY` and the FWER `holmSidak` available — and writes a summary table (per-signature means, difference, t, Cohen's d and every requested correction) to `.csv` and `.mat`, plus violin panels of the unadjusted and adjusted responses. Group membership from `DAT.BETWEENPERSON.group` or the condition/contrast-specific fields from `prep_1b`. An NPS-subregion section reports the 8 positive and 7 negative NPS regions from `DAT.NPSsubregions` (written by `prep_4` when `'nps'` is among `keyword_sigs`), corrected over its own family via `corrections_i_want_subregions` and written to `NPS_subregion_group_diff_*.csv/.mat`. It is self-gating: absent that field it prints a note and does nothing. |
+| 20 | [`e1_corr_patterns`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/core_scripts_to_run_without_modifying/e1_corr_patterns.m) | Calculates, thresholds, and plots pairwise searchlight correlation maps between all condition or contrast images in DAT via CANlab's `searchlight_correlation()` function, optionally masked/restricted to an atlas. Independent of `prep_4`/signatures. |
 
 ### 4b. If you want ROI analysis, create the ROI masks first
 
 `doroi_analysis = true` in `prep_3a` extracts ROI averages from masks that **already
-exist**. It does not create them, and until they exist the script cannot run.
+exist**, and runs the inference on them: an omnibus MANOVA across the ROI set, then a
+GLM per ROI reported with both q_BH and q_Storey. Extraction and inference are a single
+option — the former `doroi_glm` switch is retired, because extracting ROI averages and
+then testing nothing was almost never what was wanted, and a study whose `a2` predated
+that option silently got the means with no tests.
+
+`prep_3a` does not create the masks, and until they exist the script cannot run.
 
 Generate them with
 [`LaBGAScore_atlas_rois_from_atlas.m`](https://github.com/labgas/LaBGAScore/blob/main/atlas_mask_tools/LaBGAScore_atlas_rois_from_atlas.m)

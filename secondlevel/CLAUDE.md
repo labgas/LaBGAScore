@@ -372,6 +372,13 @@ addpath(genpath('..')); LaBGAScore_check_all_scripts(pwd)
 `checkcode` catches parse errors but not undefined variables, missing functions, or wrong indexing —
 the defect classes that actually occur here. Read the code path; don't rely on it.
 
+Two further checkers live in the repo root's `clean/`, aimed at *option-ordering* failures
+`checkcode` is provably blind to (it reports zero messages on either of their positive controls):
+`use_before_def.py` (an option read above the line that defines it) and `set_after_use.py` (an
+option set below the line that already consumed it). They take a directory of scripts, so they
+apply to a study's model folder rather than to this one. `clean/checker_positive_controls/run_controls.sh`
+verifies both still work. See the repo-root README, "Tests, CI, and the script checkers".
+
 ## Conventions
 
 Files in `functions/` use MATLAB's standard function help-text convention (H1 line, `USAGE`,

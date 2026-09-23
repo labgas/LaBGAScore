@@ -2,6 +2,23 @@
 
 Core scripts (and templates for them) for LaBGAS's (Laboratory for Brain-Gut Axis Studies, KU Leuven) standard neuroimaging analysis workflow.
 
+> ### New to the lab? Start here
+>
+> 1. **[`LaBGAS_fMRI_analysis_workflow.md`](LaBGAS_fMRI_analysis_workflow.md)** — the
+>    step-by-step guide to running a study end to end, from server access and DICOM
+>    conversion through first and second level. Read it before this README; everything
+>    else assumes it. Its **"Ten traps when adapting a template"** section is the
+>    single highest-value page in this repo — every trap in it is a real
+>    wrong-but-clean run someone already paid for.
+> 2. **This README** — what lives where in this repo, and why.
+> 3. **[`CANlab_help_examples`](https://github.com/labgas/CANlab_help_examples)** (LaBGAS
+>    fork) — the second-level templates you will actually copy into your study. See
+>    [Relationship to `CANlab_help_examples`](#relationship-to-canlab_help_examples-labgas-fork).
+>
+> Never edit a checked-in template in place for a study. Copy it into your project's
+> `code` subdataset and adapt the copy — see
+> [Repository structure and naming convention](#repository-structure-and-naming-convention).
+
 ## Contents
 
 - [What this is](#what-this-is)
@@ -12,14 +29,14 @@ Core scripts (and templates for them) for LaBGAS's (Laboratory for Brain-Gut Axi
 - [Relationship to `CANlab_help_examples` (LaBGAS fork)](#relationship-to-canlab_help_examples-labgas-fork)
 - [Running scripts and publishing reports](#running-scripts-and-publishing-reports)
 - [Provenance and dependency documentation](#provenance-and-dependency-documentation)
-- [Tests and CI](#tests-and-ci)
+- [Tests, CI, and the script checkers](#tests-ci-and-the-script-checkers)
 - [License](#license)
 
 ## What this is
 
 LaBGAScore is a curated collection of MATLAB scripts and helper functions implementing LaBGAS's standard neuroimaging analysis workflow, spanning BIDS conversion, first-level and second-level fMRI modeling, MVPA/machine-learning pipelines, PET, MRS, and several auxiliary toolkits. A small amount of code is in other languages — SAS macros under `stats_tools/sas_macros/`, and standalone Python utilities under `qr_code/`. Scripts can either be run directly from this repo, or — more commonly for a real study — copied into that study's own project repo and adapted there for study-specific purposes.
 
-This is not a packaged software product: there is no build system or automated test suite. A lightweight static-analysis helper is available (see [Tests and CI](#tests-and-ci)).
+This is not a packaged software product: there is no build system or automated test suite. Three lightweight checkers stand in for a test suite (see [Tests, CI, and the script checkers](#tests-ci-and-the-script-checkers)).
 
 ## Typical LaBGAS project structure
 
@@ -101,9 +118,9 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 
 **`firstlevel/`** — SPM/CANlab first-level GLM pipeline: `s1_options_dsgn_struct` (builds the CANlab-style `DSGN` design struct) → `s2_fit_model` (fits and diagnoses first-level models, cloning CANlab dependencies as needed) → `s3_diagnose_model` (publishes an HTML diagnostic report via CANlab's `scn_spm_design_check`, saves VIFs), with `s1a`/`s2a` as the multisession/multitask variant of the first two. A separate phMRI (pharmacological challenge) chain (`s1b`/`s2b`/`s3b`/`s3c`) models the post-administration period as one regressor per timebin and builds SPM batches directly rather than through `canlab_glm_*`. `functions/canlab_glm_subject_levels*_old.m` are older CANlab GLM functions kept because current example scripts still call them. See [`firstlevel/README.md`](firstlevel/README.md) for the task-fMRI chain — the `LaBGAS_options` reference, the noise model, the inter-script handoff, what lands on disk, and the contrast-order contract with the second-level scripts — and [`firstlevel/README_phMRI.md`](firstlevel/README_phMRI.md) for the phMRI chain.
 
-**`secondlevel/`** — group-level statistics and MVPA/ML pipelines: TFCE permutation inference using classic TFCE, Smith & Nichols 2009 (`group_tfce_from_subject_maps.m` → `tfce_one_fmri_dat.m` → `tfce_volume.m` → `tfce_transform_3d.m`), PLS-DA/PLSR/Elastic Net pipelines with matching diagnostic-plotting functions (see the seven `README_*.md` guides above), the shared per-fold helpers they are built from (`foldPreprocess.m`, `residualizeFold.m`, `residualizeY.m`, `applyScaling.m`, `capLV.m`, `validateCovariates.m`, `warnUnknownOptions.m`, `setParforStream.m`, `globalBaselineCV.m`, `selectENetHyperparams.m`, `enetLambdaGrid.m`, `logitSafe.m`, `quickCV_*.m`, `bootstrapOOB_*.m`, `makeGroupedFolds.m`, `swapWithinSubjectLabels.m`, `quickGroupedCV.m`), atlas/threshold validation helpers (`validateAtlasLabels.m`, `maskToSignificant.m`), dice-overlap tools (`dice_statistic_image*.m`), an ROI/parcel extraction script (`LaBGAScore_secondlevel_extractparcels_sessions.m`), a MACS-toolbox model-space batch-setup script (`LaBGAScore_secondlevel_MS_mat_pipeline.m`), an MVPA-regression-on-connectivity-betas script (`LaBGAScore_secondlevel_mvpa_beta_maps_conn.m`), a PLS/ENet ROI-pipeline wrapper (`LaBGAScore_secondlevel_roi_run_plot_PLS_ENet_pipeline.m`), an object-oriented ML toolkit example (`LaBGAScore_secondlevel_ooFmriDataObjML_example.m`), and the `ProgressTracker` class.
+**`secondlevel/`** — group-level statistics and MVPA/ML pipelines: TFCE permutation inference using classic TFCE, Smith & Nichols 2009 (`group_tfce_from_subject_maps.m` → `tfce_one_fmri_dat.m` → `tfce_volume.m` → `tfce_transform_3d.m`), PLS-DA/PLSR/Elastic Net pipelines with matching diagnostic-plotting functions (see the seven `README_*.md` guides above), the shared per-fold helpers they are built from (`foldPreprocess.m`, `residualizeFold.m`, `residualizeY.m`, `applyScaling.m`, `capLV.m`, `validateCovariates.m`, `warnUnknownOptions.m`, `setParforStream.m`, `globalBaselineCV.m`, `selectENetHyperparams.m`, `enetLambdaGrid.m`, `logitSafe.m`, `quickCV_*.m`, `bootstrapOOB_*.m`, `makeGroupedFolds.m`, `swapWithinSubjectLabels.m`, `quickGroupedCV.m`), atlas/threshold validation helpers (`validateAtlasLabels.m`, `maskToSignificant.m`), dice-overlap tools (`dice_statistic_image*.m`), blob-reporting helpers that give any thresholded map the montage/region-table treatment `c2a` gives a GLM result (`LaBGAScore_blob_montage.m`, and `LaBGAScore_pdm_report.m` / `LaBGAScore_pdm_report_image.m` for PDM mediation results, with `LaBGAScore_pdm_regenerate_reports.m` to backfill that reporting from already-written `PDM*.nii` without refitting the bootstrap), an ROI/parcel extraction script (`LaBGAScore_secondlevel_extractparcels_sessions.m`), a MACS-toolbox model-space batch-setup script (`LaBGAScore_secondlevel_MS_mat_pipeline.m`), an MVPA-regression-on-connectivity-betas script (`LaBGAScore_secondlevel_mvpa_beta_maps_conn.m`), a PLS/ENet ROI-pipeline wrapper (`LaBGAScore_secondlevel_roi_run_plot_PLS_ENet_pipeline.m`), an object-oriented ML toolkit example (`LaBGAScore_secondlevel_ooFmriDataObjML_example.m`), and the `ProgressTracker` class.
 
-**`stats_tools/`** — general-purpose statistics helpers, in two languages. `functions/LaBGAScore_Storey_FDR.m` implements Storey's positive FDR correction (falling back to Benjamini-Hochberg when its precondition isn't met). `sas_macros/` holds SAS macros for statistics the MATLAB side does not cover: `mixed_effectsize.sas` (`%mixed_effectsize`) computes effect sizes — partial eta-squared with a noncentral-F confidence interval, Cohen's f², and optionally eta-squared/omega-squared — for the fixed effects of a model fitted with `PROC MIXED`, and `es_identify.sas` (`%es_identify`, `%es_identify_ds`) audits effect sizes in an existing results table to determine which statistic was actually reported. Both files are self-contained; `%include` the one you need. They require SAS with SAS/STAT, and are the only non-MATLAB code in the analysis workflow proper. See [`stats_tools/sas_macros/README.md`](stats_tools/sas_macros/README.md) for usage, the formulas used, the marginal-versus-conditional residual distinction, and the caveats to state in a Methods section — including its note that the macros have not yet been run against a real model in SAS.
+**`stats_tools/`** — general-purpose statistics helpers, in two languages. `functions/LaBGAScore_Storey_FDR.m` implements several multiple-comparison corrections behind one interface, selected with `'method'`: Storey q-values (`'sas'`, the default, reproducing SAS PROC MULTTEST's PFDR — spline then bootstrap on SAS's own trigger; also `'lambda'`, `'spline'`), plain Benjamini-Hochberg (`'bh'`), the two adaptive FDR procedures (`'adaptivefdr'` = Benjamini & Hochberg 2000 with the lowest-slope pi0, `'bky'` = Benjamini, Krieger & Yekutieli 2006 two-stage), and FWER step-down corrections (`'stepdown_sidak'`, `'holm'`). A reliability guard can reject an implausible pi0 and fall back to BH; it is ON for the pi0-estimating methods but OFF for `'sas'`, because SAS has no such check and a q-value that PROC MULTTEST cannot reproduce defeats the purpose of a SAS mode. Override with `'guard'`. The function's header carries the measured behaviour of each estimator, the comparison against R's `qvalue` package, and what the original Storey papers do and do not say about the number of tests. `LaBGAScore_combat_fit.m` and `LaBGAScore_combat_apply.m` split ComBat into a fit step and an apply step, so harmonisation parameters can be estimated on a training fold only and applied to held-out data — the form ComBat has to take inside cross-validation, where fitting on all the data would leak. `LaBGAScore_dummy_code.m` expands a phenotype column into k-1 indicator columns, which is what an unordered factor such as scanning site requires in a design matrix. `sas_macros/` holds SAS macros for statistics the MATLAB side does not cover: `mixed_effectsize.sas` (`%mixed_effectsize`) computes effect sizes — partial eta-squared with a noncentral-F confidence interval, Cohen's f², and optionally eta-squared/omega-squared — for the fixed effects of a model fitted with `PROC MIXED`, and `es_identify.sas` (`%es_identify`, `%es_identify_ds`) audits effect sizes in an existing results table to determine which statistic was actually reported. Both files are self-contained; `%include` the one you need. They require SAS with SAS/STAT, and are the only non-MATLAB code in the analysis workflow proper. See [`stats_tools/sas_macros/README.md`](stats_tools/sas_macros/README.md) for usage, the formulas used, the marginal-versus-conditional residual distinction, and the caveats to state in a Methods section — including its note that the macros have not yet been run against a real model in SAS.
 
 **`atlas_mask_tools/`** — `LaBGAScore_atlas_binary_mask_from_atlas.m` and `LaBGAScore_atlas_rois_from_atlas.m` generate custom atlas/mask and per-ROI objects from a chosen atlas; the folder also ships a set of ready-made brain/gray-matter mask and template NIfTIs (`brain_masks/`, `brain_templates/`, `gray_matter_masks/`).
 
@@ -113,7 +130,7 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 
 **`cosmomvpa/`** — `LaBGAScore_cosmomvpa_searchlight_rsa.m`: first-level representational similarity analysis (behavioral vs. neural dissimilarity, leave-one-run-out cross-validation) plus group-level permutation/TFCE testing, via CoSMoMVPA.
 
-**`decoding_toolbox/`** — TDT-based decoding: `LaBGAScore_decoding_template_xclass_acc.m` (first-level (cross-)classification accuracy plus group-level testing) and `LaBGAScore_decoding_SVM_between_subjects.m` (a full between-subject SVM decoding pipeline with permutation-based TFCE inference, sharing `secondlevel/functions/tfce_volume.m` with the second-level TFCE stack).
+**`decoding_toolbox/`** — TDT-based decoding: `LaBGAScore_decoding_template_xclass_acc.m` (first-level (cross-)classification accuracy plus group-level testing) and `LaBGAScore_decoding_SVM_between_subjects.m` (a full between-subject SVM decoding pipeline with permutation-based TFCE inference, sharing `secondlevel/functions/tfce_volume.m` with the second-level TFCE stack, with optional in-fold ComBat harmonisation and nuisance residualisation). `LaBGAScore_export_scaled_contrasts.m` writes second-level contrast objects out as one NIfTI per subject, so a decoding analysis can be run on exactly the images the GLM used rather than on raw first-level contrasts.
 
 **`graphvar/`** — `LaBGAScore_prep_graphvar_input_from_conn.m`: builds GraphVar input files from CONN toolbox ROI-to-ROI connectivity output.
 
@@ -123,7 +140,7 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 
 **`figures/`** — plotting helpers: `canlabCmap.m` (CANlab colormap), `cluster_surface_plots.m`, `save_all_open_figures_smart.m`.
 
-**`clean/`** — utilities: `LaBGAScore_clean_gzip_all_nii.m` (recursive `.nii` gzip), `LaBGAScore_clean_sourcedata.m` (cleans the `sourcedata` subdataset), `LaBGAScore_move_repos_matlabpath.m`, `LaBGAScore_smart_parallel_pool_setup.m`, plus the provenance/dependency tooling and the report runners described below (`labgascore_run_headless.sh`, `LaBGAScore_run_reports.m`).
+**`clean/`** — utilities: `LaBGAScore_clean_gzip_all_nii.m` (recursive `.nii` gzip), `LaBGAScore_clean_sourcedata.m` (cleans the `sourcedata` subdataset), `LaBGAScore_move_repos_matlabpath.m`, `LaBGAScore_smart_parallel_pool_setup.m`, the provenance/dependency tooling and the report runners described below (`labgascore_run_headless.sh`, `LaBGAScore_run_reports.m`), and the three script checkers — `LaBGAScore_check_all_scripts.m` plus the two Python option-ordering checkers `use_before_def.py` and `set_after_use.py`, with their positive controls in `checker_positive_controls/` (see [Tests, CI, and the script checkers](#tests-ci-and-the-script-checkers)).
 
 **`qr_code/`** — standalone Python utilities (`emailQR.py`, `email_QR_Input.py`, `QRtoPDF.py`) for generating and emailing QR codes; not MATLAB, and unrelated to the neuroimaging pipeline proper.
 
@@ -231,11 +248,81 @@ Recommended settings per screen size are in
 which repository each of those lives in. It, `dependencies.tsv` and `dependencies.yml` are
 **generated** by `clean/LaBGAScore_dep_report.m` — regenerate them rather than editing.
 
-## Tests and CI
+## Tests, CI, and the script checkers
 
 There is no automated test suite and no CI pipeline in this repo. Verify changes manually by running the affected script against real or study data; several scripts support MATLAB's `publish()` to generate a date-stamped HTML report of their output (e.g. `cosmomvpa/LaBGAScore_cosmomvpa_searchlight_rsa.m`, `decoding_toolbox/LaBGAScore_decoding_template_xclass_acc.m`).
 
-`clean/LaBGAScore_check_all_scripts.m` runs MATLAB's built-in Code Analyzer (`checkcode`) across every `.m` file in the repo (or a subtree you pass it) and reports the results, with genuine syntax errors called out separately from style/performance suggestions. It reliably catches parse errors — a file that cannot run past the flagged line — but does **not** catch undefined variables used at runtime, calls to functions that don't exist or aren't on the path, or logic bugs; those still require reading the code. Run it before committing as a fast baseline check, not a substitute for review.
+What exists instead is three cheap checkers in `clean/`, each aimed at a failure
+mode the previous one cannot see. Run all three before launching a long chain —
+together they take seconds, and each was written after a specific failure that
+cost hours.
+
+| checker | catches | run it on |
+|---|---|---|
+| `LaBGAScore_check_all_scripts.m` | parse errors, plus style/performance suggestions listed separately | this repo, or any subtree you pass as `rootdir` |
+| `clean/use_before_def.py` | an option **read above the line that defines it** | a study's model script directory |
+| `clean/set_after_use.py` | an option **set below the line that already consumed it** | the same |
+
+**`LaBGAScore_check_all_scripts.m`** wraps MATLAB's built-in Code Analyzer
+(`checkcode`). It reliably catches parse errors — a file that cannot run past the
+flagged line — but does **not** catch undefined variables used at runtime, calls
+to functions that don't exist or aren't on the path, or logic bugs; those still
+require reading the code.
+
+**`use_before_def.py`** covers the gap immediately next to that one. A guarded
+default (`if ~exist('opt','var'), opt = ...; end`) only protects an option if it
+runs *before* every read. Put the guard beside one use and miss an earlier one,
+and the script dies on *"Unrecognized function or variable"* at the earlier line
+— which may sit near the end of a long script, after all the expensive work and
+before anything is saved. `checkcode` cannot see this: the line is syntactically
+perfect. This is not hypothetical — `contrast_objects_tag` was guarded beside
+`savefilenamedata` while a `printhdr` eight lines above also read it, and `prep_3`
+died there after 75 minutes of ComBat and contrast formation, having saved
+nothing.
+
+**`set_after_use.py`** covers the opposite, and worse, case: the option *is*
+defined before use, so nothing errors — but the author's real setting sits
+*below* the consumer, so the value in force is the default and the setting
+silently does nothing. The motivating case: a decoding template builds its output
+directory from `results_tag` a few lines after the guard, and a study copy that
+set `results_tag` further down had eleven runs write into the same untagged
+folder and overwrite each other's maps. The statistics were unaffected, because
+results are always recomputed; the saved artefacts were not.
+
+`set_after_use.py` is **advisory, not a gate**. One benign pattern still trips it
+— a variable legitimately reused for successive outputs (`savefilename` for a
+second file, `figtitle` for the next figure). Expect a handful per model, read
+them rather than chase them, and keep the checker because the failure it does
+catch is silent, expensive and otherwise invisible.
+
+Both Python checkers take one argument, the directory of scripts to scan:
+
+```bash
+python3 clean/use_before_def.py /data/proj_xxx/code/secondlevel/model_N_name
+python3 clean/set_after_use.py  /data/proj_xxx/code/secondlevel/model_N_name
+```
+
+Neither needs MATLAB. Both ship with a **positive control** — a deliberately
+broken miniature script each checker must flag — so a silent PASS can be
+trusted rather than assumed:
+
+```bash
+clean/checker_positive_controls/run_controls.sh
+```
+
+Each control is positive for its own checker and negative for the other, and the
+runner asserts both directions, so a checker that starts flagging everything
+fails the controls just as a checker that stops flagging anything does. The
+checkers exit non-zero when they find something, so in a control run a non-zero
+exit is success; the runner translates that and prints a single verdict line.
+
+`checkcode` reports **zero** messages on either control file. That is the point:
+both failure modes are invisible to MATLAB's own static analysis, which is why
+these two checkers exist alongside it rather than inside it.
+
+See also **["Ten traps when adapting a template"](LaBGAS_fMRI_analysis_workflow.md)**
+in the workflow document, which is the catalogue these checkers were distilled
+from; traps 6 and 7 are exactly what the two Python scripts automate.
 
 ## License
 
