@@ -14,6 +14,9 @@ Core scripts (and templates for them) for LaBGAS's (Laboratory for Brain-Gut Axi
 > 3. **[`CANlab_help_examples`](https://github.com/labgas/CANlab_help_examples)** (LaBGAS
 >    fork) — the second-level templates you will actually copy into your study. See
 >    [Relationship to `CANlab_help_examples`](#relationship-to-canlab_help_examples-labgas-fork).
+> 4. **[`LaBGAS_Claude_setup.md`](LaBGAS_Claude_setup.md)** — set up Claude (desktop app on
+>    your own machine, Claude Code CLI on the shared Linux server) from your Team invite
+>    e-mail to fully operational.
 >
 > Never edit a checked-in template in place for a study. Copy it into your project's
 > `code` subdataset and adapt the copy — see
@@ -31,6 +34,7 @@ Core scripts (and templates for them) for LaBGAS's (Laboratory for Brain-Gut Axi
 - [Provenance and dependency documentation](#provenance-and-dependency-documentation)
 - [Tests, CI, and the script checkers](#tests-ci-and-the-script-checkers)
 - [Claude Code + MATLAB Agentic Toolkit](#claude-code--matlab-agentic-toolkit)
+- [`LaBGAS_Claude_setup.md`](LaBGAS_Claude_setup.md) — Claude Team account setup (desktop app + Linux server CLI)
 - [License](#license)
 
 ## What this is
@@ -330,6 +334,8 @@ from; traps 6 and 7 are exactly what the two Python scripts automate.
 MathWorks publishes an official **[MATLAB Agentic Toolkit](https://github.com/matlab/matlab-agentic-toolkit)** — an MCP server that lets Claude Code run and inspect MATLAB directly (`evaluate_matlab_code`, `run_matlab_file`, `run_matlab_test_file`, `check_matlab_code`, `detect_matlab_toolboxes`), plus a catalogue of Claude Code skills for common MATLAB tasks. It is not part of this repo and is entirely optional, but it works well alongside the header conventions and checkers documented above.
 
 **This cannot be rolled out via a checked-in project config.** The MCP server is a native binary tied to each person's own MATLAB install path and OS, so every lab member installs and registers it once, on their own machine — see step 7 of ["Before you start"](LaBGAS_fMRI_analysis_workflow.md#before-you-start) in the workflow document for the install commands and the recommended skill-group subset for LaBGAS work.
+
+New to Claude entirely? Start with **[`LaBGAS_Claude_setup.md`](LaBGAS_Claude_setup.md)** first — it covers the Team account, the desktop app, and the Claude Code CLI on the shared Linux server; this section only covers the MATLAB-specific add-on.
 
 ## License
 
