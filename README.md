@@ -331,7 +331,7 @@ from; traps 6 and 7 are exactly what the two Python scripts automate.
 
 ## Claude Code + MATLAB Agentic Toolkit
 
-MathWorks publishes an official **[MATLAB Agentic Toolkit](https://github.com/matlab/matlab-agentic-toolkit)** — an MCP server that lets Claude Code run and inspect MATLAB directly (`evaluate_matlab_code`, `run_matlab_file`, `run_matlab_test_file`, `check_matlab_code`, `detect_matlab_toolboxes`), plus a catalogue of Claude Code skills for common MATLAB tasks. It is not part of this repo and is entirely optional, but it works well alongside the header conventions and checkers documented above.
+MathWorks publishes an official **[MATLAB Agentic Toolkit](https://github.com/matlab/matlab-agentic-toolkit)** — an MCP server that lets Claude Code run and inspect MATLAB directly (`evaluate_matlab_code`, `run_matlab_file`, `run_matlab_test_file`, `check_matlab_code`, `detect_matlab_toolboxes`), plus a catalogue of Claude Code skills for common MATLAB tasks. It is not part of this repo, but **every lab member is expected to have it set up** — it works well alongside the header conventions and checkers documented above.
 
 **This cannot be rolled out via a checked-in project config.** The MCP server is a native binary tied to each person's own MATLAB install path and OS, so every lab member installs and registers it once, on their own machine — see step 7 of ["Before you start"](LaBGAS_fMRI_analysis_workflow.md#before-you-start) in the workflow document for the install commands and the recommended skill-group subset for LaBGAS work.
 

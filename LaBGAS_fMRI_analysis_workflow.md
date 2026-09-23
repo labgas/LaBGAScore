@@ -167,9 +167,9 @@ Follow [these instructions](http://handbook.datalad.org/en/latest/intro/installa
 
 **NOTE:** it is recommended (but not compulsory) to use the same username and e-mail as the one you use for your Github and GIN accounts!
 
-### 7. Set up Claude Code with the MATLAB Agentic Toolkit (optional but recommended)
+### 7. Set up Claude Code with the MATLAB Agentic Toolkit (required)
 
-If you use [Claude Code](https://claude.com/claude-code), MathWorks' **[MATLAB Agentic Toolkit](https://github.com/matlab/matlab-agentic-toolkit)** lets it run and check MATLAB code directly (execute a script, run `checkcode`, run unit tests, list your installed toolboxes) instead of only reading it. This is per-person setup — the MCP server is a native binary tied to your own MATLAB install and OS, so there is nothing to pull from this repo; run the following once on your own machine.
+Every lab member using Claude Code is expected to have this set up. MathWorks' **[MATLAB Agentic Toolkit](https://github.com/matlab/matlab-agentic-toolkit)** lets it run and check MATLAB code directly (execute a script, run `checkcode`, run unit tests, list your installed toolboxes) instead of only reading it. This is per-person setup — the MCP server is a native binary tied to your own MATLAB install and OS, so there is nothing to pull from this repo; run the following once on your own machine.
 
 1. **Install the MCP server.** From MATLAB, run:
 

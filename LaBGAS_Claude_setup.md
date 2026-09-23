@@ -33,8 +33,9 @@ account and home directory.
 4. **Connect GitHub.** Add the GitHub connector and authorize it for the `labgas` GitHub
    organization (at minimum, `LaBGAScore` and `CANlab_help_examples`, plus any `proj_xxx`
    repos you work on). This is what lets Claude open PRs, read issues, and check CI for you.
-5. **MATLAB Agentic Toolkit (optional, recommended if you run MATLAB locally on Windows).**
-   Already fully documented — don't redo it here. See step 7 of
+5. **MATLAB Agentic Toolkit (required).** Every lab member sets this up — it's how Claude
+   runs and checks MATLAB code directly instead of only reading it. Already fully
+   documented — don't redo it here. See step 7 of
    ["Before you start"](LaBGAS_fMRI_analysis_workflow.md#before-you-start) in the workflow
    document for the install commands and the LaBGAS-recommended skill-group subset.
 
@@ -94,13 +95,13 @@ from everyone else logged into the same server.
    LaBGAS repos — this is also when Claude picks up that repo's `CLAUDE.md`/`README.md`
    conventions automatically.
 
-6. **Optional: MATLAB Agentic Toolkit here too.** If you run MATLAB from this server (see
+6. **MATLAB Agentic Toolkit here too (required).** If you run MATLAB from this server (see
    the headless-run instructions in
    ["Before you start"](LaBGAS_fMRI_analysis_workflow.md#before-you-start) of the workflow
-   document), the same MCP server and skill groups documented there work on Linux as well
-   — the install command and recommended skill-group subset are identical; only the
-   `setupAgenticToolkit("install")` step needs to be run from MATLAB on the server rather
-   than on Windows.
+   document), set it up here as well — the same MCP server and skill groups documented
+   there work on Linux; the install command and recommended skill-group subset are
+   identical, only the `setupAgenticToolkit("install")` step needs to be run from MATLAB on
+   the server rather than on Windows.
 
 You're operational once `which claude` resolves, `claude` starts without prompting you to
 log in again, and you can open a chat from inside a LaBGAS repo directory.
