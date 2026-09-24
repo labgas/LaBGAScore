@@ -476,8 +476,18 @@ if doAtlas
         if ~isempty(nz)
             cmin = min(nz);
             cmax = max(nz);
-            if cmax <= cmin
-                cmax = cmin + eps;
+            % caxis REQUIRES cmax > cmin. The previous guard added bare eps,
+            % which is eps(1) - an ABSOLUTE 2.2e-16 - and is therefore swallowed
+            % whenever cmin is large: for cmin = 1e3, cmin + eps == cmin, the
+            % range stays degenerate and set(ax,'CLim') errors out. A VIP map
+            % with a single suprathreshold value hits this every time. Scale the
+            % bump to the magnitude of the value instead, and fall back to a
+            % fixed range if the numbers are not finite.
+            if ~(cmax > cmin)
+                cmax = cmin + max(eps(cmin), realmin);
+            end
+            if ~isfinite(cmin) || ~isfinite(cmax) || ~(cmax > cmin)
+                cmin = 0; cmax = 1;
             end
             caxis(axOverlay,[cmin cmax]);
         end
