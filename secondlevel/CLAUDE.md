@@ -335,11 +335,17 @@ and read their outputs:
   `roi_stats_<mygroupnamefield>_<scaling_string>_<results_suffix>.mat` (from
   `prep_3a_run_second_level_regression_and_save.m`) and the combined-ROI `.mat` from
   `LaBGAScore_atlas_rois_from_atlas.m`, then calls the pipelines above.
-- `LaBGAScore_secondlevel_extractparcels_sessions.m` likewise loads `prep_3a` results.
+- `LaBGAScore_secondlevel_extractparcels_sessions.m` likewise loads `prep_3a` results — but from
+  **two different runs**. Since v2.0 it takes **`results_suffix_parcel` and `results_suffix_roi`
+  separately**, not one `results_suffix`: the parcel-wise and ROI results are normally written by
+  different `prep_3a` variants carrying different suffixes (e.g. `parc_gm` from the parcelwise run
+  and `vox_gm` from the voxel-wise one, which is what also produces `roi_stats_*`). A single value
+  therefore finds at most one of the two files, and before v2.0 the other branch reported "no saved
+  results" and `return`ed — which in a script aborted the surviving branch too.
 
-Consequence: option variables such as `mygroupnamefield`, `results_suffix`, `myscaling_glm`,
-`atlasname_glm`, `roi_modelname`, and `roi_set_name` **must match the values used in the upstream
-`prep_3a` / `a2_set_default_options` run**, or the `load` finds no file or the wrong one. Directories
+Consequence: option variables such as `mygroupnamefield`, the `results_suffix` value(s),
+`myscaling_glm`, `atlasname_glm`, `roi_modelname`, and `roi_set_name` **must match the values used in
+the upstream `prep_3a` / `a2_set_default_options` run**, or the `load` finds no file or the wrong one. Directories
 come from `prep/LaBGAScore_prep_s0_define_directories.m`. Two helpers used by these scripts live
 outside this folder: `clean/LaBGAScore_smart_parallel_pool_setup.m` and
 `figures/save_all_open_figures_smart.m`.
