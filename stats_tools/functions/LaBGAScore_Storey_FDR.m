@@ -290,7 +290,44 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 %
 % info.reliable is false, info.reasons says why, and q falls back to BH. BH is
 % not a compromise: BH IS Storey at pi0 = 1, the conservative choice you want
-% when pi0 is not identifiable. Note also that correlated tests (roi means from
+% when pi0 is not identifiable.
+%
+% THE GUARD FIRES ON EXACTLY THREE CONDITIONS, and it is worth knowing which,
+% because "reliable" is a narrower claim than it sounds:
+%
+%   1. pi0 swings more than 0.30 across the lambda grid  -> not identifiable
+%   2. pi0 < 0.01                                        -> degenerate
+%   3. pi0 could not be estimated (NaN)
+%
+% PASSING THE GUARD IS NOT THE SAME AS pi0 BEING TRUSTWORTHY AT SMALL m. The
+% degeneracy floor is 0.01, so pi0 = 0.02 at m = 8 PASSES while asserting that
+% ~98% of eight tests are non-null - which the m < 100 discussion above says to
+% treat as an artefact of tiny m. The guard catches the arithmetic failure
+% (pi0 -> 0 or unstable), not the inferential one (tiny m cannot identify pi0
+% well in the first place).
+%
+% Measured across proj_discoverie models 2h/2i/2j/2k/2l, 44 roi-GLM arms:
+% reliable is TRUE in 39 and FALSE in 5 - twice on condition 1 with pi0 well
+% above the floor (0.0908 and 0.0250) and three times on condition 2 with
+% pi0 = 0.0000 or 0.0050. So "Storey is unusable at m = 8" is not what the data
+% show; neither is "reliable = true means pi0 is sound".
+%
+% AND REMEMBER THE FLAG IS ONLY ADVISORY UNDER THE DEFAULT METHOD. prep_3a
+% calls this with no arguments, so method = 'sas', for which do_guard is OFF:
+% reliable is reported and NEVER overrides. Nothing falls back to BH unless the
+% caller passes 'guard', true.
+%
+% AT SMALL pi0, q COINCIDES WITH THE RAW p. This is correct behaviour, not a
+% fault: q = pi0 * q_BH, so as pi0 -> 0 the pFDR at a given threshold approaches
+% p. Measured on 8 roi p-values at pi0 = 0.0220 (which passes the 0.01 floor),
+% q_Storey equalled p to all reported digits on every one of the eight tests.
+% The practical point is that such a result is CORRECTION-DEPENDENT: it carries
+% exactly the weight the pi0 estimate carries, which at m = 8 is not much. Report
+% q_BH beside it and say which was relied on.
+%
+% Report q_BH alongside, say which you relied on, and prefer 'adaptivefdr' or
+% 'bky' when the panel is small and the question is whether an effect survives
+% correction at all. Note also that correlated tests (roi means from
 % the same subjects, neighbouring parcels) violate Storey's independence
 % assumption, while BH holds under positive regression dependency.
 %
