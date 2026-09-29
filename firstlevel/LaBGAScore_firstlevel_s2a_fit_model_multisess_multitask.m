@@ -1939,8 +1939,8 @@ for sub = 1:size(derivsubjs,1)
     
     %% FIT FIRST LEVEL MODEL
     
-    fprintf('\nRunning on subject directory %s\n',DSGN.subjects{1});
-    canlab_glm_subject_levels_old(DSGN,'subjects',DSGN.subjects(1),'overwrite','nolinks','noreview');
+    fprintf('\nRunning on subject directory %s\n',DSGN.subjects{sub});
+    canlab_glm_subject_levels_old(DSGN,'subjects',DSGN.subjects(sub),'overwrite','nolinks','noreview');
     
             if isfield(DSGN,'singletrials') && ~isempty(DSGN.singletrials) % same guard as LaBGAScore_firstlevel_s3_diagnose_model.m: an empty DSGN.singletrials must not enter this block
             
