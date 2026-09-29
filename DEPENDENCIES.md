@@ -130,6 +130,7 @@ than guessed:
 | `LaBGAScore_region_table` | secondlevel | CanlabCore | 6 | 0 |
 | `LaBGAScore_region_table_safe` | secondlevel | — | 0 | 0 |
 | `LaBGAScore_secondlevel_MS_mat_pipeline` | secondlevel | spm12 | 1 | 0 |
+| `LaBGAScore_secondlevel_extractclusters_sessions` | secondlevel | CANlab_help_examples, CanlabCore | 4 | 0 |
 | `LaBGAScore_secondlevel_extractparcels_sessions` | secondlevel | CANlab_help_examples, CanlabCore | 3 | 0 |
 | `LaBGAScore_secondlevel_mvpa_beta_maps_conn` | secondlevel | CanlabCore, ooFmriDataObjML | 18 | 17 |
 | `LaBGAScore_secondlevel_ooFmriDataObjML_example` | secondlevel | CanlabCore, ooFmriDataObjML | 10 | 2 |
@@ -187,12 +188,12 @@ than guessed:
 
 | Repository | Call edges | Distinct functions |
 |---|---:|---:|
-| CanlabCore | 659 | 60 |
+| CanlabCore | 663 | 61 |
 | spm12 | 193 | 30 |
 | ooFmriDataObjML | 18 | 11 |
 | osprey | 16 | 8 |
 | CoSMoMVPA | 15 | 15 |
-| CANlab_help_examples | 10 | 2 |
+| CANlab_help_examples | 11 | 2 |
 | CanlabPrivate | 6 | 2 |
 | canlab_single_trials | 4 | 2 |
 | ComBatHarmonization | 2 | 1 |
@@ -1122,6 +1123,20 @@ No external dependencies.
 **spm12**
 
 - `MA_model_space`
+
+### `LaBGAScore_secondlevel_extractclusters_sessions`
+
+`secondlevel/scripts/LaBGAScore_secondlevel_extractclusters_sessions.m`
+
+**CANlab_help_examples**
+
+- `a_set_up_paths_always_run_first`
+
+**CanlabCore**
+
+- `autolabel_regions_using_atlas` *(@region)*
+- `extract_data` *(@atlas)* — `ambiguous_within_repo`, 2 candidates
+- `region` *(@region)*
 
 ### `LaBGAScore_secondlevel_extractparcels_sessions`
 

@@ -342,6 +342,18 @@ and read their outputs:
   and `vox_gm` from the voxel-wise one, which is what also produces `roi_stats_*`). A single value
   therefore finds at most one of the two files, and before v2.0 the other branch reported "no saved
   results" and `return`ed — which in a script aborted the surviving branch too.
+- `LaBGAScore_secondlevel_extractclusters_sessions.m` is the **voxel-wise** counterpart, and reads
+  `c2a`'s output rather than `prep_3a`'s — `c2a` *appends* its region objects into the same
+  `regression_stats_and_maps_*.mat` that `prep_3a` wrote, so run it after `c2a`, not just `prep_3a`.
+  It is not the same operation as the parcel script: a parcel is a column of `datmatrix`, whereas the
+  saved region objects carry geometry and statistic only (`dat` and `all_data` arrive `0×0`, because
+  `c2a` builds them from thresholded statistic images, which have no subject dimension). Values are
+  therefore extracted **spatially** from `contrast_data_objects.mat` with `@region/extract_data`.
+  Three traps are documented in its header, all of which return wrong output rather than erroring:
+  `@fmri_data/extract_roi_averages` rejects a region array; `region(img,'unique_mask_values')` yields
+  one empty region on a continuous statistic map (the default `'contiguous_regions'` is correct, and
+  is what `c2a` uses); and `region_objs_tfce_corr` holds only the one correction named by
+  `tfce_correction`, so requesting the other and trusting it returns mislabelled clusters.
 
 Consequence: option variables such as `mygroupnamefield`, the `results_suffix` value(s),
 `myscaling_glm`, `atlasname_glm`, `roi_modelname`, and `roi_set_name` **must match the values used in
