@@ -38,7 +38,7 @@ Topic-organized top level, not a conventional toolbox layout: `prep/`, `firstlev
 | `group_tfce_from_subject_maps.m` (`secondlevel/functions/`) | `prep_3a_run_second_level_regression_and_save.m` | Group TFCE from subject-level maps |
 | `thresholded_fmri_data_from_statistic_image.m` (`secondlevel/functions/`) | `prep_3a_run_second_level_regression_and_save.m`, `c2_SVM_contrasts_masked.m` | Thresholded `fmri_data` object from a `statistic_image` |
 | `tfce_fwe_from_null.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | Max-statistic FWE p-values from a saved TFCE permutation null |
-| `LaBGAScore_region_table.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | `@region/table` vendored without the large-value clipping. Upstream ends `get_signed_max` with `maxZ = norminv(1 - 1E-12)` (= **7.0345**) and clips every value above it, not only the infinities its own comment describes. As of c2a v8.5 **all five** table branches use this copy; before that only the two TFCE branches did, and FDR / uncorrected / Bayesian peaks above 7.0345 were silently flattened |
+| `LaBGAScore_region_table.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | `@region/table` vendored without the large-value clipping. Upstream ends `get_signed_max` with `maxZ = norminv(1 - 1E-12)` (= **7.0345**) and clips every value above it, not only the infinities its own comment describes. As of c2a v8.5 **all five** table branches use this copy; before that only the two TFCE branches did, and FDR / uncorrected / Bayesian peaks above 7.0345 were silently flattened. **Also relabels the Bayes column (2026-09-25).** `@statistic_image/estimateBayesFactor` ends with `BF.dat = 2*log(bf10)` and sets `.type='BF'`, so the column was headed `maxBF` while holding **2·ln(BF10)** - a printed 15.05 is a Bayes factor of 1854, not 15. The column is now `max_2lnBF` with `maxBF10 = exp(max_2lnBF/2)` beside it. Note how the two defects compounded: clipping at 7.0345 on a 2·ln scale caps the reported evidence at BF10 ≈ 34, so an unclipped peak of 39591 printed as 7.03 |
 | `LaBGAScore_region_table_safe.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | Three-output wrapper so an undisplayable contrast does not abort the report |
 
 The first two rows above are call-graph verified; the two `atlas_mask_tools` entries are
@@ -48,6 +48,25 @@ tooling and were previously undocumented. `DEPENDENCIES.md` in each repo is the 
 authoritative version of this table.
 
 LaBGAScore = study setup + first-level + atlas/mask generation; CANlab_help_examples (LaBGAS fork) = second-level templates built on top. See that repo's own `README.md`/`CLAUDE.md` under `Second_level_analysis_template_scripts/` for its internals.
+
+## Bayes factors: the stored scale is 2·ln(BF)
+
+`@statistic_image/estimateBayesFactor` returns **2·ln(BF10)** (Kass & Raftery 1995),
+positive favouring H1. Three consequences worth not rediscovering:
+
+- **Converting.** `BF10 = exp(value/2)`, never `exp(value)`. Getting this wrong
+  inflates the apparent evidence *for the null* dramatically: on model_2c_IOM it
+  turned "83% moderate evidence for the null, median BF 0.16" into a spurious
+  "82% strong evidence for the null, median BF 0.027".
+- **Thresholds in the pipeline are correct.** `c2a` converts on use with
+  `2*log(BF_threshold_glm)`; `prep_3a` hardcodes `2.1972`, which is `2*ln(3)` and
+  is labelled "|BF| > 3". The bare constant is what misleads - it is not ln(9).
+- **The JZS BF has a sample-size floor.** `t1smpbf(0, n)` bounds how much evidence
+  for H0 is attainable: n=70 floors at BF10 = 0.131 (7.6:1), n=93 at 0.115,
+  n=158 at 0.089. **Below roughly n=100, "strong evidence for the null"
+  (BF10 < 1/10) is unreachable no matter how null the data are.** A Bayes map
+  showing 0% strong-for-null in a small sample is reporting a design ceiling,
+  not a weak result, and should say so.
 
 ## Documentation & audit history
 
