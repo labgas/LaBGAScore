@@ -351,6 +351,23 @@ else
         end
     end
 
+    % BAYES FACTOR MAPS ARE NOT STORED AS BAYES FACTORS.
+    % @statistic_image/estimateBayesFactor ends with
+    %     BF.dat = 2*log(bf10);   % scale according to kass and raftery 1995
+    % and sets .type = 'BF', so Z_descrip is 'BF' and this column would be
+    % headed "maxBF" while holding 2*ln(BF10). A reader takes 19.87 for a Bayes
+    % factor of about 20 when it is exp(19.87/2) = 2.1e4 - three orders out, and
+    % in the direction that understates the evidence. Name the column for what
+    % it holds, and add the Bayes factor itself beside it.
+    %
+    % Note the thresholds are applied on the STORED scale and are correct:
+    % c2a uses 2*log(BF_threshold_glm), prep_3a hardcodes 2.1972 = 2*ln(3).
+    % Only the printed column was mislabelled.
+    if ~show_min && ~isempty(Z_descrip) && strcmpi(Z_descrip, 'BF')
+        Z.Properties.VariableNames{1} = 'max_2lnBF';
+        Z.maxBF10 = exp(Z.max_2lnBF ./ 2);
+    end
+
     results_table = [Region Volume XYZ Z Atlas_coverage];
     results_table.region_index = (1:size(region_table, 1))';
     
@@ -419,6 +436,15 @@ else
     if isempty(cl(1).Z_descrip)
         myzdescrip = 'MaxZ: Unknown quantity; label in .Z_descrip field in region object.';
         
+    elseif strcmpi(cl(1).Z_descrip, 'BF')
+        myzdescrip = ['max_2lnBF: Signed max of 2*ln(BF10), the scale ' ...
+            'estimateBayesFactor stores (Kass & Raftery 1995). maxBF10: the ' ...
+            'Bayes factor itself, exp(max_2lnBF/2). BF10 > 1 favours a ' ...
+            'difference, < 1 favours the null; > 10 or < 1/10 are the usual ' ...
+            'strong-evidence cutoffs. NOTE the JZS BF has a floor at t = 0 ' ...
+            'set by sample size (n = 70 floors at BF10 = 0.13, i.e. 7.6:1), ' ...
+            'so BF10 < 1/10 can be unreachable in a small sample.'];
+
     else
         myzdescrip = ['MaxZ: Signed max over ' cl(1).Z_descrip];
     
