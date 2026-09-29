@@ -20,14 +20,26 @@ function [poscl, negcl, results_table] = LaBGAScore_region_table(cl, varargin)
 %   so every region collapses onto the same 7.0345 and the peak column silently
 %   carries no information at all.
 %
-%   THE ONLY FUNCTIONAL CHANGE from upstream is in get_signed_max: infinities are
-%   capped, finite values pass through untouched, and the negative tail is capped
-%   too (upstream handled only the positive one). Everything else is verbatim, so
-%   a diff against the source should show only the function name, this header,
-%   and that block.
+%   THERE ARE TWO FUNCTIONAL CHANGES from upstream. A diff against the source
+%   should show the function name, this header, and exactly these two blocks -
+%   PORT BOTH when re-vendoring after a CanlabCore upgrade.
 %
-%   Used by c2a_second_level_regression for TFCE results only; ordinary Z-score
-%   tables keep using CanlabCore's own table() method.
+%   1. get_signed_max (the reason above): infinities are capped, finite values
+%      pass through untouched, and the negative tail is capped too (upstream
+%      handled only the positive one).
+%
+%   2. THE BAYES COLUMN IS RENAMED (added 2026-09-25). @statistic_image/
+%      estimateBayesFactor ends with BF.dat = 2*log(bf10) and sets .type = 'BF',
+%      so Z_descrip is 'BF' and the column would be headed "maxBF" while holding
+%      2*ln(BF10) - a reader takes 19.87 for a Bayes factor of about 20 when it
+%      is exp(19.87/2) = 2.1e4. The column is emitted as max_2lnBF with
+%      maxBF10 = exp(max_2lnBF/2) beside it, and the legend text is adjusted to
+%      match. See the block that renames the Z column and the myzdescrip
+%      assignment. Note this compounds with (1): a 7.0345 ceiling on a 2*ln
+%      scale caps reported evidence at BF10 = exp(7.0345/2), about 34.
+%
+%   Used by c2a_second_level_regression for TFCE and Bayes results; ordinary
+%   Z-score tables keep using CanlabCore's own table() method.
 %
 %   See also table, group_tfce_from_subject_maps, tfce_fwe_from_null.
 % Print a table of all regions in a region object (cl). Return labeled

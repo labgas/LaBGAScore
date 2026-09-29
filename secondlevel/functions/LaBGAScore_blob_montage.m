@@ -25,6 +25,9 @@ function LaBGAScore_blob_montage(dat, r, label, varargin)
 %   **'fontscale'**          default 2/3. Montage titles are tuned for a larger
 %                            canvas than headless publishing provides.
 %   **'noregioncenters'**    overview montage only.
+%   **'regioncentersonly'**  the converse: skip the overview montage and draw
+%                            only the regioncenters one. Still subject to
+%                            'max_regioncenters'.
 %
 % -------------------------------------------------------------------------
 % by: Lukas Van Oudenhove  |  KU Leuven, September 2026

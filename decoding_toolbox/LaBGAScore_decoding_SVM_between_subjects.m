@@ -109,6 +109,10 @@
 %
 % Set in the "0. USER SETTINGS" section below:
 %
+% * pheno_file              phenotype filename inside BIDSdir, default 'phenotype.csv'. LaBGAS
+%                           studies do not agree on this - proj_cfs has phenotype.csv (comma),
+%                           proj_moodbugs has participants.tsv (tab) - so it is named here and
+%                           the delimiter is taken from the extension rather than guessed
 % * pheno_id_var            phenotype column holding sub-* identifiers, used to build image paths
 % * pheno_group_var         phenotype column holding the group variable
 % * group_pos_code / group_neg_code    values of that column for class +1 / -1
@@ -144,9 +148,19 @@
 %                               if 'wholebrain': mask_file
 % * n_perms                 number of permutations for the null distribution, default 1000
 % * atlas                   CANlab atlas used for region labeling, default 'canlab2024'
-% * unc_p / unc_k            uncorrected p-value / extent threshold for output fmri_data objects
-% * fdr_p / fdr_k            FDR-corrected p-value / extent threshold for output fmri_data objects
-% * fwe_p / fwe_k            TFCE FWE-corrected p-value / extent threshold for output fmri_data objects
+% * unc_p                   uncorrected p-value threshold for output fmri_data objects
+% * fdr_p                   FDR-corrected p-value threshold
+% * fwe_p                   TFCE FWE-corrected p-value threshold
+% * unc_k_auc / unc_k_tfce  extent thresholds (voxels) at unc_p, for the AUC and TFCE maps
+% * fdr_k_auc / fdr_k_tfce  extent thresholds at fdr_p
+% * fwe_k_tfce              extent threshold at fwe_p; TFCE only, there is no AUC FWE map
+%
+%                           The extent thresholds are SEPARATE PER MAP TYPE, and the names
+%                           carry the suffix - there is no plain unc_k/fdr_k/fwe_k. TFCE
+%                           already integrates cluster extent into the statistic, so a k on
+%                           top of it removes signal the correction has already accounted
+%                           for; the _tfce defaults are 0 for that reason while the _auc
+%                           ones are not.
 % * combat_batch_var        phenotype column holding site/batch labels, e.g. 'center'; empty disables
 %                           ComBat. Harmonisation here is LABEL-BLIND (mod = []) by design: telling
 %                           ComBat to preserve the variable being decoded would leak labels into the
@@ -154,6 +168,31 @@
 %                           within any one site, are excluded from harmonisation and passed through
 %                           untouched - combat.m errors on the first and returns NaN on the second.
 % * combat_ref              site label to harmonise towards; empty harmonises to the grand mean
+%
+%       THREE LEVERS FOR A SITE/NUISANCE CONFOUND. They address different things and
+%       can be combined; ComBat above is a fourth, acting on the features.
+%
+% * subject_filter          restrict the sample: {column, values-to-keep}, e.g.
+%                           {'center', {'KUL'}} for a single site with no confound left to
+%                           control. Empty = use everyone
+% * nuisance_resid_vars     residualise the features on these phenotype columns. Label-blind,
+%                           so it is applied identically to the real and permuted runs and
+%                           cannot leak group information. NOTE THE COST: where a nuisance
+%                           level contains only one class, the nuisance and the group effect
+%                           are collinear and residualising removes the group signal with it
+% * perm_within_vars        permute labels WITHIN levels of these variables when building the
+%                           null. Preserves each level's class counts, so the permuted
+%                           classifier can exploit the nuisance exactly as much as the real
+%                           one and the null lands where the nuisance alone would put it
+%                           rather than at chance. This fixes the INFERENCE; it does not
+%                           deflate the point estimate
+% * perm_chunks             how many chunks the permutations are split into, default -1
+%                           (one per worker). SIZE THIS TO THE POOL: 105 chunks on a
+%                           21-worker pool means 5 waves and 5x the feature extraction, and
+%                           measured 5.4 days where 21 chunks on 21 workers took well under
+%                           one. Fewer chunks than workers is the opposite error. The
+%                           arithmetic is identical either way, so a chunked run must match
+%                           the per-permutation path - verify on a small run first
 % * export_conidx           contrast index to export when scaled_contrast_dir is empty;
 %                           defaults to con2use when that is a scalar index
 % * export_object           contrast object to export: 'DATA_OBJ_CON' (raw),
