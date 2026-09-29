@@ -34,7 +34,19 @@ end
 availableWorkers = maxWorkers - usedWorkers;
 
 % Use 66% of available workers
-nWorkers = floor(0.66 * availableWorkers);
+% 0.75, raised from 0.66 on 2026-09-25. The cap exists so concurrent jobs do
+% not oversubscribe the box; it works only if the PROFILE NumWorkers reflects
+% PHYSICAL cores. On this machine (AMD EPYC 7282, 2 sockets x 16 = 32 physical,
+% 64 logical via SMT2) the profile is 32, so 0.66 gave 21 and 0.75 gives 24 -
+% both comfortably inside the physical count.
+%
+% DO NOT set the profile from /proc's logical count, and do not call saveProfile
+% to raise it. Both were done here on 2026-09-25 (profile pushed to 40) and a
+% permutation job then ran ~7x slower than predicted: every worker pegged at
+% 99%, but 8 of them on hyperthreads and all of them thrashing a 64 MiB
+% per-socket L3 with a 175 MB feature matrix. The cap is the safeguard; sizing
+% the profile wrongly defeats it.
+nWorkers = floor(0.75 * availableWorkers);
 
 % Cap: always leave at least 1 worker free overall
 nWorkers = min(nWorkers, maxWorkers - 1);
