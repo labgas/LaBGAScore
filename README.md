@@ -274,6 +274,14 @@ flagged line — but does **not** catch undefined variables used at runtime, cal
 to functions that don't exist or aren't on the path, or logic bugs; those still
 require reading the code.
 
+The cost of not running it is not hypothetical either.
+`decoding_toolbox/LaBGAScore_decoding_template_xclass_acc.m` sat committed with a
+`signrank` call missing a closing parenthesis, which `checkcode` reports as
+`NOPAR`. The file did not parse, so the script could not run in any form — and it
+stayed that way, undetected, from its last use in 2023 until an audit in
+September 2026. Seconds of static analysis at any point in between would have
+found it.
+
 **`use_before_def.py`** covers the gap immediately next to that one. A guarded
 default (`if ~exist('opt','var'), opt = ...; end`) only protects an option if it
 runs *before* every read. Put the guard beside one use and miss an earlier one,
