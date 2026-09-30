@@ -3,19 +3,69 @@
 %
 % *USAGE*
 %
-% This script reads logfiles, extracts the onsets, durations, and ratings for
-% different conditions, and writes events.tsv files to the BIDS dir for
-% each subject. It also contains an option to write a single phenotype file
-% with trial-by-trial ratings for all subjects.
+% This script turns stimulus-presentation logfiles into BIDS events.tsv files
+% for a single-session dataset, more specifically
+%
+% 1. define directories and subject lists by calling
+%   <study_prefix>_prep_s0_define_directories, and define the study's runs,
+%   condition labels, and logfile import options
+%   NOTE: everything from runnames onwards in that first code section is
+%       specific to this study's Presentation logfile format
+%
+% 2. loop over subjects - either those listed in subjs2write, or all subjects
+%   in sourcedir when subjs2write is empty
+%   NOTE: in the all-subjects branch, sourcesubjs and BIDSsubjs are checked
+%       against each other first
+%
+% 3. for each run, locate the logfile in sourcedata/<sub>/logfiles and read it
+%   with delimitedTextImportOptions
+%   NOTE: a run whose logfile is missing is skipped with a warning, so a
+%       partial dataset still produces output for the runs that exist
+%
+% 4. establish time zero from the FIRST SCANNER PULSE (Trial == 0 and
+%   EventType == 'Pulse'), subtract it from every timestamp, and divide by
+%   10000 to convert Presentation's 0.1 ms units to seconds
+%   NOTE: onsets are therefore relative to the start of image acquisition,
+%       which is what SPM expects - not to the start of the logfile
+%
+% 5. map the logfile's Code column onto trial_type labels, using the
+%   sweet_labels / swallow_rinse_labels / rating_labels / fixation_labels
+%   lists defined above
+%   NOTE: the rating onset is shifted by +4 s, the duration of the rating
+%       instruction in this study's design
+%
+% 6. parse trial-by-trial ratings out of the Code strings by position, and
+%   attach each rating to its event
+%   NOTE: log.rating(n+3) encodes a study-specific fact - that the rating
+%       sits three logfile rows after the event it belongs to
+%
+% 7. derive durations as the difference between successive onsets, and drop
+%   fixation events by giving them NaN duration and filtering on it
+%   NOTE: fixation therefore acts as the implicit baseline of the first level
+%       model rather than as a modelled condition
+%   NOTE: this assumes the run ENDS on a fixation event; see KNOWN
+%       LIMITATIONS
+%
+% 8. write one events.tsv per run to BIDS/<sub>/func
+%
+% 9. optionally accumulate all subjects' ratings into a single phenotype.tsv
+%   in BIDS/phenotype, adding within-run, within-condition and concatenated
+%   trial indices for mixed-model analysis
 %
 % Script should be run from the root directory of the superdataset, e.g.
-% /data/proj_discoverie
+% /data/proj_erythritol_4a
 % The script is highly study-specific, as logfiles will vary with design,
 % stimulus presentation software used, etc.
-% Hence, it is provided in LaBGAScore as an example and needs to be
+% Hence, it is provided in LaBGAScore as an EXAMPLE and needs to be
 % downloaded and adapted to the code subdataset for your study/project.
 % This example is from LaBGAS proj_erythritol_4a
 % (https://gin.g-node.org/labgas/proj_erythritol_4a)
+% What generalizes is the SHAPE of the solution - the loop over subjects and
+% runs, deriving time zero from the first pulse, deriving durations from
+% successive onsets, and the events.tsv contract with firstlevel - not the
+% logfile parsing itself.
+% For designs with more than one session and/or task, use
+% LaBGAScore_prep_s1_write_events_tsv_multisess_multitask.m instead.
 %
 %
 % *OPTIONS*
@@ -45,6 +95,21 @@
 % OUTPUTS: events.tsv files for each run in BIDS dir for each subject;
 % phenotype.tsv file in BIDS/phenotype dir (optional)
 %
+% The events.tsv columns firstlevel relies on are onset, duration and
+% trial_type, matched BY NAME rather than position; any further column (here
+% rating) is available as a parametric modulator. trial_type is matched
+% against DSGN.conditions with contains(), so condition names may carry a
+% prefix the events file does not - see prep/README.md
+%
+% KNOWN LIMITATIONS (full list in prep/README.md)
+% - log.onset(m+1) and log.rating(n+3) are unbounded, and rely on the run
+%   ending on a fixation event; a logfile ending on any other event raises an
+%   index error. Both encode study-specific facts about this logfile's event
+%   ordering and are expected to be rewritten per study
+% - the per-run body is duplicated between the subjs2write and all-subjects
+%   branches, so every fix has to be applied twice. Both copies currently
+%   agree; keep them that way
+%
 % -------------------------------------------------------------------------
 %
 % modified by: Lukas Van Oudenhove
@@ -53,9 +118,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_s1_write_events_tsv.m         v1.5
+% LaBGAScore_prep_s1_write_events_tsv.m         v1.6
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/30
 %
 %
 %% DEFINE DIRECTORIES, SUBJECTS, RUNS, CONDITIONS, AND IMPORT OPTIONS
@@ -113,24 +178,38 @@ if ~isempty(subjs2write)
             % LOOP OVER RUNS
             for run = 1:size(logfilenames,2)
                 
-                logfilename = dir(fullfile(subjsourcedir,'logfiles',logfilenames{run}));
-                logfilename = char(logfilename(:).name);
+                logfilelist = dir(fullfile(subjsourcedir,'logfiles',logfilenames{run}));
+                
+                % the duplicate check has to run on the dir() RESULT: it used to test
+                % size(logfilepath,1) > 1 on the single path string fullfile returns,
+                % which can never exceed one row, so two matching logfiles fell through
+                % to the ~isfile branch below and were reported as "logfile missing" -
+                % the run was then silently skipped rather than flagged
+                if size(logfilelist,1) > 1
+                    error('\nmore than one logfile with run index %d for %s, please check before proceeding',run,sourcesubjs{sub})
+                end
+                
+                logfilename = char(logfilelist(:).name);
                 logfilepath = fullfile(subjsourcedir,'logfiles',logfilename);
                 
                 if ~isfile(logfilepath)
                     warning('\nlogfile missing for run %d in %s, please check before proceeding',run,logfilepath);
                     continue
                 
-                elseif size(logfilepath,1) > 1
-                    error('\nmore than one logfile with run index %s for %s, please check before proceeding',run,sourcesubjs{sub})
-                
                 else
                     log = readtable(logfilepath,opts);
                     log = log(~isnan(log.Trial),:);
                     time_zero = log.Time(log.Trial == 0 & log.EventType == 'Pulse'); % time for onsets and durations is counted from the first scanner pulse onwards
                         
-                        if size(time_zero,1) > 1
-                            error('\nambiguity about time zero in %s%s, please check logfile',subjs{sub},logfilenames{run});
+                        % sourcesubjs, not the undefined variable subjs this used to
+                        % reference - that made the branch die on the undefined variable
+                        % instead of reporting the real problem. An EMPTY time_zero is
+                        % caught too: without a Trial == 0 Pulse row the subtraction below
+                        % silently yields an empty table rather than an error
+                        if isempty(time_zero)
+                            error('\nno time zero found in %s %s: no row with Trial == 0 and EventType == Pulse, please check logfile',sourcesubjs{sub},logfilenames{run});
+                        elseif size(time_zero,1) > 1
+                            error('\nambiguity about time zero in %s %s, please check logfile',sourcesubjs{sub},logfilenames{run});
                         end
                         
                     log.TimeZero = log.Time - time_zero;
@@ -257,24 +336,38 @@ else
             % LOOP OVER RUNS
             for run = 1:size(logfilenames,2)
                 
-                logfilename = dir(fullfile(subjsourcedir,'logfiles',logfilenames{run}));
-                logfilename = char(logfilename(:).name);
+                logfilelist = dir(fullfile(subjsourcedir,'logfiles',logfilenames{run}));
+                
+                % the duplicate check has to run on the dir() RESULT: it used to test
+                % size(logfilepath,1) > 1 on the single path string fullfile returns,
+                % which can never exceed one row, so two matching logfiles fell through
+                % to the ~isfile branch below and were reported as "logfile missing" -
+                % the run was then silently skipped rather than flagged
+                if size(logfilelist,1) > 1
+                    error('\nmore than one logfile with run index %d for %s, please check before proceeding',run,sourcesubjs{sub})
+                end
+                
+                logfilename = char(logfilelist(:).name);
                 logfilepath = fullfile(subjsourcedir,'logfiles',logfilename);
                 
                 if ~isfile(logfilepath)
                     warning('\nlogfile missing for run %d in %s, please check before proceeding',run,logfilepath);
                     continue
                 
-                elseif size(logfilepath,1) > 1
-                    error('\nmore than one logfile with run index %s for %s, please check before proceeding',run,sourcesubjs{sub})
-                
                 else
                     log = readtable(logfilepath,opts);
                     log = log(~isnan(log.Trial),:);
                     time_zero = log.Time(log.Trial == 0 & log.EventType == 'Pulse'); % time for onsets and durations is counted from the first scanner pulse onwards
                         
-                        if size(time_zero,1) > 1
-                            error('\nambiguity about time zero in %s%s, please check logfile',subjs{sub},logfilenames{run});
+                        % sourcesubjs, not the undefined variable subjs this used to
+                        % reference - that made the branch die on the undefined variable
+                        % instead of reporting the real problem. An EMPTY time_zero is
+                        % caught too: without a Trial == 0 Pulse row the subtraction below
+                        % silently yields an empty table rather than an error
+                        if isempty(time_zero)
+                            error('\nno time zero found in %s %s: no row with Trial == 0 and EventType == Pulse, please check logfile',sourcesubjs{sub},logfilenames{run});
+                        elseif size(time_zero,1) > 1
+                            error('\nambiguity about time zero in %s %s, please check logfile',sourcesubjs{sub},logfilenames{run});
                         end
                         
                     log.TimeZero = log.Time - time_zero;
@@ -398,13 +491,20 @@ else
 
             end % for loop runs
             
-            pheno_file = [pheno_file;pheno_file_subj];
-            clear pheno_file_subj;
+            % guarded, like the blocks that CREATE pheno_file and pheno_file_subj:
+            % without this, pheno_tsv = false stopped here on an undefined
+            % pheno_file, so the documented option did not work
+            if pheno_tsv
+                pheno_file = [pheno_file;pheno_file_subj];
+                clear pheno_file_subj;
+            end
 
         end % for loop subjects
         
-        pheno_filename = fullfile(pheno_dir,pheno_name);
-        writetable(pheno_file,pheno_filename,'Filetype','text','Delimiter','\t');
+        if pheno_tsv
+            pheno_filename = fullfile(pheno_dir,pheno_name);
+            writetable(pheno_file,pheno_filename,'Filetype','text','Delimiter','\t');
+        end
     
     end % if loop checking sourcesubjs == BIDSsubjs
     

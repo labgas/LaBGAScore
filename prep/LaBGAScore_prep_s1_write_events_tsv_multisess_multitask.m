@@ -3,20 +3,49 @@
 %
 % *USAGE*
 %
-% This script reads logfiles, extracts the onsets, durations, and ratings for
-% different conditions, and writes events.tsv files to the BIDS dir for
-% each subject, for a multi-session, multi-task design. It also contains an
-% option to write a single phenotype file with trial-by-trial ratings for
-% all subjects.
+% This script turns stimulus-presentation logfiles into BIDS events.tsv files
+% for datasets with more than one session and/or more than one task per
+% session, more specifically
+%
+% 1. define directories and subject lists by calling
+%   <study_prefix>_prep_s0_define_directories, and define the study's
+%   sessions, tasks, runs, condition labels, and logfile import options
+%
+% 2. loop over subjects - either those listed in subjs2write, or all subjects
+%   in sourcedir when subjs2write is empty
+%
+% 3. loop over sessions, and within each session over tasks and runs,
+%   locating and reading the logfile belonging to each
+%
+% 4. establish time zero from the first scanner pulse of that run, subtract it
+%   from every timestamp, and convert to seconds
+%
+% 5. map the logfile's event codes onto trial_type labels for the task at hand
+%
+% 6. derive onsets and durations, and drop the events that should act as
+%   implicit baseline
+%
+% 7. write one events.tsv per session, task and run to BIDS/<sub>/ses-<n>/func
+%   as sub-*_ses-*_task-*_run-*_events.tsv
+%   NOTE: these are exactly the filenames that
+%       firstlevel/functions/LaBGAScore_firstlevel_find_events.m resolves by
+%       BIDS inheritance - it looks for the run-specific file first, then
+%       walks up through ses/func, ses, sub/func, sub to the dataset root
+%
+% 8. optionally accumulate ratings into a single phenotype.tsv, with trial
+%   indices within run, within session and concatenated over the whole study
 %
 % Script should be run from the root directory of the superdataset, e.g.
-% /data/proj_discoverie
+% /data/proj_bitter-reward
 % The script is highly study-specific, as logfiles will vary with design,
 % stimulus presentation software used, etc.
-% Hence, it is provided in LaBGAScore as an example and needs to be
+% Hence, it is provided in LaBGAScore as an EXAMPLE and needs to be
 % downloaded and adapted to the code subdataset for your study/project.
-% This example is from LaBGAS proj_bitter-reward
-% (https://gin.g-node.org/labgas/proj_bitter-reward)
+% At over 1000 lines it is the largest script in prep/, mostly because the
+% per-run body is repeated for each branch of the subject/session/task
+% structure.
+% This is the counterpart of the firstlevel s1a/s2a multisession scripts; for
+% single-session designs use LaBGAScore_prep_s1_write_events_tsv.m instead.
 %
 %
 % *OPTIONS*
@@ -29,10 +58,8 @@
 %
 % * pheno_name      filename of the phenotype.tsv file
 %
-% * nr_sess         number of sessions in the experiment
-%
-% The remaining variables in the first code section (logfile column names/types, condition/event labels, ...) are
-% specific to this study's Presentation/E-Prime logfile formats (food-images and FID tasks) and need to be adapted study by study.
+% The remaining variables in the first code section (session/task structure, logfile column names/types,
+% condition/event labels, ...) are specific to this study and need to be adapted study by study.
 %
 %
 % *DEPENDENCIES*
@@ -43,24 +70,37 @@
 %
 % *NOTES*
 %
-% INPUTS: Presentation .log files in sourcedata dir for each subject
+% INPUTS: stimulus-presentation logfiles in sourcedata dir for each subject
+% and session
 %
-% OUTPUTS: events.tsv files for each run in BIDS dir for each subject;
-% phenotype.tsv file in BIDS/phenotype dir (optional)
+% OUTPUTS: events.tsv files for each session, task and run in BIDS dir for
+% each subject; phenotype.tsv file in BIDS/phenotype dir (optional)
 %
-% Adapted from LCN12_JULIE_first_level_analysis script by Patrick Dupont.
+% Session labels are written unpadded (ses-1, not ses-01), matching
+% LaBGAScore_prep_s2_smooth_multisess.m and the firstlevel s1a/s2a scripts.
+%
+% Where the timings of a task are identical for every subject and run, a
+% single inherited file at the BIDS root (task-<label>_events.tsv) is enough.
+% Per-subject files are REQUIRED whenever timings vary by subject, which
+% includes any self-paced or jittered design - and a task whose trial_type
+% order is fixed may still have subject-specific onsets.
+%
+% KNOWN LIMITATIONS (full list in prep/README.md)
+% - the per-run body is duplicated across the branches of the
+%   subject/session/task structure, so every fix has to be applied in
+%   several places. The copies currently agree; keep them that way
 %
 % -------------------------------------------------------------------------
 %
 % modified by: Lukas Van Oudenhove
 %
-% date:   January, 2023
+% date:   December, 2021
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_s1_write_events_tsv_multisess_multitask.m    v1.2
+% LaBGAScore_prep_s1_write_events_tsv_multisess_multitask.m    v1.3
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/30
 %
 %
 %% DEFINE DIRECTORIES, SUBJECTS, RUNS, CONDITIONS, AND IMPORT OPTIONS
@@ -145,18 +185,25 @@ if ~isempty(subjs2write)
                     
                     % DEFINE LOGFILES
 
-                    logfilename = dir(fullfile(logsessubjsourcedir,logfilenames{run}));
-                    logfilename = char(logfilename(:).name);
-                    logfilepath = fullfile(logsessubjsourcedir,logfilename);
+                    logfilelist = dir(fullfile(logsessubjsourcedir,logfilenames{run}));
                     
                     % SANITY CHECK
-
+                    
+                    % the duplicate check has to run on the dir() RESULT: it used to test
+                    % size(logfilepath,1) > 1 on the single path string fullfile returns,
+                    % which can never exceed one row, so two matching logfiles fell through
+                    % to the ~isfile branch below and were reported as "logfile missing" -
+                    % the run was then silently skipped rather than flagged
+                    if size(logfilelist,1) > 1
+                        error('\nmore than one logfile with run index %d for %s, please check before proceeding',run,sourcesubjs{sub})
+                    end
+                    
+                    logfilename = char(logfilelist(:).name);
+                    logfilepath = fullfile(logsessubjsourcedir,logfilename);
+                    
                     if ~isfile(logfilepath)
                         warning('\nlogfile missing for run %d in %s, please check before proceeding',run,logfilepath);
                         continue
-
-                    elseif size(logfilepath,1) > 1
-                        error('\nmore than one logfile with run index %s for %s, please check before proceeding',run,sourcesubjs{sub})
 
                     else
                         
@@ -585,18 +632,25 @@ else
                     
                     % DEFINE LOGFILES
 
-                    logfilename = dir(fullfile(logsessubjsourcedir,logfilenames{run}));
-                    logfilename = char(logfilename(:).name);
-                    logfilepath = fullfile(logsessubjsourcedir,logfilename);
+                    logfilelist = dir(fullfile(logsessubjsourcedir,logfilenames{run}));
                     
                     % SANITY CHECK
-
+                    
+                    % the duplicate check has to run on the dir() RESULT: it used to test
+                    % size(logfilepath,1) > 1 on the single path string fullfile returns,
+                    % which can never exceed one row, so two matching logfiles fell through
+                    % to the ~isfile branch below and were reported as "logfile missing" -
+                    % the run was then silently skipped rather than flagged
+                    if size(logfilelist,1) > 1
+                        error('\nmore than one logfile with run index %d for %s, please check before proceeding',run,sourcesubjs{sub})
+                    end
+                    
+                    logfilename = char(logfilelist(:).name);
+                    logfilepath = fullfile(logsessubjsourcedir,logfilename);
+                    
                     if ~isfile(logfilepath)
                         warning('\nlogfile missing for run %d in %s, please check before proceeding',run,logfilepath);
                         continue
-
-                    elseif size(logfilepath,1) > 1
-                        error('\nmore than one logfile with run index %s for %s, please check before proceeding',run,sourcesubjs{sub})
 
                     else
                         
@@ -1011,18 +1065,27 @@ else
 
                 end % for loop runs
                 
-                pheno_file_subj = [pheno_file_subj;pheno_file_ses];
-                clear pheno_file_ses;
+                if pheno_tsv
+                    pheno_file_subj = [pheno_file_subj;pheno_file_ses];
+                    clear pheno_file_ses;
+                end
             
             end % for loop sessions
                         
-        pheno_file = [pheno_file;pheno_file_subj];
-        clear pheno_file_subj;
+        % guarded, like the blocks that CREATE these tables: without this,
+        % pheno_tsv = false stopped here on an undefined pheno_file, so the
+        % documented option did not work
+        if pheno_tsv
+            pheno_file = [pheno_file;pheno_file_subj];
+            clear pheno_file_subj;
+        end
 
         end % for loop subjects
         
-        pheno_filename = fullfile(pheno_dir,pheno_name);
-        writetable(pheno_file,pheno_filename,'Filetype','text','Delimiter','\t');
+        if pheno_tsv
+            pheno_filename = fullfile(pheno_dir,pheno_name);
+            writetable(pheno_file,pheno_filename,'Filetype','text','Delimiter','\t');
+        end
     
     end % if loop checking sourcesubjs == BIDSsubjs
     

@@ -3,8 +3,31 @@
 %
 % *USAGE*
 %
-% This script converts Philips PARREC files to Nifti files and names and
-% organizes them according to BIDS specification.
+% This script converts Philips PARREC files to Nifti and organizes them
+% according to BIDS specification, more specifically
+%
+% 1. set the study-specific options: number of sessions, task names, and the
+%   three exam-card settings needed to reconstruct slice timing
+%
+% 2. derive PhaseEncodingDirection for the BIDS json sidecars from the
+%   fold-over and fat-shift directions given above
+%   NOTE: this cannot be read from the PARREC files, which is why it is an
+%       option rather than something detected - and why getting it wrong
+%       produces a plausible-looking but WRONG sidecar that fMRIprep will
+%       apply silently
+%
+% 3. define directories and add the code dir to the Matlab path
+%   NOTE: this script does NOT call <study_prefix>_prep_s0_define_directories,
+%       because it runs before a derivatives tree exists and s0's three-way
+%       subject check could not pass; it defines what it needs itself
+%
+% 4. read the subject list from sourcedata and create the matching BIDS
+%   directory structure
+%
+% 5. convert the PARRECs to Nifti with dicm2nii, then rename and move each
+%   output to its BIDS-compliant location
+%   NOTE: external function called by this script
+%       dicm2nii - https://github.com/xiangruili/dicm2nii
 %
 % Script should be run from the root directory of the superdataset, in this
 % example case /data/proj_bitter-reward, and assumes that
@@ -13,7 +36,9 @@
 % - see fmri analysis workflow Google doc on LaBGAS drive
 %
 % The script is study-specific, I indicate in the code below where
-% study-specific changes will need to be made.
+% study-specific changes will need to be made (15 STUDY-SPECIFIC markers).
+% It is Philips-only; for other scanners use dcm2bids or heudiconv, which
+% this repo does not wrap.
 %
 %
 % *OPTIONS*
@@ -38,6 +63,28 @@
 % 2. Xiangruili's dicm2nii Github repo on your Matlab path
 %       https://github.com/xiangruili/dicm2nii
 %
+%
+% *NOTES*
+%
+% INPUTS: Philips PARREC files in sourcedata dir for each subject and session
+%
+% OUTPUTS: BIDS-organized .nii.gz images and json sidecars in BIDSdir
+%
+% This is the first step of the LaBGAS workflow: its output is the input to
+% fMRIprep, which runs outside Matlab, and whose output is in turn the input
+% to LaBGAScore_prep_s2_smooth*.m. See prep/README.md for the full chain.
+%
+% Task names written here must match the tasknames used later in the
+% firstlevel s1/s1a DSGN structure. Note that fMRIprep truncates a task name
+% at the first underscore, so a BIDS task-food_images becomes task-food in
+% derivatives - avoid underscores in task names to save yourself that
+% mismatch.
+%
+% KNOWN LIMITATIONS (full list in prep/README.md)
+% - slice timing is reconstructed from exam-card options that are NOT
+%   validated against the data
+% - only fold_over_direction_exam_card == 'AP' is implemented
+%
 % -------------------------------------------------------------------------
 %
 % modified by: lukas.vanoudenhove@kuleuven.be
@@ -46,9 +93,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_prep_parrec2bids.m         v1.3
+% LaBGAScore_prep_parrec2bids.m         v1.4
 %
-% last modified: 2026/08/20
+% last modified: 2026/09/30
 %
 %
 %% STUDY-SPECIFIC OPTIONS AND SETTINGS
