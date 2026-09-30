@@ -21,7 +21,7 @@
 
 ### 1. Connect to the LaBGAS Linux server on your computer
 
-Follow the instructions in *Getting started with the LaBGAS Linux server*, or mail [linuxteam.gbiomed@kuleuven.be](mailto:linuxteam.gbiomed@kuleuven.be) (or, better, create a ticket via the ICTS helpdesk) with Lukas in cc, to request access to the server if you do not have it yet.
+Follow the instructions in [*Getting started with the LaBGAS Linux server*](https://docs.google.com/document/d/1b0O2832DlddN33IEn3fa8i_DXvzfJR7SfKWMZoJyoL0/edit?usp=drive_link), or mail [linuxteam.gbiomed@kuleuven.be](mailto:linuxteam.gbiomed@kuleuven.be) (or, better, create a ticket via the ICTS helpdesk) with Lukas in cc, to request access to the server if you do not have it yet.
 
 ### 2. Decide how you will run scripts and publish reports
 
@@ -139,11 +139,11 @@ If your session is too small, nothing breaks: `plugin_set_figure_size` scales th
 
 ### 3. Study the following documents
 
-Use the learning resources in them to familiarize yourself with the tools we will be using:
+Use the learning resources in them to familiarize yourself with the tools we will be using. These three live on the LaBGAS Google Drive, so they need LaBGAS access — this repo is public, and the links will not resolve for readers outside the lab:
 
-1. *Getting started with the LaBGAS Linux server*
-2. *Getting started with Git, Github, GIN, and DataLad*
-3. *Getting started with BIDS, mriqc, and fmriprep*
+1. [*Getting started with the LaBGAS Linux server*](https://docs.google.com/document/d/1b0O2832DlddN33IEn3fa8i_DXvzfJR7SfKWMZoJyoL0/edit?usp=drive_link)
+2. [*Getting started with Git, Github, GIN, and DataLad*](https://docs.google.com/document/d/1Cy5ER-6-5EYDJcq4P1M95hjow1dGCrismUrUNOzxQIs/edit?usp=drive_link)
+3. [*Getting started with BIDS, mriqc, and fmriprep*](https://docs.google.com/document/d/1VMJX20-4XREYsI1ClVGm7FP8dyh8_fQ7YN9MW2K6TBY/edit?usp=drive_link)
 
 ### 4. Take an fMRI course/tutorials which focuses on SPM
 
@@ -378,7 +378,7 @@ datalad save -m "created .gitignore file"
 
 #### Option a
 
-1. Make the `/data` directory on the server accessible as a network drive in your Windows system, following the instructions in *Getting started with the LaBGAS Linux server*.
+1. Make the `/data` directory on the server accessible as a network drive in your Windows system, following the instructions in [*Getting started with the LaBGAS Linux server*](https://docs.google.com/document/d/1b0O2832DlddN33IEn3fa8i_DXvzfJR7SfKWMZoJyoL0/edit?usp=drive_link).
 2. Copy the Windows way.
 3. Record this change using the [`datalad save`](http://docs.datalad.org/en/stable/generated/man/datalad-save.html) command:
    - in the subdataset:
@@ -611,7 +611,7 @@ cd /data/proj_discoverie
 mkdir study_config
 ```
 
-Follow the instructions in *Getting started with BIDS, mriqc, and fmriprep*.
+Follow the instructions in [*Getting started with BIDS, mriqc, and fmriprep*](https://docs.google.com/document/d/1VMJX20-4XREYsI1ClVGm7FP8dyh8_fQ7YN9MW2K6TBY/edit?usp=drive_link).
 
 #### Run the command
 
