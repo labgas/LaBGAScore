@@ -116,7 +116,7 @@ broken, because the adjusted mean is then `b*mean(cv)`, nonzero in any finite sa
 **Results produced before this work are not numerically comparable to results produced after it**,
 and prior ENet results in particular were selected by a flawed tuning rule.
 
-### Audit of the remaining `functions/` files — findings, not yet fixed
+### Audit of the remaining `functions/` files — findings, all now fixed or resolved
 
 The overhaul above covered the ML pipeline family and `group_tfce_from_subject_maps.m`. The
 remaining files were read through afterwards. Nothing below is fixed yet.

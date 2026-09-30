@@ -160,8 +160,14 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 | `LaBGAScore_firstlevel_s2_fit_model.m` (`firstlevel/`) | upstream of `prep_3f_create_fmri_data_single_trial_object.m` (not called directly) | Fits first-level models; produces the single-trial con images that single-trial/runwise MVPA and mediation analyses consume |
 | `LaBGAScore_atlas_binary_mask_from_atlas.m` (`atlas_mask_tools/`) | referenced via `atlasname_glm`/`atlasname_svm` options in `a2_set_default_options.m` | Generates custom `.mat` atlas/mask objects usable as GLM/SVM masks |
 | `LaBGAScore_atlas_rois_from_atlas.m` (`atlas_mask_tools/`) | referenced via `roi_names`/`roi_modelname`/`roi_set_name` options | Generates per-ROI atlas objects for ROI-average analysis |
+| `LaBGAScore_smart_parallel_pool_setup.m` (`clean/`) | `c2a_second_level_regression.m`, `prep_3a_run_second_level_regression_and_save.m`, `prep_3c_run_SVMs_on_contrasts_masked.m` | Sets up the parallel pool before bootstrapping/permutation |
+| `group_tfce_from_subject_maps.m` (`secondlevel/functions/`) | `prep_3a_run_second_level_regression_and_save.m` | Group TFCE from subject-level maps |
+| `thresholded_fmri_data_from_statistic_image.m` (`secondlevel/functions/`) | `prep_3a_run_second_level_regression_and_save.m`, `c2_SVM_contrasts_masked.m` | Thresholded `fmri_data` object from a `statistic_image` |
+| `tfce_fwe_from_null.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | Max-statistic FWE p-values from a saved TFCE permutation null |
+| `LaBGAScore_region_table.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | `@region/table` vendored without the large-value clipping at 7.0345, and with the Bayes column relabelled `max_2lnBF` (the stored scale is 2·ln(BF10), not BF) |
+| `LaBGAScore_region_table_safe.m` (`secondlevel/functions/`) | `c2a_second_level_regression.m` | Three-output wrapper so an undisplayable contrast does not abort the report |
 
-In short: LaBGAScore owns study setup, first-level modeling, and atlas/mask generation; `CANlab_help_examples` (LaBGAS fork) owns the second-level/group analysis templates built on top of LaBGAScore's outputs. For that repo's own internals, see its own [`README.md`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/README.md) under `Second_level_analysis_template_scripts/`.
+In short: LaBGAScore owns study setup, first-level modeling, atlas/mask generation, and the second-level **library** — the TFCE stack, the MVPA/ML pipelines, and the thresholding and reporting functions in [`secondlevel/`](secondlevel/README.md); `CANlab_help_examples` (LaBGAS fork) owns the second-level **templates** that drive them. For that repo's own internals, see its own [`README.md`](https://github.com/labgas/CANlab_help_examples/blob/master/Second_level_analysis_template_scripts/README.md) under `Second_level_analysis_template_scripts/`.
 
 ## Running scripts and publishing reports
 
