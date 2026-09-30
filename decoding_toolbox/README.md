@@ -13,7 +13,7 @@ They answer different questions and live at different levels of the hierarchy:
 | what is decoded | group membership (e.g. patients vs controls) | condition identity within a subject |
 | cross-validation | K-fold over subjects, balanced per group | leave-one-run-out within subject |
 | inference | permutation + TFCE, non-parametric throughout | sign-rank vs chance, plus repeated-measures ANOVA across conditions |
-| status | **overhauled and tested** | **template, not currently runnable — see [Status](#status-and-known-issues)** |
+| status | **overhauled and tested** | **audited and repaired 2026-09-30, not yet re-run — see [Status](#status-and-known-issues)** |
 
 ---
 
@@ -102,7 +102,7 @@ Options are three lines at the top: `results_suffix`, `conds2include`,
 `a_set_up_paths_always_run_first` (for `resultsdir`/`htmlsavedir`) to have run,
 and calls each itself if the corresponding variable is missing.
 
-**This script does not currently run** — see [Status](#status-and-known-issues).
+It has been audited and repaired but **not re-run since** — see [Status](#status-and-known-issues).
 
 ### `LaBGAScore_export_scaled_contrasts.m`
 
@@ -237,81 +237,46 @@ headless-vs-X2go decision.
 Overhauled and run in anger, including the header. Treat its header as the
 authoritative description of that pipeline.
 
-### `template_xclass_acc` — audited 2026-09-30, not currently runnable
+### `template_xclass_acc` — audited and repaired 2026-09-30, not yet re-run
 
-Tested once, some time ago, and not since. An audit on 2026-09-30 found the
-following. **Nothing here has been fixed yet** — this section is the record of
-what an adaptation must deal with.
+Tested once, some time ago, and not since. An audit on 2026-09-30 found a
+blocking syntax error and a set of correctness problems; all are now fixed, and
+`checkcode` went from 8 messages to **0**. The script has **not been run against
+data since the repairs** — that needs a study with a fitted first-level model.
 
-**Blocking**
+**What was wrong, and what changed**
 
-- **Syntax error at line 376.** `signrank(inputs{var},(100/size(conds2include,2));`
-  is missing a closing parenthesis. MATLAB's `checkcode` reports
-  `NOPAR: A '(' might be missing a closing ')'`, so the file does not parse and
-  the script cannot run in any form. This is the one defect in this repo's
-  history that static analysis *does* catch, and it has evidently been there since
-  the last run.
+| was | now |
+|---|---|
+| `signrank(inputs{var},(100/size(conds2include,2));` — a missing closing parenthesis, reported by `checkcode` as `NOPAR`. **The file did not parse, so the script could not run in any form.** | fixed, and the chance level is derived rather than hardcoded (below) |
+| `labelnames{label}` indexed by condition NUMBER, so `conds2include = [2 4]` populated `{2}` and `{4}` and left `{1}` and `{3}` empty — empty labels then flowed into `decoding_describe_data` and every figure | indexed by POSITION in `conds2include`, and preallocated per subject |
+| the subject count was the leaked loop counter `firstsub`; right by accident, undefined if the subject list was empty | an explicit `nsubs`, with the listing filtered to directories and an error when it is empty |
+| the mask was resampled to subject 1 and reused, with nothing checking the others shared that space | still resampled once, but every later subject's `dim`/`mat` is checked against the reference and a mismatch is an error |
+| `signrank(…, 100/nConditions)` silently assumed TDT returns percentages; a proportion-scaled matrix would have been tested against a chance level 100× too high, returning a "significant" result for every condition | the scale is detected from the data, the chance level follows, and which one was used is printed |
+| `cfg.scale.estimation = 'all'` hardcoded, with a comment claiming it is "equivalent to no scaling" | a `scaling_regime` option (`'kernel'`/`'strict'`), the same choice and the same reasoning as `SVM_between_subjects` |
+| `cfg.plot_selected_voxels = 500` | `0`, as in the between-subjects script |
+| `set(gcf,'WindowState','maximized')` on five figures, `drawnow, snapnow` on only one | `plugin_set_figure_size` and `drawnow, snapnow` throughout, plus a chance line on the boxplot |
+| `'Colors','rgbm'` — four hardcoded colours for a variable number of conditions | `lines(n_conds)` |
+| `ranovatbl`, `margmeanstbl`, `posthoctbl`, `p` and `stats` computed but never saved | saved alongside the rest |
+| the `htmlsavedir` guard warned *"DSGN variable not found"*; the set-up-paths script went by three different names | both corrected |
+| `['group_level_stats' cfg.analysis …]` → `group_level_statswholebrain_…` | separator added |
+| three blocks of commented-out plotting code; five variables growing in loops | removed; all preallocated |
 
-**Correctness**
+The header was rewritten to the numbered-step style used in `firstlevel/` and in
+`SVM_between_subjects`: what each step does, which TDT function it calls, the
+full option list including the three variables taken from the workspace rather
+than set in the script, and an explicit ASSUMPTIONS block.
 
-- **`labelnames` is indexed by condition number, not position.** `for label =
-  conds2include … labelnames{label} = …` means `conds2include = [2 4]` populates
-  `labelnames{2}` and `labelnames{4}` and leaves `{1}` and `{3}` empty, which then
-  flow into `decoding_describe_data` and every figure label. Only a contiguous
-  list starting at 1 (the shipped default `[1:4]`) works.
-- **The subject count is a leaked loop counter.** `firstsub` is the loop variable
-  of the `for firstsub = 1:size(firstsubjs,1)` block above, and is then reused as
-  a count in `cell(1,firstsub)` and `for sub = 1:firstsub`. It happens to hold the
-  right value, but an empty subject list leaves it undefined, and any edit that
-  clears it breaks the script silently. Use `size(firstsubjs,1)`.
-- **The mask is resampled to subject 1 only** (`if sub == 1`). Fine when every
-  subject is in the same normalized space, wrong the moment one is not, and
-  nothing checks.
-- **Chance level assumes percentages.** `signrank(…, 100/nConditions)` is only
-  right if TDT's `confusion_matrix` output is in percent rather than proportion.
-  Verify against a real result before trusting the p-values.
-- **Parametric and non-parametric reporting are mixed** without comment: the
-  header promises "median accuracy & IQR", and `signrank` is non-parametric, but
-  the across-condition comparison is `fitrm`/`ranova`, which is parametric.
+**What is still true of it**
 
-**Borrow from `SVM_between_subjects`**
-
-- `cfg.scale.estimation = 'all'` is hardcoded with a comment claiming it is
-  "equivalent to no scaling". The between-subjects script makes this an explicit
-  `scaling_regime` choice between `'kernel'` (`'all'`) and `'strict'`
-  (train-only `'across'`), with the reasoning and the measured cost written down.
-  The same choice applies here and should be exposed the same way.
-- `cfg.plot_selected_voxels = 500` draws during decoding; the between-subjects
-  script sets `0`. Under headless publishing the plots are pure cost.
-- Figures use `set(gcf,'WindowState','maximized')`, the pre-headless idiom.
-  `plugin_set_figure_size` is what the rest of the repo now uses for
-  publication-sized figures.
-- Only the per-subject confusion-matrix figure calls `drawnow, snapnow`; the
-  four group-level figures do not.
-
-**Cosmetic / hygiene**
-
-- The `htmlsavedir` guard warns *"DSGN variable not found"* (copy-paste), and the
-  set-up-paths script is referred to by three different names across the comment,
-  the warning text, and the actual call.
-- `['group_level_stats' cfg.analysis …]` lacks a separator, producing filenames
-  like `group_level_statswholebrain_…`.
-- Three blocks of commented-out code (the mask-extension branch, the line and bar
-  plots, the profile plot).
-- `boxplot(…,'Colors','rgbm')` hardcodes four colours for what is a variable
-  number of conditions.
-- `inputs`, `p`, `stats`, `labelnames` and `firstsubjdirs` all grow inside loops
-  without preallocation (`checkcode` flags each).
-- `inputs` recomputes, from `confusion_matrices`, exactly what `group_results`
-  already accumulated in the subject loop.
-
-**Header**
-
-The header predates the numbered-step style used in `firstlevel/` and in
-`SVM_between_subjects`. It should gain: a numbered `*USAGE*` naming the TDT calls
-each step makes; the full option list (it documents three options but the script
-also depends on `DSGN.modeldir`, `resultsdir` and `htmlsavedir` from other
-scripts); a `*NOTES*` section stating the assumption that **all conditions are
-present in all runs** (currently a trailing comment on the `conds2include` line)
-and that labels come from `SPM.Sess(1)`; and the `LaBGAScore_prov_publish`
-recommendation in place of the bare `publish()` call it currently documents.
+- **The parametric/non-parametric mix is deliberate but unresolved.** Median and
+  IQR are reported, the per-condition test against chance is a sign-rank, but
+  the across-condition comparison is `fitrm`/`ranova`, which is parametric. The
+  header now says so and tells you to lead with the non-parametric results if
+  the accuracies are visibly non-normal. Nobody has decided whether the ANOVA
+  should be replaced with a Friedman test.
+- **Condition names come from `SPM.Sess(1)` only**, and all conditions are
+  assumed present in all runs. Fine for the single-session designs this was
+  written for; wrong for a multi-session design whose sessions differ.
+- **It has not been re-run.** `checkcode` is clean and the logic has been read,
+  but neither is a substitute for a real run. Run it on one subject first.
