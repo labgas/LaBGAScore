@@ -54,6 +54,29 @@ function report = LaBGAScore_stats_rederive_storey_q(modeldirs, varargin)
 % * method          method passed to LaBGAScore_Storey_FDR; empty (default) uses that
 %                   function's OWN default, so the two cannot drift apart
 %
+% *READ n_sig_BH BEFORE READING n_sig_old*
+%
+% n_sig_old counts what the STORED q_Storey column called significant, and that
+% column is not always a correction: where the old pi0 collapsed towards 0, the
+% mandatory q >= p floor handed back the raw p-values under an FDR name
+% (stored_q_was_raw_p flags exactly this - it was true in 46 of 73 families on
+% the eight final models). Reading n_sig_old as a baseline therefore scores a
+% newly-correct q against uncorrected p, and every real improvement looks like a
+% lost result.
+%
+% n_sig_BH is the reference that is always valid. Since q = pi0 * q_BH floored at
+% p and pi0 <= 1, the new q can never be STRICTER than BH, so:
+%
+%   n_sig_new > n_sig_BH   power legitimately gained over BH - a win
+%   n_sig_new == n_sig_BH  pi0 near 1; Storey has nothing to add here
+%   n_sig_old > n_sig_BH   the old column claimed significance BH does not
+%                          support. This is the number that matters for anything
+%                          already reported.
+%
+% Measured on the eight final models: of the 29 results that the new default
+% drops relative to the stored column, NONE survives plain BH either, while the
+% new q beats BH in 3 families (5 extra discoveries).
+%
 % * verbose         default true; print the per-table summary as it goes
 %
 %
@@ -272,6 +295,7 @@ for d = 1:numel(modeldirs)
                         sum(sel), max(p(sel)), ...
                         pi0_old, pi0_new, max(abs(q_new - q_old)), ...
                         sum(q_old < alpha), sum(q_new < alpha), ...
+                        sum(info.q_BH < alpha), ...
                         sum((q_old < alpha) ~= (q_new < alpha)), ...
                         q_was_p, family_ok, info.reliable, ...
                         strjoin(info.reasons, '; ') }; %#ok<AGROW>
@@ -328,7 +352,7 @@ end
 % -------------------------------------------------------------------------
 
 varnames = {'model','file','table','family','n','max_p','pi0_old','pi0_new','dq_max', ...
-            'n_sig_old','n_sig_new','n_cross_alpha','stored_q_was_raw_p', ...
+            'n_sig_old','n_sig_new','n_sig_BH','n_cross_alpha','stored_q_was_raw_p', ...
             'family_check_ok','reliable_new','reasons_new'};
 
 if isempty(rows)
@@ -345,6 +369,10 @@ if verbose
     fprintf('  tables whose q changed by > 0.001 : %d\n', sum(report.dq_max > 0.001));
     fprintf('  tables crossing alpha = %.2f       : %d\n', alpha, sum(report.n_cross_alpha > 0));
     fprintf('  tables whose stored q was raw p    : %d\n', sum(report.stored_q_was_raw_p));
+    fprintf('  new q finds MORE than BH           : %d  (power gained over BH)\n', ...
+        sum(report.n_sig_new > report.n_sig_BH));
+    fprintf('  stored q found more than BH        : %d  (significance BH does not support)\n', ...
+        sum(report.n_sig_old > report.n_sig_BH));
     fprintfonly = sum(~report.family_check_ok);
     fprintf('  tables with an unreliable new pi0  : %d\n', sum(~report.reliable_new));
     fprintf('  FAMILY CHECK FAILED (not written)  : %d\n', fprintfonly);
