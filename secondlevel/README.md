@@ -47,6 +47,17 @@ mixing them up is the easiest mistake here:
   progress/ETA printer that uses `drawnow limitrate` so it prints from inside
   `parfor`. Used by `group_tfce_from_subject_maps` and by `decoding_toolbox/`.
 
+> **Build these from the repo, not from another study's copies.** Copying a
+> previous study's renamed scripts and search-replacing the prefix is tempting,
+> because they already carry the study-specific settings - but those copies were
+> frozen when made and drift. Measured 2026-10-01, one study's second-level copies
+> were 66-628 lines behind the current templates, two of them
+> `core_scripts_to_run_without_modifying` missing more than half their current
+> content plus two upstream fixes. Download fresh and port only the genuinely
+> study-specific values; check the template's history
+> (`git log -L '/^<option> /,+1:<file>'`) to tell a real study choice from a
+> default that has since moved on.
+
 ## What is in `functions/`
 
 ### The ML pipeline family (~30 files)

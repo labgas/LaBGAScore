@@ -1136,6 +1136,18 @@ mkdir model_1_conds_pmods
 
 We want to include all our code in the code subdataset of our datalad superdataset, also the generic scripts, so we consistently download and rename them, like we did with the earlier prep scripts.
 
+> **Download from the repo, never copy from another study.** It is tempting to
+> copy a previous study's renamed scripts and search-replace the prefix, since
+> they already carry the study-specific settings. Don't: those copies were frozen
+> when they were made and have drifted. Measured on 2026-10-01, one study's
+> second-level copies were 66, 144, 460 and 628 lines behind the current
+> templates - and the 460 and 628 are `core_scripts_to_run_without_modifying`, so
+> more than half of each current script was missing, along with two fixes already
+> made upstream. Download fresh, then port only the genuinely study-specific
+> values from the old copy, checking the template's own history
+> (`git log -L '/^<option> /,+1:<file>'`) to tell a real study choice from a
+> former default that has since moved on.
+
 **IMPORTANT NOTE:** always create a model-specific directory (with the same name as the corresponding model-specific directory in your firstlevel — and later secondlevel — subdatasets), and include a model index (`m1`, etc.) in your script name, even if you do not anticipate running several first-level models, to keep things consistent and organized.
 
 Example for the first script:
@@ -1309,6 +1321,18 @@ e.g. `cfs_secondlevel_m2a_s6_prep_3a_run_second_level_regression_and_save.m`.
 ### 3. Download the scripts from the LaBGAS fork of the CANlab_help_examples GitHub repo to your code subdataset and rename them
 
 We want to include all our code in the code subdataset of our datalad superdataset, also the generic scripts, so we consistently download and rename them, like we did with the earlier prep and first-level scripts.
+
+> **Download from the repo, never copy from another study.** It is tempting to
+> copy a previous study's renamed scripts and search-replace the prefix, since
+> they already carry the study-specific settings. Don't: those copies were frozen
+> when they were made and have drifted. Measured on 2026-10-01, one study's
+> second-level copies were 66, 144, 460 and 628 lines behind the current
+> templates - and the 460 and 628 are `core_scripts_to_run_without_modifying`, so
+> more than half of each current script was missing, along with two fixes already
+> made upstream. Download fresh, then port only the genuinely study-specific
+> values from the old copy, checking the template's own history
+> (`git log -L '/^<option> /,+1:<file>'`) to tell a real study choice from a
+> former default that has since moved on.
 
 Which scripts you will use depends on your study-specific aims and hypotheses, but there are a number of scripts that should always be run first to set up second-level analysis.
 

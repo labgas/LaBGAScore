@@ -72,6 +72,17 @@ future studies, not any running analysis.
 `s1`/`s2` and `s1a`/`s2a` are alternatives, not steps: pick the pair that matches your
 design. Both pairs publish the same `s3`.
 
+> **Build these from the repo, not from another study's copies.** Copying a
+> previous study's renamed scripts and search-replacing the prefix is tempting,
+> because they already carry the study-specific settings - but those copies were
+> frozen when made and drift. Measured 2026-10-01, one study's second-level copies
+> were 66-628 lines behind the current templates, two of them
+> `core_scripts_to_run_without_modifying` missing more than half their current
+> content plus two upstream fixes. Download fresh and port only the genuinely
+> study-specific values; check the template's history
+> (`git log -L '/^<option> /,+1:<file>'`) to tell a real study choice from a
+> default that has since moved on.
+
 ## How the scripts hand off
 
 These are **scripts, not functions**. They take no arguments and return nothing; all state

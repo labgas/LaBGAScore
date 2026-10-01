@@ -86,6 +86,29 @@ Four documentation goals, mirroring work already done for `CANlab_help_examples`
 
    `clean/` and `secondlevel/` needed indexes rather than audits - both are recent work, and `secondlevel/` already had its own `CLAUDE.md` plus seven ML guides. Each new README says at the top what it does NOT cover, so authority stays in one place per subject. Writing the `secondlevel/` one nevertheless turned up two documentation defects: `secondlevel/CLAUDE.md` still headed its audit section *"findings, not yet fixed"* when every item in it is marked FIXED or RESOLVED (corrected), and the cross-repo dependency table in the root `README.md` was missing six of the eleven rows this file already carried - every `secondlevel/functions/` entry plus `smart_parallel_pool_setup` (added). The root README also framed LaBGAScore as owning "study setup, first-level modeling, and atlas/mask generation" while the fork owned the second level, which undersells `secondlevel/`: the TFCE stack, the ML pipelines and the reporting functions live HERE and the fork owns the templates that drive them. **Two tables covering the same relationship drift apart; the generated `DEPENDENCIES.md` is the one to trust.**
 
+## Start from the repo, not from a sibling study
+
+**Always build a study's scripts from the most recent version in the repo.** Use
+an older study's copies only as an *example* of which study-specific adaptations
+to make, never as the thing you copy and rename.
+
+**Why:** study copies are frozen when they are made and then drift. Measured on
+2026-10-01, `proj_bitter-reward`'s second-level copies were behind the current
+templates by 66 lines (`a_set_up_paths`), 144 (`a2_set_default_options`), 460
+(`prep_2`) and 628 (`prep_3`) - and the last two are
+`core_scripts_to_run_without_modifying`, so more than half the current script was
+simply missing. Two fixes already upstream were absent, including the
+`scriptsdir`/`modelname_2nd` correction that sends a variant model's scripts dir
+at the wrong model.
+
+**How to apply:** copy the template, then port only the genuinely
+study-specific values from the old copy. Distinguish those from stale defaults by
+checking the template's own history - `git log -L '/^<option> /,+1:<file>'`. On
+that same date, of five option differences in `a2_set_default_options`, two
+(`atlasname_glm = 'canlab2023_fine_2mm'`, `similarity_metric_sigs = 'dotproduct'`)
+were former template defaults rather than study choices, and only three
+(`doroi_analysis`, `keyword_sigs`, `subjs2exclude_data`) were real.
+
 ## Provenance and dependency tooling
 
 `clean/LaBGAScore_prov_*` and `clean/LaBGAScore_dep_*` record which version of each
