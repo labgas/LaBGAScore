@@ -173,21 +173,41 @@ second-level record from 1639 rows to 552 and removed BrainSpace, gift, cocoanCO
 ExploreASL and others that nothing here calls. See `clean/README_provenance.md` — do not
 relax these without re-checking the negative controls documented there.
 
-**State as of 2026-09-23:** the retrospective has been run over `proj_cfs` and
-`proj_discoverie`, second and first level. Commit status differs per dataset and was
-re-checked on this date:
+**State as of 2026-10-01** (re-measured; the 2026-09-23 figures this table used to
+carry were stale in every row, and understated what is committed by a wide margin):
+the retrospective has been run over `proj_cfs` and `proj_discoverie`, second and
+first level, and **all four subdatasets are now committed**.
 
-| dataset | provenance sidecars tracked | untracked |
-|---|---|---|
-| `proj_discoverie/secondlevel` | **46** | 0 |
-| `proj_discoverie/firstlevel` | 0 | 332 |
-| `proj_cfs/secondlevel` | 0 | 57 |
-| `proj_cfs/firstlevel` | 0 | 137 |
+| dataset | tracked | untracked | untracked sits where |
+|---|---|---|---|
+| `proj_discoverie/secondlevel` | **688** | 702 | entirely inside the untracked `model_2a`–`model_2g` dirs |
+| `proj_discoverie/firstlevel` | **220** | 0 | — |
+| `proj_cfs/secondlevel` | **170** | 83 | 47 in models 6/7/9/10/11, 36 inside untracked `model_1a` |
+| `proj_cfs/firstlevel` | **250** | 0 | — |
 
-So `proj_discoverie/secondlevel` is committed; the other three are still written-but-not-committed,
-pending review. Re-derive these counts rather than trusting them — `git ls-files | grep -c provenance`
-against `git status --porcelain | grep -c provenance` in each subdataset — since they move whenever
-someone runs a `datalad save`.
+The two firstlevel subdatasets are fully committed. The untracked remainder in the
+two secondlevel ones is **not a pending commit** — it is provenance belonging to
+model directories that are themselves deliberately untracked:
+
+- `proj_discoverie/secondlevel`: all 702 sit inside `model_2a`–`model_2g`, the
+  ~123 GB of centre-harmonisation comparison runs superseded by `model_2h`. The
+  record of why `model_2h` won is tracked as
+  `README_centre_harmonisation_model_selection.md`; the runs themselves are not
+  meant for GIN.
+- `proj_cfs/secondlevel`: 36 sit inside the untracked `model_1a_casecontrol_glm`
+  (7.6 GB, work in progress). The other **47 are a genuine gap** — models
+  `model_6`/`7`/`9`/`10`/`11` are tracked models whose sidecars were never
+  committed, because `c898950` deliberately scoped the provenance commit to
+  "model_2b and model_2c, the current final models" and `86a801c` removed the
+  superseded ones. Committing them is cheap (628 KB) but reverses that scoping
+  decision, so it is a choice, not an oversight to fix.
+
+**Re-derive these counts rather than trusting them** — `git ls-files | grep -c provenance`
+against `git status --porcelain | grep -c provenance` in each subdataset — since they move
+whenever someone runs a `datalad save`. One trap in that second command: an untracked
+*directory* collapses to a single porcelain line, so it reports 0 for
+`proj_discoverie/secondlevel` and 37 for `proj_cfs/secondlevel` where the file-level
+counts are 702 and 83. Walk the untracked directories to get the real number.
 
 ## Running scripts and publishing reports
 
