@@ -40,13 +40,46 @@ direction is π₀ → 0.
 
 Four methods: `'sas'` (default), `'lambda'`, `'spline'`, `'bh'`.
 
+**The spline is implemented here, and validated against SAS (2026-10-01).** It
+used to delegate to `mafdr`, which is a *different* estimator — and that was the
+reason the function disagreed with PROC MULTTEST while labelling its output
+"SAS: spline". On two 7-p-value sets:
+
+| p-values | SAS (METHOD=SPLINE) | this function | `mafdr` (old) |
+|---|---|---|---|
+| `.0063 .0046 .1097 .0017 .0190 .0025 .8031` | 0.17670 | **0.17670** | 0.00319 |
+| `.3913 .0124 .2928 .1349 .2515 .0839 .7543` | 0.02547 | **0.02547** | 0.00677 |
+
+n×π₀ reproduces SAS's "estimated number of true nulls" too (1.23693, 0.17829).
+Three details decide it, and all three were wrong before: the λ grid is
+`(0:19)/20` (SAS's `NLAMBDA=20`), not the `'lambda'` option's default
+`0.2:0.1:0.5`; the smoother is a natural cubic **smoothing** spline with 3
+effective df; and the estimate is read at the **last λ (0.95), not at λ=1**.
+Storey & Tibshirani's paper writes π₀ = s(1), while the qvalue package and SAS
+both read off max(λ) — at λ=1 those two sets give 0.14133 and **−0.02118**.
+`info.spline_pi0_at_lambda1` reports it so the choice stays visible.
+
+**Where π₀ is identified, and when it isn't.** π₀ is read off the *top* of the λ
+curve. With no p-value above the last λ, π̂₀(λ) is exactly 0 there and any
+estimator extrapolating into that region collapses toward 0 — which is what
+produced `mafdr`'s 0.003 above (max p = 0.8031). That condition is now reported
+explicitly in `info.reasons` and raised as a warning. Both validated examples
+trip it, and SAS's own answer on the second (π₀ = 0.025, i.e. 0.18 of 7
+hypotheses null) is not credible either: agreement with SAS is exact, which is
+not the same as either number being usable. At small n with a thin upper tail,
+BH is the defensible choice.
+
 > **The guard is OFF under the default method.** `'sas'` reproduces SAS PROC
 > MULTTEST's PFDR exactly — which is the point, since LaBGAS cross-checks
 > analyses against SAS — and that fidelity includes not rejecting a π₀ the
 > lambda curve does not support. Under `'sas'` the reliability flag in `info` is
 > **advisory: reported, never enforced**. Under the other three methods the
 > guard is on and a bad π₀ is rejected. So read the flag, or pick a non-default
-> method when SAS agreement is not what you need.
+> method when SAS agreement is not what you need. Since 2026-10-01 an unreliable
+> π₀ that is returned anyway also raises
+> `LaBGAScore_Storey_FDR:unreliablePi0`, so it cannot pass into a results table
+> silently. The guard is still **not** enforced under `'sas'` — deliberately, so
+> the function reproduces PROC MULTTEST including its failures.
 
 ### `LaBGAScore_combat_fit` / `_apply`
 

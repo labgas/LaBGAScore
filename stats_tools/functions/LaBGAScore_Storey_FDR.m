@@ -28,6 +28,37 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 % The 0.99 guard only ever caught the CONSERVATIVE failure (pi0 -> 1, where
 % Storey harmlessly degenerates to BH). The damaging direction is pi0 -> 0.
 %
+% *VALIDATED AGAINST SAS (2026-10-01)*
+%
+% The spline is computed here rather than taken from mafdr, and reproduces
+% PROC MULTTEST (METHOD=SPLINE) exactly on both test sets:
+%
+%   p = [.0063 .0046 .1097 .0017 .0190 .0025 .8031]
+%       SAS pi0 = 0.17670 (n*pi0 = 1.23693)   this function 0.17670 (1.23693)
+%   p = [.3913 .0124 .2928 .1349 .2515 .0839 .7543]
+%       SAS pi0 = 0.02547 (n*pi0 = 0.17829)   this function 0.02547 (0.17829)
+%
+% mafdr returned 0.00319 and 0.00677 on the same inputs - roughly 50x and 4x too
+% small - and the old 'sas' path passed those through while reporting
+% "SAS: spline". THREE details decide it, all of which were wrong before:
+%
+%   1. the lambda grid is (0:19)/20 = 0, .05 ... .95 (SAS's NLAMBDA = 20), not
+%      this function's 'lambda' option default 0.2:0.1:0.5, which stops at 0.5
+%      and only ever drove the lambda-median estimate;
+%   2. the smoother is a natural cubic SMOOTHING spline with 3 effective df;
+%   3. the estimate is the fitted value at the LAST lambda (0.95), NOT at
+%      lambda = 1. Storey & Tibshirani (2003) write pi0 = s(1); the qvalue
+%      package and SAS both read off max(lambda). At lambda = 1 the two sets
+%      above give 0.14133 and -0.02118 - one plausible, one negative.
+%      info.spline_pi0_at_lambda1 reports it so the choice stays visible.
+%
+% NOTE ON BOTH TEST SETS: neither has a p-value above 0.81, so pi0(lambda) is
+% exactly 0 for every lambda >= 0.85 and pi0 is not identified at the top of the
+% curve, where it is supposed to be read off. SAS's own answer on the second set
+% (0.025, i.e. 0.18 of 7 hypotheses null) is not credible either. Agreement with
+% SAS is now exact; it is not a claim that either number is usable. This is
+% reported as an explicit reason in info.reasons and raised as a warning.
+%
 % *RELATION TO SAS PROC MULTTEST*
 %
 % The old header claimed this implemented Storey "as in SAS proc multtest". It
@@ -39,15 +70,16 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 %
 % with NLAMBDA=20 and NBOOT=10000 (both Storey & Tibshirani 2003); SAS's
 % LAMBDA= instead fixes a single lambda with no search (Storey 2002). MATLAB's
-% mafdr implements the SPLINE step only, with no fallback - which is exactly
-% why the degenerate estimate above was returned silently.
+% The SPLINE step is implemented HERE (local_storey_spline_pi0), not delegated.
+% It used to call mafdr, which is a different estimator and the reason this
+% function disagreed with PROC MULTTEST - see the validation note below.
 %
 % *METHODS AVAILABLE, AND WHAT THEY CONTROL*
 %
 %   FDR, Storey-type (q = pi0 * q_BH, differing only in how pi0 is estimated):
 %     'sas'          SPLINE then BOOTSTRAP on SAS's trigger = PROC MULTTEST PFDR
 %     'lambda'       median of pi0(lambda) over a grid; not a SAS method
-%     'spline'       mafdr's spline step alone
+%     'spline'       the SPLINE step alone, no fallback
 %     'bh'           pi0 = 1, i.e. plain Benjamini-Hochberg
 %
 %   FDR, adaptive (m replaced by an estimate of the number of true nulls):
@@ -394,11 +426,21 @@ pi0_lam   = arrayfun(@(L) min(1, mean(p > L)/(1-L)), lam);
 pi0_range = max(pi0_lam) - min(pi0_lam);
 pi0_med   = median(pi0_lam);
 
+% Storey & Tibshirani (2003) spline estimate, as SAS PROC MULTTEST computes it.
+% This used to be mafdr(p), which is a DIFFERENT estimator: on a 7-p-value set
+% where SAS returns pi0 = 0.17670, mafdr returned 0.00319, and the 'sas' method
+% passed that straight through while labelling it "SAS: spline". See
+% local_storey_spline_pi0 for the three details that have to match.
+boot_seed  = NaN;    % set by local_sas_pi0 when it falls back to the bootstrap
 pi0_spline = NaN;
+spl = struct('slope_end', NaN, 'fitted_range', NaN, 'df_effective', NaN, ...
+             'pi0_at_lambda1', NaN, 'lambda_last', NaN, 'pi0_raw', NaN);
 try
-    [~, ~, pi0_spline] = mafdr(p);
-catch
-    % mafdr's spline fit can fail outright on small or degenerate inputs
+    [pi0_spline, spl] = local_storey_spline_pi0(p, 20, 3);
+catch ME
+    % a degenerate grid (e.g. every p identical) can make the fit singular
+    warning('LaBGAScore_Storey_FDR:splineFailed', ...
+        '\nspline estimate of pi0 could not be computed (%s); falling back', ME.message);
 end
 
 switch method
@@ -407,7 +449,7 @@ switch method
     case 'spline'
         pi0_use = pi0_spline;  method_used = 'mafdr-spline';
     case 'sas'
-        [pi0_use, method_used] = local_sas_pi0(p, lam, pi0_spline, nboot);
+        [pi0_use, method_used, boot_seed] = local_sas_pi0(p, lam, pi0_spline, nboot, spl);
     case 'bh'
         pi0_use = 1;  method_used = 'BH (pi0 = 1)';
     case {'stepdown_sidak','sidak','holm','bonferroni'}
@@ -436,7 +478,32 @@ if isnan(pi0_use)
     reasons{end+1} = 'pi0 could not be estimated';
 end
 
+% The upper end of the lambda curve is where pi0 is identified. With no
+% p-value above the last lambda, pi0(lambda) is exactly 0 there and ANY
+% estimator extrapolating into that region collapses toward 0 - which is what
+% produced pi0 = 0.003 on the validated example (max p = 0.8031). Reported, not
+% enforced: 'sas' must stay faithful to PROC MULTTEST, which returns its
+% estimate regardless.
+lam_top = 0.95;
+n_above_top = sum(p > lam_top);
+if n_above_top == 0
+    reasons{end+1} = sprintf(['no p-value exceeds %.2f, so the top of the lambda ' ...
+        'curve is empty and pi0 is not identified there (max p = %.4f)'], lam_top, max(p));
+end
+
 reliable = isempty(reasons);
+
+% Point of this warning: under 'sas' the guard is deliberately OFF so the
+% function reproduces PROC MULTTEST, including its failures. An unreliable pi0
+% is therefore RETURNED, and silence would let it pass into a results table as
+% though it were trustworthy.
+if ~reliable && ~do_guard
+    warning('LaBGAScore_Storey_FDR:unreliablePi0', ...
+        ['\npi0 = %.4f is flagged UNRELIABLE and is being returned anyway ' ...
+         '(guard off, as method ''%s'' requires for SAS fidelity):\n  - %s\n' ...
+         'Treat the q-values as provisional; BH (method ''bh'') is the safe fallback.'], ...
+        pi0_use, method, strjoin(reasons, sprintf('\n  - ')));
+end
 
 % ------------------------- form q ----------------------------------------
 
@@ -509,7 +576,11 @@ end
 info = struct('method_used', method_used, 'pi0', pi0_use, 'pi0_lambda', pi0_lam, ...
     'lambda', lam, 'pi0_range', pi0_range, 'pi0_spline', pi0_spline, ...
     'reliable', reliable, 'reasons', {reasons}, 'q_BH', reshape(q_bh, sz), ...
-    'guard_on', do_guard, 'guard_fired', guard_fired);
+    'guard_on', do_guard, 'guard_fired', guard_fired, ...
+    'spline_slope_end', spl.slope_end, 'spline_fitted_range', spl.fitted_range, ...
+    'spline_df_effective', spl.df_effective, 'spline_pi0_at_lambda1', spl.pi0_at_lambda1, ...
+    'spline_pi0_raw', spl.pi0_raw, ...
+    'n_p_above_0_95', n_above_top, 'bootstrap_seed', boot_seed);
 
 pi0 = pi0_use;
 q   = reshape(q, sz);
@@ -519,7 +590,10 @@ end % main function
 
 % =========================================================================
 
-function [pi0, method_used] = local_sas_pi0(p, lam, pi0_spline, nboot)
+function [pi0, method_used, boot_seed] = local_sas_pi0(p, ~, pi0_spline, nboot, spl)
+% the lambda grid argument is unused: SAS's spline and its bootstrap fallback
+% both use NLAMBDA = 20 internally, not the caller's 'lambda' option, which
+% only drives the lambda-median estimate
 % SAS PROC MULTTEST's PFDR default: SPLINE first, BOOTSTRAP on its trigger.
 %
 % SAS: "the SPLINE method is attempted first. If the estimate is nonpositive or
@@ -533,23 +607,30 @@ function [pi0, method_used] = local_sas_pi0(p, lam, pi0_spline, nboot)
 
 n = numel(p);
 
-spline_bad = isnan(pi0_spline) || pi0_spline <= 0;
+raw = pi0_spline;
+if isfield(spl,'pi0_raw') && ~isempty(spl.pi0_raw), raw = spl.pi0_raw; end
+spline_bad = isnan(raw) || raw <= 0;   % SAS's nonpositive test, on the UNCLAMPED estimate
 
 if ~spline_bad
-    % Stand-in for SAS's terminal-slope test: does the spline estimate sit
-    % anywhere near what the lambda curve implies at its upper end?
+    % SAS's documented trigger, now computed exactly rather than approximated:
+    % "if the estimate is nonpositive, or if the slope of the spline at the last
+    % lambda is greater than 0.1 times the range of the fitted spline values,
+    % the BOOTSTRAP method is used."
     %
-    % Anchored at lambda = 0.95, the LAST lambda of SAS's NLAMBDA = 20 grid,
-    % which is where SAS evaluates the spline slope. It previously used
-    % max(lam), i.e. 0.5 under the default grid - a different place on the
-    % curve from the one SAS tests, which rejected the spline far more often
-    % at small n and pushed work onto the bootstrap, the more biased of the
-    % two estimators. The two anchorings disagreed on 31-72%% of simulated
-    % datasets (n = 8 to 200).
-    lam_last   = 0.95;
-    pi0_lam_hi = min(1, mean(p > lam_last)/(1 - lam_last));
-    spline_bad = abs(pi0_spline - pi0_lam_hi) > 0.3;
+    % Note the test is on the SIGNED slope, not its magnitude. On both validated
+    % examples the slope is steeply NEGATIVE (-0.71, -0.93) against a 0.1*range
+    % of 0.03 and 0.09, so SAS does not fall back - and neither do we, which is
+    % what reproduces its numbers.
+    %
+    % The previous stand-in compared pi0_spline with mean(p>0.95)/0.05. That
+    % anchor is exactly 0 whenever no p-value exceeds 0.95, so a spuriously
+    % SMALL spline estimate always "agreed" with it and was accepted, while only
+    % large estimates were rejected - backwards, since pi0 -> 0 is the damaging
+    % direction.
+    spline_bad = spl.slope_end > 0.1 * spl.fitted_range;
 end
+
+boot_seed = NaN;                      % no bootstrap drawn on the spline path
 
 if ~spline_bad
     pi0 = pi0_spline;
@@ -562,9 +643,23 @@ lam_b   = (0:19)/20;                      % NLAMBDA = 20, as SAS
 pi0_b   = arrayfun(@(L) min(1, mean(p > L)/(1-L)), lam_b);
 min_pi0 = min(pi0_b);
 
+% The bootstrap is seeded FROM THE P-VALUES, and drawn from a private stream.
+% Two separate problems, both real:
+%   1. REPRODUCIBILITY. With an unseeded global RNG, ten identical calls on one
+%      saved roi table gave pi0 = 0.4688 nine times and 0.3846 once - and the
+%      number of ROIs at q < 0.05 changed from 1 to 2 with it. A q-value that
+%      moves between runs of the same script on the same data is not publishable.
+%   2. SIDE EFFECTS. randi(n,...) consumes the GLOBAL stream, so simply calling
+%      this function shifted the RNG state for whatever the caller did next -
+%      including the permutation tests in prep_3a and the decoding scripts.
+% A private RandStream fixes both: deterministic per input, and invisible to the
+% caller. info.bootstrap_seed records it.
+boot_seed = local_seed_from_p(p);
+rs        = RandStream('mt19937ar', 'Seed', boot_seed);
+
 mse = zeros(size(lam_b));
 for b = 1:nboot
-    pb    = p(randi(n, n, 1));
+    pb    = p(randi(rs, n, n, 1));
     pi0_s = arrayfun(@(L) min(1, mean(pb > L)/(1-L)), lam_b);
     mse   = mse + (pi0_s - min_pi0).^2;
 end
@@ -686,4 +781,127 @@ m0  = m - r1;
 pi0 = m0 / m;
 method_used = sprintf('BKY 2006 two-stage: stage 1 alpha = %.4f rejected %d, m0 = %d', a1, r1, m0);
 
+end
+
+
+% =========================================================================
+function [pi0, spl] = local_storey_spline_pi0(p, nlambda, target_df)
+% Storey & Tibshirani (2003) spline estimate of pi0, as SAS PROC MULTTEST
+% computes it. VALIDATED against SAS on 2026-10-01 on two 7-p-value sets:
+%
+%   p = [.0063 .0046 .1097 .0017 .0190 .0025 .8031] -> SAS .17670, here .17670
+%   p = [.3913 .0124 .2928 .1349 .2515 .0839 .7543] -> SAS .02547, here .02547
+%
+% (SAS reports n*pi0 as the "estimated number of true null hypotheses":
+%  1.23693 and 0.17829 respectively, which these reproduce.)
+%
+% Three details all have to match, and each was wrong before:
+%   1. GRID      lambda = (0:nlambda-1)/nlambda -> 0, .05, ... .95 at SAS's
+%                NLAMBDA = 20. NOT the function's own default 0.2:0.1:0.5, which
+%                is used for the lambda-median estimate and stops at 0.5.
+%   2. SMOOTHER  natural cubic SMOOTHING spline with target_df effective degrees
+%                of freedom (3), not an interpolating spline and not mafdr.
+%   3. EVALUATION at the LAST lambda, 0.95 - *not* at lambda = 1. Storey &
+%                Tibshirani's paper writes pi0 = s(1); the qvalue package and
+%                SAS both take the fitted value at max(lambda). Evaluating at 1
+%                extrapolates linearly off the end of a natural spline and gives
+%                0.141 and -0.021 on the two sets above, i.e. one plausible
+%                number and one negative one. spl.pi0_at_lambda1 reports it so
+%                the difference stays visible.
+
+n   = numel(p);
+lam = (0:nlambda-1)'/nlambda;
+y   = arrayfun(@(L) sum(p > L)/(n*(1 - L)), lam);
+
+[f, gamma, df_eff] = local_ncss(lam, y, target_df);
+
+% The smoother is not constrained to [0,1] and can overshoot: on a 7-p-value set
+% with a populated upper tail it returned 3.39, which is not a proportion and
+% would multiply q_BH by 3.39. Storey's qvalue does min(.,1) here and so do we.
+% The RAW value is kept for SAS's nonpositive test and for the diagnostics, so
+% clamping cannot mask a failed fit.
+pi0_raw = f(end);
+pi0     = min(1, pi0_raw);
+
+% Slope of the fitted spline at the last knot, for SAS's fallback trigger. A
+% natural spline has zero second derivative there, so on the final interval the
+% slope is the chord plus one curvature term.
+h_last    = lam(end) - lam(end-1);
+g_in      = 0;
+if ~isempty(gamma), g_in = gamma(end); end
+slope_end = (f(end) - f(end-1))/h_last + h_last*g_in/6;
+
+spl = struct('lambda', lam, 'pi0_lambda', y, 'fitted', f, ...
+    'slope_end', slope_end, 'fitted_range', max(f) - min(f), ...
+    'df_effective', df_eff, 'lambda_last', lam(end), 'pi0_raw', pi0_raw, ...
+    'pi0_at_lambda1', f(end) + (1 - lam(end))*slope_end);
+end
+
+
+% =========================================================================
+function [f, gamma, df_eff] = local_ncss(x, y, target_df)
+% Natural cubic smoothing spline (Green & Silverman 1994, ch. 2), with the
+% roughness penalty tuned by bisection so the smoother has target_df effective
+% degrees of freedom - which is how "a natural cubic spline with 3 df" is
+% specified in Storey & Tibshirani (2003).
+%
+% Implemented here rather than with csaps/spaps or mafdr so the function needs
+% neither the Curve Fitting nor the Bioinformatics Toolbox for its pi0 estimate.
+%
+% df is monotonically DECREASING in the penalty alpha: alpha -> 0 gives
+% df -> numel(x) (interpolation), alpha -> Inf gives df -> 2 (the penalty's
+% nullspace is the linear functions). So target_df must lie in (2, numel(x)].
+
+n = numel(x);
+h = diff(x);
+
+R = zeros(n-2, n-2);
+Q = zeros(n,   n-2);
+for i = 1:n-2
+    R(i,i) = (h(i) + h(i+1))/3;
+        if i < n-2
+            R(i,i+1) = h(i+1)/6;
+            R(i+1,i) = h(i+1)/6;
+        end
+    Q(i,   i) =  1/h(i);
+    Q(i+1, i) = -1/h(i) - 1/h(i+1);
+    Q(i+2, i) =  1/h(i+1);
+end
+
+K = Q * (R \ Q');
+I = eye(n);
+
+lo = -12; hi = 12;                      % bisect on log10(alpha)
+for it = 1:200
+    mid = (lo + hi)/2;
+        if trace((I + 10^mid * K) \ I) > target_df
+            lo = mid;                   % too little smoothing, raise alpha
+        else
+            hi = mid;
+        end
+end
+
+S      = (I + 10^((lo + hi)/2) * K) \ I;
+f      = S * y;
+gamma  = R \ (Q' * f);
+df_eff = trace(S);
+end
+
+
+% =========================================================================
+function s = local_seed_from_p(p)
+% Deterministic seed derived from the exact bit pattern of the sorted p-values,
+% so the same input always produces the same bootstrap draw. Sorted, because the
+% pi0 estimate does not depend on the order of the p-values and the seed should
+% not either.
+%
+% Arithmetic is done in double with an explicit mod: uint32 multiplication in
+% MATLAB SATURATES at intmax rather than wrapping, which would collapse the hash
+% to a constant for any vector of more than a few elements.
+
+w = typecast(sort(double(p(:))), 'uint32');
+s = 0;
+for i = 1:numel(w)
+    s = mod(s*31 + double(w(i)), 2^32);
+end
 end

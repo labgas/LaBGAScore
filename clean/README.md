@@ -5,7 +5,7 @@ result; it records how results were produced, catches the mistakes that waste a
 day, and does the chores.
 
 Almost everything is a **function called from elsewhere** rather than a script
-you run by hand — 15 of the 16 `.m` files are functions, the exception being
+you run by hand — 16 of the 17 `.m` files are functions, the exception being
 `LaBGAScore_smart_parallel_pool_setup.m`. The two `.py` checkers and the two
 `.sh` wrappers are run directly.
 
@@ -62,6 +62,12 @@ not exist, or logic bugs — those still need reading.
 | `LaBGAScore_run_reports.m` | publishes a chain of scripts and **fails loudly when one errors**. `publish()` catches a script error into the HTML and returns normally, so a crashed run otherwise raises nothing and exits 0 — the single biggest source of silently wrong results in this pipeline |
 | `labgascore_run_headless.sh` | wraps the headless invocation, including the traps: `matlab -batch` cannot `publish()`, stdin must be redirected from `/dev/null`, and the MATLAB code goes into a temporary `.m` file rather than a one-line `-r` string |
 | `LaBGAScore_check_display.m` | reports whether the current X2go session is big enough for a full-size report figure, and what to change if not. Applies to the **interactive** route only |
+
+### One-off corrections
+
+| file | |
+|---|---|
+| `LaBGAScore_stats_rederive_storey_q.m` | re-derives Storey q-values in **already saved** second-level results and reports what changes, without re-running any analysis. Possible because `q = pi0 * q_BH` floored at `p` is a scalar transform of p-values that the results tables already store next to the q-values — everything expensive produced those p-values. Report-only by default; `'write', true` saves corrected tables as `*_storeyfix.mat` and never touches the originals |
 
 ### Housekeeping
 
