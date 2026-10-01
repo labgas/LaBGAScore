@@ -195,52 +195,90 @@ for d = 1:numel(modeldirs)
                         continue
                     end
 
-                [q_new, pi0_new, info] = LaBGAScore_Storey_FDR(p(ok), ...
-                    'method', method, 'verbose', false);
+                % THE FAMILY MATTERS. roi_glm_stats holds one row per
+                % effect x roi, and prep_3a corrects WITHIN each effect - a
+                % 3-effect x 8-roi table carries three different pi0 values and
+                % three separate q_BH ladders. Pooling all 24 p-values into one
+                % family changes the correction, makes it stricter, and
+                % manufactured four spurious "significance lost" results on
+                % model_2j before this was caught. Group by 'effect' where the
+                % column exists; otherwise the whole vector is one family.
+                    if strcmp(shape,'table') && ismember('effect', cols)
+                        [gid, gname] = findgroups(string(T.effect(:)));
+                    else
+                        gid = ones(numel(p),1); gname = "all";
+                    end
+
+                for g = 1:numel(gname)
+
+                    sel = ok & (gid == g);
+                        if sum(sel) < 4, continue, end
+
+                    [q_new, pi0_new, info] = LaBGAScore_Storey_FDR(p(sel), ...
+                        'method', method, 'verbose', false);
 
                 % In the TABLE form q_Storey is full-length and aligns with p, so it
                 % is indexed by ok. In the STRUCT form prep_3a stored only the
                 % usable entries, so it is ALREADY the subset and indexing it
                 % again would misalign every value after the first NaN.
-                q_allold = T.q_Storey(:);
-                    if numel(q_allold) == sum(ok)
-                        q_old = q_allold;
-                    else
-                        q_old = q_allold(ok);
-                    end
-                pi0_old  = NaN;
-                    if ismember('pi0', cols)
-                        pi0_allold = T.pi0(:);
-                        pi0_old    = pi0_allold(1);
-                    end
+                    % Decide by SHAPE, not by length: in the struct form prep_3a
+                    % stored only the usable entries so q_Storey is already the
+                    % subset, whereas a table's column is full-length. Testing
+                    % numel(q)==sum(ok) instead is true for any table with no NaN
+                    % p-values, which then indexed the wrong way for a grouped
+                    % table and errored on mismatched sizes.
+                    q_allold = T.q_Storey(:);
+                        if strcmp(shape, 'struct')
+                            q_old = q_allold;
+                        else
+                            q_old = q_allold(sel);
+                        end
+                    pi0_old = NaN;
+                        if ismember('pi0', cols)
+                            pi0_allold = T.pi0(:);
+                            pi0_old    = pi0_allold(find(sel,1));
+                        end
+
+                    % SELF-CHECK on the family: q_BH is a deterministic function
+                    % of the p-values in its family, so if the stored q_BH column
+                    % does not match BH recomputed over this group, the grouping
+                    % is wrong and the correction must NOT be trusted or written.
+                    family_ok = true;
+                        if ismember('q_BH', cols) && strcmp(shape,'table')
+                            qbh_stored = T.q_BH(sel);
+                            family_ok  = max(abs(qbh_stored(:) - info.q_BH(:))) < 1e-6;
+                        end
 
                 % stored q identical to p means the q >= p floor took over, i.e.
                 % the column is an uncorrected p-value under an FDR name
-                q_was_p = all(abs(q_old - p(ok)) < 1e-10);
+                    q_was_p = all(abs(q_old - p(sel)) < 1e-10);
 
-                rows(end+1,:) = { modelname, files(f).name, ...
-                    sprintf('%s{%d} [%s]', fn{v}, c, shape), sum(ok), max(p(ok)), ...
-                    pi0_old, pi0_new, max(abs(q_new - q_old)), ...
-                    sum(q_old < alpha), sum(q_new < alpha), ...
-                    sum((q_old < alpha) ~= (q_new < alpha)), ...
-                    q_was_p, info.reliable, strjoin(info.reasons, '; ') }; %#ok<AGROW>
+                    rows(end+1,:) = { modelname, files(f).name, ...
+                        sprintf('%s{%d} [%s]', fn{v}, c, shape), char(gname(g)), ...
+                        sum(sel), max(p(sel)), ...
+                        pi0_old, pi0_new, max(abs(q_new - q_old)), ...
+                        sum(q_old < alpha), sum(q_new < alpha), ...
+                        sum((q_old < alpha) ~= (q_new < alpha)), ...
+                        q_was_p, family_ok, info.reliable, ...
+                        strjoin(info.reasons, '; ') }; %#ok<AGROW>
 
-                    if verbose
-                        fprintf(['    %-30s %-18s n=%-4d pi0 %.4f -> %.4f  ' ...
-                                 'dq<=%.4f  <%.2f: %d -> %d  flips %d%s\n'], ...
-                            files(f).name(1:min(30,end)), sprintf('%s{%d}', fn{v}, c), ...
-                            sum(ok), pi0_old, pi0_new, max(abs(q_new - q_old)), ...
-                            alpha, sum(q_old < alpha), sum(q_new < alpha), ...
-                            sum((q_old < alpha) ~= (q_new < alpha)), ...
-                            repmat('   [stored q WAS raw p]', 1, q_was_p));
-                    end
+                        if verbose
+                            fprintf(['    %-26s %-22s %-16s n=%-3d pi0 %.4f -> %.4f  ' ...
+                                     'dq<=%.4f  <%.2f: %d -> %d  flips %d%s%s\n'], ...
+                                files(f).name(1:min(26,end)), sprintf('%s{%d}', fn{v}, c), ...
+                                char(gname(g)), sum(sel), pi0_old, pi0_new, ...
+                                max(abs(q_new - q_old)), alpha, sum(q_old < alpha), ...
+                                sum(q_new < alpha), sum((q_old < alpha) ~= (q_new < alpha)), ...
+                                repmat('  [q WAS raw p]', 1, q_was_p), ...
+                                repmat('  *** FAMILY MISMATCH, NOT WRITTEN ***', 1, ~family_ok));
+                        end
 
-                    if dowrite
-                        Tnew = T;
+                    if dowrite && family_ok
+                        Tnew = X{c};
                             if strcmp(shape, 'table')
-                                Tnew.q_Storey(ok) = q_new;
-                                    if ismember('pi0', cols),             Tnew.pi0(ok) = pi0_new; end
-                                    if ismember('storey_reliable', cols), Tnew.storey_reliable(ok) = info.reliable; end
+                                Tnew.q_Storey(sel) = q_new;
+                                    if ismember('pi0', cols),             Tnew.pi0(sel) = pi0_new; end
+                                    if ismember('storey_reliable', cols), Tnew.storey_reliable(sel) = info.reliable; end
                             else
                                 % struct form: q_Storey is the vector of the ok
                                 % entries only, as prep_3a stored it
@@ -251,6 +289,9 @@ for d = 1:numel(modeldirs)
                         X{c} = Tnew;
                         changed_any = true;
                     end
+
+                end % for each family within this table
+
             end
 
                 if dowrite && changed_any
@@ -272,9 +313,9 @@ end
 %% BUILD AND OPTIONALLY WRITE THE REPORT
 % -------------------------------------------------------------------------
 
-varnames = {'model','file','table','n','max_p','pi0_old','pi0_new','dq_max', ...
+varnames = {'model','file','table','family','n','max_p','pi0_old','pi0_new','dq_max', ...
             'n_sig_old','n_sig_new','n_cross_alpha','stored_q_was_raw_p', ...
-            'reliable_new','reasons_new'};
+            'family_check_ok','reliable_new','reasons_new'};
 
 if isempty(rows)
     report = cell2table(cell(0, numel(varnames)), 'VariableNames', varnames);
@@ -290,7 +331,9 @@ if verbose
     fprintf('  tables whose q changed by > 0.001 : %d\n', sum(report.dq_max > 0.001));
     fprintf('  tables crossing alpha = %.2f       : %d\n', alpha, sum(report.n_cross_alpha > 0));
     fprintf('  tables whose stored q was raw p    : %d\n', sum(report.stored_q_was_raw_p));
+    fprintfonly = sum(~report.family_check_ok);
     fprintf('  tables with an unreliable new pi0  : %d\n', sum(~report.reliable_new));
+    fprintf('  FAMILY CHECK FAILED (not written)  : %d\n', fprintfonly);
     if ~dowrite
         fprintf('\n  REPORT ONLY - nothing written. Re-run with ''write'', true to save\n');
         fprintf('  corrected tables (as *_storeyfix.mat, originals untouched).\n');
