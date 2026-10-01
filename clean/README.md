@@ -67,7 +67,30 @@ not exist, or logic bugs — those still need reading.
 
 | file | |
 |---|---|
-| `LaBGAScore_stats_rederive_storey_q.m` | re-derives Storey q-values in **already saved** second-level results and reports what changes, without re-running any analysis. Possible because `q = pi0 * q_BH` floored at `p` is a scalar transform of p-values that the results tables already store next to the q-values — everything expensive produced those p-values. Report-only by default; `'write', true` saves corrected tables as `*_storeyfix.mat` and never touches the originals |
+| `LaBGAScore_stats_rederive_storey_q.m` | re-derives Storey q-values in **already saved** second-level results and reports what changes, without re-running any analysis. Possible because `q = pi0 * q_BH` floored at `p` is a scalar transform of p-values that the results tables already store next to the q-values — everything expensive produced those p-values. Report-only by default; `'write', true` with `'output','sidecar'` (the default) saves corrected tables as `*_storeyfix.mat` and leaves the originals alone, `'output','inplace'` overwrites them, and `'csv',true` writes a flat `.csv` beside each |
+
+**Reading its report: `n_sig_BH` first, not `n_sig_old`.** The stored `q_Storey`
+column is not always a correction — where the old pi0 collapsed towards 0 the
+`q >= p` floor handed the raw p-values back under an FDR name, which was the case
+in 47 of 73 families across the eight final models. Scoring a corrected q against
+that baseline makes every genuine improvement look like a lost result. `q_BH` is
+the reference that is always valid, and an upper bound: since pi0 ≤ 1 the new q
+can never be *stricter* than BH, so `n_sig_new > n_sig_BH` is power gained and
+`n_sig_old > n_sig_BH` is significance the old column claimed without support.
+
+**`'output','inplace'` refuses to write through a git-annex symlink**, and says
+so rather than failing quietly. git-annex deduplicates by content hash, so one
+object can back the identical table in several models; saving over the link
+would edit that shared object and corrupt every model pointing at it. Run
+`git annex unlock <file>` first — which leaves the previous version in annex
+history, so the overwrite stays reversible.
+
+> **The eight final models were corrected in place on 2026-10-01** and each
+> carries `results/README_storey_correction_2026-10-01.md` recording that the
+> tables now **supersede the `q_Storey` columns in the published
+> `results/html/` reports**, which were not regenerated. Everything else in
+> those reports — p-values, `q_BH`, effect sizes, all voxelwise results — is
+> unaffected.
 
 ### Housekeeping
 

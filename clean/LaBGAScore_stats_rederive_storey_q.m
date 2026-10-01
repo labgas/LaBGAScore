@@ -129,6 +129,8 @@ ip = inputParser;
 ip.addParameter('alpha',   0.05,  @isnumeric);
 ip.addParameter('write',   false, @(x) islogical(x) || isnumeric(x));
 ip.addParameter('outdir',  '',    @ischar);
+ip.addParameter('output',  'sidecar', @(x) any(strcmpi(x, {'sidecar','inplace'})));
+ip.addParameter('csv',     false,     @(x) islogical(x) || isnumeric(x));
 ip.addParameter('method',  '', @(x) ischar(x) || isstring(x));   % empty = follow LaBGAScore_Storey_FDR's own default
                                                                  % (it hardcoded 'sas' until 2026-10-01, which silently
                                                                  %  overrode the function's default when that changed)
@@ -136,6 +138,16 @@ ip.addParameter('verbose', true,  @(x) islogical(x) || isnumeric(x));
 ip.parse(varargin{:});
 alpha   = ip.Results.alpha;
 dowrite = logical(ip.Results.write);
+inplace = strcmpi(ip.Results.output, 'inplace');
+docsv   = logical(ip.Results.csv);
+
+% INPLACE REFUSES TO WRITE THROUGH AN ANNEX SYMLINK. git-annex deduplicates by
+% content hash, so one object can back the same table in several models; saving
+% over the symlink would edit that shared object in place and silently corrupt
+% every other model pointing at it. Unlock first (git annex unlock <file>),
+% which replaces the link with a writable copy and leaves the old version in
+% annex history, then re-run.
+
 outdir  = ip.Results.outdir;
 method  = char(ip.Results.method);
 verbose = logical(ip.Results.verbose);
@@ -185,6 +197,7 @@ for d = 1:numel(modeldirs)
         S = load(fpath);
         changed_any = false;
         Sout = S;
+        csvrows = {};
 
         fn = fieldnames(S);
         for v = 1:numel(fn)
@@ -326,6 +339,24 @@ for d = 1:numel(modeldirs)
                             end
                         X{c} = Tnew;
                         changed_any = true;
+
+                            if docsv
+                                pfam = p(sel);
+                                if strcmp(shape,'table') && ismember('roi', cols)
+                                    rl = string(T.roi(sel));
+                                elseif strcmp(shape,'struct') && isfield(T,'names')
+                                    rl = string(T.names(:)); rl = rl(ok(1:numel(rl)));
+                                else
+                                    rl = "test_" + string((1:numel(q_new))');
+                                end
+                                rl = rl(:);
+                                    for r = 1:numel(q_new)
+                                        csvrows(end+1,:) = { sprintf('%s{%d}', fn{v}, c), ...
+                                            char(gname(g)), char(rl(min(r,numel(rl)))), ...
+                                            pfam(r), info.q_BH(r), q_old(r), q_new(r), ...
+                                            pi0_old, pi0_new };            %#ok<AGROW>
+                                    end
+                            end
                     end
 
                 end % for each family within this table
@@ -339,10 +370,38 @@ for d = 1:numel(modeldirs)
 
             if dowrite && changed_any
                 [~, base, ext] = fileparts(files(f).name);
-                newpath = fullfile(files(f).folder, [base '_storeyfix' ext]);
+                    if inplace
+                        newpath = fpath;
+                            if islink_(fpath)
+                                warning('LaBGAScore_stats_rederive_storey_q:annexLocked', ...
+                                    ['\n%s is a git-annex symlink and was NOT overwritten.\n' ...
+                                     'Writing through it would edit the shared annex object and corrupt\n' ...
+                                     'every model whose identical table points at the same content hash.\n' ...
+                                     'Run:  git annex unlock %s\nthen re-run with ''output'',''inplace''.'], ...
+                                     files(f).name, files(f).name);
+                                continue
+                            end
+                    else
+                        newpath = fullfile(files(f).folder, [base '_storeyfix' ext]);
+                    end
                 save(newpath, '-struct', 'Sout', '-v7.3');
                     if verbose
-                        fprintf('    -> wrote %s\n', [base '_storeyfix' ext]);
+                        [~, wrote, we] = fileparts(newpath);
+                        fprintf('    -> wrote %s\n', [wrote we]);
+                    end
+
+                % Flat .csv of the corrected table, so a q-value can be checked
+                % without MATLAB. One row per test, carrying p and q_BH beside
+                % the corrected q - q_BH is the reference that decides whether a
+                % result is supported at all (see *READ n_sig_BH* above).
+                    if docsv && ~isempty(csvrows)
+                        csvpath = fullfile(files(f).folder, [base '.csv']);
+                        writetable(cell2table(csvrows, 'VariableNames', ...
+                            {'container','family','label','p','q_BH', ...
+                             'q_Storey_old','q_Storey_new','pi0_old','pi0_new'}), csvpath);
+                            if verbose
+                                fprintf('    -> wrote %s (%d tests)\n', [base '.csv'], size(csvrows,1));
+                            end
                     end
             end
     end
@@ -378,7 +437,9 @@ if verbose
     fprintf('  FAMILY CHECK FAILED (not written)  : %d\n', fprintfonly);
     if ~dowrite
         fprintf('\n  REPORT ONLY - nothing written. Re-run with ''write'', true to save\n');
-        fprintf('  corrected tables (as *_storeyfix.mat, originals untouched).\n');
+        fprintf('  corrected tables. Default ''output'',''sidecar'' writes *_storeyfix.mat and\n');
+        fprintf('  leaves the originals untouched; ''output'',''inplace'' overwrites them (annexed\n');
+        fprintf('  files must be git annex unlock''ed first). Add ''csv'',true for flat .csv too.\n');
     end
 end
 
@@ -392,4 +453,27 @@ if dowrite
     if verbose, fprintf('\n  report written to %s\n', tsv); end
 end
 
+end
+
+% -------------------------------------------------------------------------
+function tf = islink_(f)
+% Is f a symlink? MATLAB has no issymlink, and exist/dir both follow links, so
+% this asks the filesystem through java.nio, which does not. Used only to refuse
+% to write through a git-annex symlink - see the note beside 'inplace' above.
+tf = false;
+try
+    pth = java.nio.file.Paths.get(f, javaArray('java.lang.String',0));
+    tf  = java.nio.file.Files.isSymbolicLink(pth);
+catch
+    % no JVM: fall back to comparing the resolved path with the given one. If
+    % that fails too, tf keeps its initial false - which is the UNSAFE answer
+    % here, so say so loudly rather than silently overwrite an annex object.
+    try
+        tf = ~strcmp(char(java.io.File(f).getCanonicalPath()), f);
+    catch
+        warning('LaBGAScore_stats_rederive_storey_q:cannotTestSymlink', ...
+            ['\ncould not determine whether %s is a symlink, so the annex guard ' ...
+             'is blind here.\nCheck with ''ls -l'' before trusting an inplace write.'], f);
+    end
+end
 end
