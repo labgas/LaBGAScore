@@ -150,6 +150,65 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 % check still fires on SAS example 2 and proj_cfs m2b - correctly, since those
 % two are independently unidentifiable (an empty upper tail in both cases).
 %
+% *THE NEW DEFAULT DOES NOT RETIRE THE BENCHMARK CHECK - IT MAKES IT QUIETER*
+%
+% Read this before concluding that 'decreaseslope' means you can stop looking.
+% It fixes the DEGENERATE failures - pi0 at or near 0, asserting that essentially
+% nothing is null - and it fixes them thoroughly. It does NOT guarantee that pi0
+% is well estimated, and at these sample sizes it often is not.
+%
+% The two things come apart, which is the trap. Measured three ways: the five SAS
+% example datasets, the 73 p-value families of the eight final second-level
+% models, and 1500 random panels (m uniform on 5..20, a random number of true
+% effects drawn Beta(0.2,8), the rest Uniform(0,1)):
+%
+%                          pi0 BELOW benchmark     trips unreliablePi0
+%                                                  (pi0 < benchmark/3)
+%   five SAS examples            3 of 5                  0 of 5
+%   73 real families            23  (32%%)                0  (0%%)
+%   1500 random panels              41.7%%                   0.6%%
+%   ... same panels, 'sas'          85.3%%                  51.6%%
+%
+% So the automatic warning went from firing on half of all panels to almost
+% never - because it is calibrated at a third of the benchmark, which is where
+% the spline used to live and 'decreaseslope' does not. Meanwhile pi0 still sits
+% BELOW the benchmark in roughly a third to a half of cases. Those are mildly
+% anti-conservative estimates: not absurd, not flagged, and still worth a look.
+%
+% CONSEQUENCE: silence from this function is no longer evidence that pi0 is
+% sound. Compare pi0 * n against info.pi0_benchmark * n yourself - both are
+% returned for exactly this reason - and treat a value materially below it as a
+% reason to report q_BH alongside, or instead.
+%
+% On the five SAS examples the residual shortfalls are: CytokinesT1 2.00 against
+% a benchmark of 2.1 (negligible), VTROI 11.00 against 12.6 (mild), and
+% CytokinesT2 3.00 against 6.3 - which is half, and is the one case of the five
+% where the q-values should not be reported on their own.
+%
+% *AND IT IS STILL WORTH COMPARING ESTIMATORS*
+%
+% One estimator is one opinion. The cheapest sanity check beyond the benchmark is
+% to ask a second one and see whether they agree, which costs a single extra
+% call. On the five SAS examples, m0 by method:
+%
+%   dataset        m   benchmark   'decreaseslope'   'lsl'   'sas' (spline)
+%   CytokinesT1    7      2.1           2.00         6.00        1.24
+%   CytokinesT2    7      6.3           3.00         5.00        0.18
+%   VTROI         14     12.6          11.00        13.00        7.50
+%   K1ROI         14      1.1          14.00        14.00        0.00
+%   SCFAs          4      4.0           4.00         4.00        1.06
+%
+% (SCFAs: the raw #{p>0.05}/0.95 is 4.21, but pi0_benchmark is clamped at 1, so
+% info.pi0_benchmark * n reads 4.0. Other docs quote the unclamped 4.2 - same
+% arithmetic, and the clamp only ever bites when every p-value exceeds 0.05.)
+%
+% 'lsl' (LOWESTSLOPE, = SAS's ADAPTIVEFDR default) is the more conservative of
+% the two slope estimators on every dataset here, and lands ABOVE the benchmark
+% where 'decreaseslope' lands below it. Where they disagree materially - as on
+% CytokinesT1, 2 against 6 - the honest report says which was used and why, or
+% falls back to BH. Where they agree, you have a much stronger basis for the
+% q-values than either number alone.
+%
 % *RELATION TO SAS PROC MULTTEST*
 %
 % The old header claimed this implemented Storey "as in SAS proc multtest". It

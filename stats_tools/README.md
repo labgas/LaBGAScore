@@ -179,6 +179,59 @@ for an unordered factor should go through this function.
 Accepts numeric, logical, char, cellstr, string or categorical; returns double
 indicator columns plus the level names and the input as a categorical.
 
+### The new default does not retire the benchmark check — it makes it quieter
+
+**Read this before concluding that the changed default means you can stop
+looking.** `'decreaseslope'` fixes the *degenerate* failures — π₀ at or near 0,
+asserting that essentially nothing is null — and fixes them thoroughly. It does
+**not** guarantee π₀ is well estimated, and at these sample sizes it often is not.
+
+The two come apart, which is the trap. Measured over the five SAS example sets,
+the 73 p-value families of the eight final second-level models, and 1500 random
+panels (m uniform on 5–20, a random number of true effects ~ Beta(0.2, 8)):
+
+| | π₀ **below** benchmark | trips `unreliablePi0` (π₀ < benchmark/3) |
+|---|---|---|
+| five SAS examples | **3 of 5** | 0 of 5 |
+| 73 real families | **23 (32%)** | 0 (0%) |
+| 1500 random panels | **41.7%** | 0.6% |
+| …the same panels under `'sas'` | 85.3% | 51.6% |
+
+So the automatic warning went from firing on half of all panels to almost never
+— it is calibrated at a *third* of the benchmark, which is where the spline used
+to live and `'decreaseslope'` does not. Meanwhile π₀ still sits below the
+benchmark in roughly a third to a half of cases. Those are mildly
+anti-conservative estimates: not absurd, not flagged, and still worth a look.
+
+> **Silence from the function is no longer evidence that π₀ is sound.** Compare
+> `pi0 * n` against `info.pi0_benchmark * n` yourself — both are returned for
+> exactly this purpose — and treat a value materially below it as a reason to
+> report `q_BH` alongside, or instead of, the Storey q.
+
+On the five SAS examples the residual shortfalls are CytokinesT1 at 2.00 against
+2.1 (negligible), VTROI at 11.00 against 12.6 (mild), and **CytokinesT2 at 3.00
+against 6.3 — half the benchmark, and the one case of the five whose q-values
+should not be reported on their own.**
+
+### And it is still worth comparing estimators
+
+One estimator is one opinion, and a second costs one extra call. m₀ on the five
+examples:
+
+| dataset | m | benchmark | `'decreaseslope'` | `'lsl'` | `'sas'` (spline) |
+|---|---|---|---|---|---|
+| CytokinesT1 | 7 | 2.1 | **2.00** | 6.00 | 1.24 |
+| CytokinesT2 | 7 | 6.3 | **3.00** | 5.00 | 0.18 |
+| VTROI | 14 | 12.6 | **11.00** | 13.00 | 7.50 |
+| K1ROI | 14 | 1.1 | **14.00** | 14.00 | 0.00 |
+| SCFAs | 4 | 4.2 | **4.00** | 4.00 | 1.06 |
+
+`'lsl'` (LOWESTSLOPE, = SAS's `ADAPTIVEFDR` default) is the more conservative of
+the two slope estimators on every dataset here, and lands *above* the benchmark
+where `'decreaseslope'` lands below it. Where they disagree materially — CytokinesT1,
+2 against 6 — say which you used and why, or fall back to BH. Where they agree,
+the q-values rest on much more than one number.
+
 ## `sas_code/proc_multtest_fdr.sas` — and the one check to do every time
 
 A worked example running five real p-value sets through

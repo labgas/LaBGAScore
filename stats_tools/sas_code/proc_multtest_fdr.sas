@@ -57,6 +57,51 @@
   check your own output.)
 
   ---------------------------------------------------------------------------
+  M0=DECREASESLOPE DOES NOT RETIRE THE CHECK BELOW - IT MAKES IT QUIETER
+  ---------------------------------------------------------------------------
+
+  Setting the better estimator is not the same as not having to look. DECREASESLOPE
+  fixes the DEGENERATE failures - m0 at or near 0, asserting that essentially
+  nothing is null - thoroughly. It does NOT guarantee m0 is well estimated, and at
+  these sample sizes it often is not.
+
+  On the five datasets below, DECREASESLOPE's m0 still falls BELOW the #{p>0.05}
+  benchmark on THREE of the five (CytokinesT1 2.00 vs 2.1, VTROI 11.00 vs 12.6,
+  CytokinesT2 3.00 vs 6.3) - even though none of them is absurd any more. Measured
+  more broadly with the MATLAB implementation: m0 below benchmark in 32%% of the 73
+  p-value families of the lab's eight final second-level models, and in 41.7%% of
+  random panels - against 85.3%% for the spline. The catastrophic cases are gone;
+  the mildly anti-conservative ones are not.
+
+  So run the check below on every PFDR or AFDR output, whatever M0= says.
+
+  ---------------------------------------------------------------------------
+  AND COMPARE ESTIMATORS - IT COSTS ONE EXTRA PROC STEP
+  ---------------------------------------------------------------------------
+
+  One estimator is one opinion. Add a second run with a different NTRUENULL= and
+  see whether they agree:
+
+      proc multtest inpvalues=<data> pfdr m0=lowestslope;   run;
+
+  m0 on the five datasets below, by method:
+
+      dataset        m   benchmark   DECREASESLOPE   LOWESTSLOPE   SPLINE
+      CytokinesT1    7      2.1          2.00           6.00        1.24
+      CytokinesT2    7      6.3          3.00           5.00        0.18
+      VTROI         14     12.6         11.00          13.00        7.50
+      K1ROI         14      1.1         14.00          14.00        0.00
+      SCFAs          4      4.2          4.00           4.00        1.06
+
+  LOWESTSLOPE is the more conservative of the two slope estimators on every one
+  of these, and lands ABOVE the benchmark where DECREASESLOPE lands below it.
+  Where the two disagree materially - CytokinesT1, 2 against 6 - report which you
+  used and why, or fall back to plain FDR. Where they agree, the q-values rest on
+  more than a single number. (Remember that specifying M0= applies it to PFDR and
+  AFDR BOTH, so a second opinion needs a second PROC step, not a second
+  adjustment in the same one.)
+
+  ---------------------------------------------------------------------------
   THE ONE CHECK YOU MUST DO: IS THE ESTIMATED NUMBER OF TRUE NULLS SANE?
   ---------------------------------------------------------------------------
 
@@ -203,7 +248,7 @@
   -------------------------------------------------------------------------
   by: Lukas Van Oudenhove  |  KU Leuven, October 2026
   -------------------------------------------------------------------------
-  proc_multtest_fdr.sas   v1.2   last modified: 2026/10/01
+  proc_multtest_fdr.sas   v1.3   last modified: 2026/10/01
 *****************************************************************************/
 
 /* m=7, 2 p-values > 0.05. benchmark m0 ~ 2.1; DECREASESLOPE m0 = 2.00, exactly on the
