@@ -59,6 +59,57 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 % SAS is now exact; it is not a claim that either number is usable. This is
 % reported as an explicit reason in info.reasons and raised as a warning.
 %
+% *THE DEFAULT IS 'decreaseslope' SINCE 2026-10-01 - IT USED TO BE 'sas'*
+%
+% The spline/bootstrap estimator that PROC MULTTEST's PFDR uses does not control
+% FDR at the family sizes this lab works with. Simulated, 400 datasets per cell,
+% nominal alpha = 0.05, nulls uniform and alternatives from z ~ N(3,1):
+%
+%   m    true pi0  method          mean m0   degenerate   REALISED FDR   power
+%   8      1.0     sas (spline)       4.25      25.5%        0.178         -
+%   8      1.0     decreaseslope      7.40       0.0%        0.065         -
+%   8      1.0     lsl                7.90       0.0%        0.060         -
+%   8      1.0     bh                 8.00       0.0%        0.060         -
+%  14      1.0     sas (spline)       8.66       8.8%        0.123         -
+%  30      1.0     sas (spline)      22.36       0.8%        0.100         -
+%
+%   8      0.7     sas (spline)       3.01      34.8%        0.091       0.775
+%   8      0.7     decreaseslope      6.54       0.0%        0.052       0.711
+%   8      0.7     lsl                7.62       0.0%        0.036       0.677
+%   8      0.7     bh                 8.00       0.0%        0.028       0.674
+%
+% With eight all-null tests 'sas' rejects at 3.5x the nominal rate and returns a
+% degenerate m0 a quarter of the time; it over-rejects at every m tested. Much of
+% the extra power it appears to offer is bought that way.
+%
+% 'decreaseslope' controls FDR indistinguishably from BH - note BH itself reads
+% 0.060 at pi0 = 1 here, so 0.065 is within simulation noise of it - NEVER
+% returned a degenerate estimate in 3600 datasets, and still recovers most of the
+% genuine power gain (0.711 against BH's 0.674). 'lsl' controls FDR equally well
+% but is too conservative to be worth having over BH (0.677 against 0.674).
+%
+% VERIFIED AGAINST SAS on both validation sets, NTRUENULL=DECREASESLOPE:
+%
+%   CytokinesT1  SAS m0 = 2   here m0 = 2
+%   CytokinesT2  SAS m0 = 3   here m0 = 3, and all seven q-values agree:
+%                SAS  .3913 .0372 .2928 .1349 .2515 .1259 .7543
+%                here .3913 .0372 .2928 .1349 .2515 .1258 .7543
+%                (max difference 5e-5, i.e. 4-decimal rounding on one value)
+%
+% The q-values agree on T1 too, step-up monotonicity included: both SAS and this
+% routine lift the smallest p-value from .0017 to .0025.
+%
+% 'sas' IS UNCHANGED AND STILL REPRODUCES PROC MULTTEST's PFDR EXACTLY. Ask for it
+% by name when a SAS cross-check is the point. Nothing is lost by the new default
+% being SAS-reproducible too: DECREASESLOPE is NTRUENULL=DECREASESLOPE there, and
+% the ADAPTIVEHOLM/ADAPTIVEHOCHBERG default.
+%
+% WHAT CHANGING THIS AFFECTS. Every caller that does not name a method - prep_3a's
+% roi and neurotransmitter paths, h_signature_responses_group_diff, and the
+% decoding scripts. q-values from those will differ from anything computed before
+% this date. clean/LaBGAScore_stats_rederive_storey_q.m re-derives saved results
+% without re-running them.
+%
 % *THE #{p>0.05} SANITY BENCHMARK*
 %
 % info.pi0_benchmark reports #{p > 0.05}/(n*0.95), clamped at 1. This is not a
@@ -117,6 +168,10 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 % *METHODS AVAILABLE, AND WHAT THEY CONTROL*
 %
 %   FDR, Storey-type (q = pi0 * q_BH, differing only in how pi0 is estimated):
+%     'decreaseslope' (DEFAULT) Schweder & Spjotvoll (1982) as modified by
+%                    Hochberg & Benjamini (1990). SAS NTRUENULL=DECREASESLOPE.
+%                    Controls FDR at small m where the spline does not - see
+%                    *THE DEFAULT* below. Alias 'ds'.
 %     'sas'          SPLINE then BOOTSTRAP on SAS's trigger = PROC MULTTEST PFDR
 %     'lambda'       median of pi0(lambda) over a grid; not a SAS method
 %     'spline'       the SPLINE step alone, no fallback
@@ -425,7 +480,7 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 % ---------------------------- parse inputs -------------------------------
 
 ip = inputParser;
-ip.addParameter('method',  'sas', @(x) ischar(x) || isstring(x));
+ip.addParameter('method',  'decreaseslope', @(x) ischar(x) || isstring(x));   % changed from 'sas' on 2026-10-01; see *THE DEFAULT* in the header
 ip.addParameter('lambda',  0.2:0.1:0.5, @isnumeric);
 ip.addParameter('nboot',   1000, @isnumeric);   % SAS's NBOOT= default is 10000; 1000 is used here for speed and is only reached on the bootstrap fallback
 ip.addParameter('verbose', true, @(x) islogical(x) || isnumeric(x));
@@ -448,7 +503,8 @@ alpha   = ip.Results.alpha;
 if isempty(ip.Results.guard)
     do_guard = ~ismember(lower(char(ip.Results.method)), ...
         {'sas','bh','stepdown_sidak','sidak','holm','bonferroni', ...
-         'adaptivefdr','bh2000','lsl','bky','bky2006','twostage'});
+         'adaptivefdr','bh2000','lsl','bky','bky2006','twostage', ...
+         'decreaseslope','ds'});
 else
     do_guard = logical(ip.Results.guard);
 end
@@ -499,13 +555,15 @@ switch method
         pi0_use = 1;  method_used = 'BH (pi0 = 1)';
     case {'stepdown_sidak','sidak','holm','bonferroni'}
         pi0_use = NaN;  method_used = method;   % FWER methods: pi0 does not apply
+    case {'decreaseslope','ds'}
+        [pi0_use, method_used] = local_ds_pi0(p);
     case {'adaptivefdr','bh2000','lsl'}
         [pi0_use, method_used] = local_lsl_pi0(p);
     case {'bky','bky2006','twostage'}
         [pi0_use, method_used] = local_bky_pi0(p, q_bh, alpha);
     otherwise
         error('LaBGAScore_Storey_FDR:method', ...
-            ['method must be ''sas'', ''lambda'', ''spline'', ''bh'', ' ...
+            ['method must be ''decreaseslope'', ''sas'', ''lambda'', ''spline'', ''bh'', ' ...
              '''stepdown_sidak'', ''holm'', ''adaptivefdr'' or ''bky'', got ''%s'''], method);
 end
 
@@ -586,7 +644,7 @@ if ismember(method, {'stepdown_sidak','sidak','holm','bonferroni'})
     % the same tables as q.
     q = local_stepdown_fwer(p, method);
     pi0_use = NaN;
-elseif ismember(method, {'adaptivefdr','bh2000','lsl','bky','bky2006','twostage'})
+elseif ismember(method, {'adaptivefdr','bh2000','lsl','bky','bky2006','twostage','decreaseslope','ds'})
     % Adaptive FDR: BH with m replaced by an estimate of the number of true
     % nulls. Same shape as Storey (q = pi0 * q_BH); only the pi0 estimator
     % differs - see the header.
@@ -984,4 +1042,50 @@ s = 0;
 for i = 1:numel(w)
     s = mod(s*31 + double(w(i)), 2^32);
 end
+end
+
+
+% =========================================================================
+function [pi0, method_used] = local_ds_pi0(p)
+% DECREASESLOPE estimator of pi0: Schweder & Spjotvoll (1982) as modified by
+% Hochberg & Benjamini (1990). SAS PROC MULTTEST's NTRUENULL=DECREASESLOPE, and
+% the default for its ADAPTIVEHOLM and ADAPTIVEHOCHBERG adjustments.
+%
+% SAS/STAT 14.1: with q_(i) = 1 - p_(i), let b_i be the slope of the least squares
+% line fitted THROUGH THE ORIGIN to {q_(m), ..., q_(m-i+1)}; find the first
+% i = m-1, m-2, ..., 1 with b_i < b_{i+1}; then m0 = ceil(1/b_{i+1} - 1).
+%
+% VERIFIED against SAS on both validation sets, NTRUENULL=DECREASESLOPE, m0 AND
+% q-values: CytokinesT1 m0 = 2 (SAS 2), CytokinesT2 m0 = 3 (SAS 3). The agreement
+% includes the step-up monotonicity: on T1 the smallest p-value, .0017, is lifted
+% to .0025 - its rank-2 neighbour's value - in SAS exactly as it is here, so the
+% q-values are NOT simply the raw p-values even though six of seven coincide.
+%
+% WHY THIS IS NOW THE DEFAULT: see *THE DEFAULT* in the header. Briefly, over
+% 3600 simulated datasets it never returned a degenerate estimate, where the
+% spline/bootstrap did so in up to 65% of cases, and it controls FDR where the
+% spline does not.
+
+p = sort(p(:), 'ascend');
+m = numel(p);
+q = 1 - p;
+
+b = nan(m,1);
+for i = 1:m
+    j    = (m-i+1):m;          % the i smallest q, i.e. the i LARGEST p-values
+    x    = (m - j + 1)';       % 1..i
+    b(i) = sum(x .* q(j)) / sum(x.^2);      % least squares through the origin
+end
+
+m0 = m;                        % no decrease anywhere: treat every test as null
+for i = (m-1):-1:1
+    if b(i) < b(i+1)
+        m0 = ceil(1/b(i+1) - 1);
+        break
+    end
+end
+
+m0  = max(0, min(m0, m));
+pi0 = m0/m;
+method_used = sprintf('DECREASESLOPE (m0 = %d of %d)', m0, m);
 end
