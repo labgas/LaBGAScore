@@ -175,7 +175,7 @@ proc multtest inpvalues=<data> fdr pfdr afdr plots=all;
 
 which puts three corrections side by side — **FDR** (Benjamini–Hochberg, assumes
 π₀ = 1), **PFDR** (Storey, scales BH by an *estimated* number of true nulls m₀),
-**AFDR** (adaptive, estimates m₀ by LOWESTSLOPE, built for small m) — plus the
+**AFDR** (adaptive, estimates m₀ by LOWESTSLOPE (Benjamini & Hochberg 2000), built for small m) — plus the
 diagnostic plots, including the fitted m₀.
 
 **Everything turns on m₀, because q = (m₀/m) · q_BH.** Halve m₀ and every q
@@ -191,14 +191,40 @@ handful of tests.
 
 ### When the check fails
 
-1. **Try another m₀ estimator for PFDR.** SAS's PFDR default is SPLINE falling
-   back to BOOTSTRAP; DECREASESLOPE and LOWESTSLOPE are steadier at small m. Set
-   it with `NTRUENULL=` — **confirm the syntax against the SAS documentation for
-   your version**, since nothing in these folders has been executed in SAS.
-2. **Or report AFDR**, but only if *its* m₀ passes the same check. It behaves far
-   better at small m, and in all five examples it passes whenever PFDR fails.
-3. **Or report plain FDR.** Always defensible, and the honest answer when m₀ is
+Syntax below is verified against the
+[SAS/STAT 14.1 MULTTEST documentation](https://support.sas.com/documentation/onlinedoc/stat/141/multtest.pdf).
+
+1. **Try another m₀ estimator.** The option is `NTRUENULL=`, with **`M0=` as a
+   documented alias**; `PTRUENULL=` takes a *proportion* instead of a count, and
+   either accepts a plain number in place of a keyword. Keywords: `SPLINE`,
+   `BOOTSTRAP`, `LOWESTSLOPE`, `DECREASESLOPE`, `LEASTSQUARES`, `KSTEST`,
+   `MEANDIFF`. The defaults differ **by adjustment**, which is worth knowing
+   before concluding two adjustments disagree about the data:
+
+   | adjustment | default m₀ estimator |
+   |---|---|
+   | `PFDR` | `SPLINE`, falling back to `BOOTSTRAP` if the estimate is nonpositive or the spline's slope at the last λ exceeds 0.1 × the range of fitted values |
+   | `ADAPTIVEFDR` (alias `AFDR`) | `LOWESTSLOPE` |
+   | `ADAPTIVEHOLM`, `ADAPTIVEHOCHBERG` | `DECREASESLOPE` |
+
+   `LOWESTSLOPE` and `DECREASESLOPE` are the ones to reach for at small m: they
+   read m₀ off the slope of the ordered p-values and need no well-populated upper
+   tail — exactly what `SPLINE` and `BOOTSTRAP` lack when only a handful of
+   p-values exceed 0.05.
+2. **Or report `ADAPTIVEFDR`**, but only if *its* m₀ passes the same check. It
+   defaults to `LOWESTSLOPE` for this reason, and in all five examples it passes
+   whenever PFDR fails.
+3. **Or report plain `FDR`.** Always defensible, and the honest answer when m₀ is
    not estimable — which it is not when only a handful of p-values exceed 0.05.
+
+### Reading the diagnostic plots
+
+`PLOTS=ALL` includes the two that matter:
+
+| plot | what it is |
+|---|---|
+| **LambdaPlot** | *"MSE or NTRUENULL by lambda"* — produced for `PFDR`, or `NTRUENULL=SPLINE`/`BOOTSTRAP`. **This is the λ curve the estimate is read off**, so look at its right-hand end, where m₀ is taken: flat and settled means identifiable; erratic, rising, or implying a proportion above 1 means it is not, and no choice of λ rescues it |
+| **RawUniformPlot** | raw p-values by rank plus their histogram. Near-uniform under a mostly-null family. Almost nothing above 0.05 (see K1ROI) says a small m₀ is plausible; flat across [0,1] says m₀ should be near m |
 
 Do **not** set m₀ by hand without external grounds for the number: m₀ = m is
 exactly BH, and anything lower buys significance by assumption rather than from

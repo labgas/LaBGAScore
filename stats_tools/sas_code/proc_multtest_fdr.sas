@@ -48,24 +48,73 @@
   WHAT TO DO WHEN THE CHECK FAILS
   ---------------------------------------------------------------------------
 
-  1. Try a different m0 estimator for PFDR. SAS's PFDR default is the SPLINE
-     method, falling back to BOOTSTRAP; DECREASESLOPE and LOWESTSLOPE are the
-     alternatives, and are steadier when the number of tests is small. Set it
-     with the NTRUENULL= option on the PROC MULTTEST statement. CHECK THE
-     SYNTAX against the SAS documentation for your installed version: nothing in
-     this folder has been executed in SAS (see sas_macros/README.md).
+  Syntax below verified against the SAS/STAT 14.1 MULTTEST documentation
+  (support.sas.com/documentation/onlinedoc/stat/141/multtest.pdf).
 
-  2. Or report AFDR instead - but only if ITS m0 passes the same check. AFDR's
-     estimator behaves far better at small m, and in the five examples below it
-     passes every time PFDR fails.
+  1. Try a different m0 estimator. The option is NTRUENULL=, with M0= as a
+     documented alias; PTRUENULL= takes a PROPORTION instead of a count, and
+     either accepts a positive integer (resp. a proportion) in place of a
+     keyword. The keywords are:
+
+         SPLINE          Storey & Tibshirani (2003) cubic spline. pi0_hat(lambda)
+                         = #{p>lambda}/(m(1-lambda)) on lambda in {0,1/n,...,
+                         (n-1)/n}, fitted with a natural cubic spline of 3 df
+                         (DF= to change), read off at the LAST lambda.
+         BOOTSTRAP       Storey & Tibshirani (2003) bootstrap. Picks the lambda
+                         minimising MSE. NBOOT=10000 and NLAMBDA=20 by default.
+         LOWESTSLOPE     Benjamini & Hochberg (2000).
+         DECREASESLOPE   Schweder & Spjotvoll (1982) as modified by Hochberg &
+                         Benjamini (1990).
+         LEASTSQUARES    least-squares search for the cutpoint.
+         KSTEST          Kolmogorov-Smirnov uniformity test, Turkheimer et al.
+                         (2001).
+         MEANDIFF        mean of differences, Hsueh, Chen & Kodell (2003).
+
+     The defaults differ by adjustment, which is worth knowing before you
+     conclude that two adjustments disagree about the data:
+
+         PFDR            SPLINE first; if the estimate is nonpositive, or if the
+                         slope of the spline at the last lambda exceeds 0.1 times
+                         the range of the fitted spline values, BOOTSTRAP instead
+         ADAPTIVEFDR     LOWESTSLOPE
+         ADAPTIVEHOLM    DECREASESLOPE
+         ADAPTIVEHOCHBERG  DECREASESLOPE
+
+     LOWESTSLOPE and DECREASESLOPE are the ones to reach for at small m: they
+     read m0 off the slope of the ordered p-values and need no well-populated
+     upper tail, which is exactly what SPLINE and BOOTSTRAP lack when only a
+     handful of p-values exceed 0.05.
+
+  2. Or report ADAPTIVEFDR (alias AFDR) instead - but only if ITS m0 passes the
+     same check. It defaults to LOWESTSLOPE for that reason, and in the five
+     examples below it passes every time PFDR fails.
 
   3. Or report plain FDR (Benjamini-Hochberg). Always defensible, and the honest
      answer when m0 simply is not estimable - which it is not when only a handful
      of p-values sit above 0.05.
 
   Do NOT respond to a failed check by specifying m0 by hand unless you have
-  external grounds for the number. Specifying m0 = m is exactly BH; anything
-  lower buys significance by assumption rather than from the data.
+  external grounds for the number. Specifying m0 = m (or PTRUENULL=1) is exactly
+  BH; anything lower buys significance by assumption rather than from the data.
+
+  ---------------------------------------------------------------------------
+  READING THE DIAGNOSTIC PLOTS
+  ---------------------------------------------------------------------------
+
+  PLOTS=ALL includes the two that matter here:
+
+      LambdaPlot       "MSE or NTRUENULL by lambda". Produced for PFDR, or for
+                       NTRUENULL=SPLINE / BOOTSTRAP. This IS the lambda curve the
+                       estimate is read off, so look at its right-hand end, where
+                       m0 is taken. A curve that is flat and settled there is
+                       identifiable; one that is erratic, or rises, or implies a
+                       proportion above 1, is not - and then no choice of lambda
+                       rescues it.
+      RawUniformPlot   raw p-values by rank, plus their histogram. Under a mostly
+                       null family this is close to uniform. A histogram with
+                       almost nothing above 0.05 (see K1ROI below) tells you a
+                       small m0 is plausible; one that is flat across [0,1] tells
+                       you m0 should be near m.
 
   ---------------------------------------------------------------------------
   WHAT TO EXPECT FROM THE FIVE EXAMPLES BELOW

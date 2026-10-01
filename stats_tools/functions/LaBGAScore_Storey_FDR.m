@@ -124,9 +124,14 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 %
 %   FDR, adaptive (m replaced by an estimate of the number of true nulls):
 %     'adaptivefdr'  Benjamini & Hochberg (2000) adaptive linear step-up, m0 by
-%                    the lowest-slope estimator of Hochberg & Benjamini (1990)
-%                    after Schweder & Spjotvoll (1982). SAS ADAPTIVEFDR default
-%                    (LOWESTSLOPE).
+%                    their LOWEST-SLOPE estimator. This is SAS PROC MULTTEST's
+%                    ADAPTIVEFDR default (NTRUENULL=LOWESTSLOPE).
+%                    NOTE the attribution, which this header previously got
+%                    wrong: SAS credits LOWESTSLOPE to Benjamini & Hochberg
+%                    (2000), and credits Schweder & Spjotvoll (1982) as modified
+%                    by Hochberg & Benjamini (1990) to the DIFFERENT
+%                    DECREASESLOPE method, which is the ADAPTIVEHOLM and
+%                    ADAPTIVEHOCHBERG default and is not implemented here.
 %     'bky'          Benjamini, Krieger & Yekutieli (2006) two-stage linear
 %                    step-up: BH at alpha/(1+alpha), then BH with m0 = m - r1.
 %
@@ -422,7 +427,7 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 ip = inputParser;
 ip.addParameter('method',  'sas', @(x) ischar(x) || isstring(x));
 ip.addParameter('lambda',  0.2:0.1:0.5, @isnumeric);
-ip.addParameter('nboot',   1000, @isnumeric);
+ip.addParameter('nboot',   1000, @isnumeric);   % SAS's NBOOT= default is 10000; 1000 is used here for speed and is only reached on the bootstrap fallback
 ip.addParameter('verbose', true, @(x) islogical(x) || isnumeric(x));
 ip.addParameter('guard',   [], @(x) isempty(x) || islogical(x) || isnumeric(x));
 ip.addParameter('alpha',   0.05, @(x) isnumeric(x) && isscalar(x) && x > 0 && x < 1);
@@ -775,10 +780,15 @@ end
 % =========================================================================
 
 function [pi0, method_used] = local_lsl_pi0(p)
-% Lowest-slope estimator of pi0: Hochberg & Benjamini (1990), after Schweder &
-% Spjotvoll (1982). This is what SAS PROC MULTTEST's ADAPTIVEFDR uses by
-% default (LOWESTSLOPE), giving Benjamini & Hochberg's (2000) adaptive linear
-% step-up procedure.
+% Lowest-slope estimator of pi0: Benjamini & Hochberg (2000), which is what SAS
+% PROC MULTTEST's ADAPTIVEFDR uses by default (NTRUENULL=LOWESTSLOPE). The
+% Schweder & Spjotvoll (1982) / Hochberg & Benjamini (1990) lineage belongs to
+% SAS's DECREASESLOPE instead - a different estimator, not implemented here.
+%
+% SAS/STAT 14.1 states LOWESTSLOPE as: find the first i = 1..m such that
+% b_i = q_(i)/(m - i + 1) decreases, then m0 = floor(min(1/b_i + 1, m)), with
+% q_(i) = 1 - p_(i). The ceil(1/b_i) below is the same number whenever 1/b_i is
+% not an exact integer, which is the only case that differs.
 %
 % Slopes S_i = (1 - p_(i)) / (m + 1 - i) decrease while the ordered p-values
 % look null, and turn up once the small p-values are exhausted. m0 is read off
@@ -864,7 +874,14 @@ function [pi0, spl] = local_storey_spline_pi0(p, nlambda, target_df)
 %                is used for the lambda-median estimate and stops at 0.5.
 %   2. SMOOTHER  natural cubic SMOOTHING spline with target_df effective degrees
 %                of freedom (3), not an interpolating spline and not mafdr.
-%   3. EVALUATION at the LAST lambda, 0.95 - *not* at lambda = 1. Storey &
+%   3. EVALUATION at the LAST lambda, 0.95 - *not* at lambda = 1.
+%      CONFIRMED IN THE SAS DOCUMENTATION, not merely inferred from the two
+%      validation sets. SAS/STAT 14.1, NTRUENULL=SPLINE: "For each lambda in
+%      {0, 1/n, 2/n, ..., (n-1)/n} compute pi0_hat(lambda) = #{p_i > lambda} /
+%      (m(1-lambda)). Let f(lambda) be the natural cubic spline with 3 degrees
+%      of freedom of pi0_hat(lambda) versus lambda. Estimate pi0 by taking the
+%      spline value at the last lambda." Every element of this routine - grid,
+%      statistic, 3 df, and the evaluation point - is that sentence. Storey &
 %                Tibshirani's paper writes pi0 = s(1); the qvalue package and
 %                SAS both take the fitted value at max(lambda). Evaluating at 1
 %                extrapolates linearly off the end of a natural spline and gives
