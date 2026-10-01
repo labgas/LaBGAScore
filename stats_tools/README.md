@@ -45,7 +45,17 @@ run cannot reveal it. The old 0.99 guard only ever caught the *conservative*
 direction (π₀ → 1, where Storey harmlessly degenerates to BH); the damaging
 direction is π₀ → 0.
 
-Four methods: `'sas'` (default), `'lambda'`, `'spline'`, `'bh'`.
+Methods: **`'decreaseslope'` (default since 2026-10-01)**, `'sas'`, `'lambda'`,
+`'spline'`, `'lsl'`, `'bky'`, `'bh'`.
+
+**Why `'decreaseslope'` and not `'sas'`.** `'sas'` reproduces PROC MULTTEST's
+PFDR exactly, failures included — and at the sample sizes this lab works at, the
+failures dominate. Measured on 400 simulated datasets per cell, m = 8, all nulls,
+nominal FDR 0.05: the SAS spline realises an FDR of **0.178** with a degenerate
+π₀ in 25.5% of runs, against **0.065** and 0.0% for DECREASESLOPE, which also
+beats plain BH on power (0.711 vs 0.674) where signal exists. `'sas'` is
+unchanged and still available — use it when reproducing a SAS run is the point.
+The lab's SAS example sets `M0=DECREASESLOPE` to match (see below).
 
 **The spline is implemented here, and validated against SAS (2026-10-01).** It
 used to delegate to `mafdr`, which is a *different* estimator — and that was the
@@ -117,13 +127,17 @@ hypotheses null) is not credible either: agreement with SAS is exact, which is
 not the same as either number being usable. At small n with a thin upper tail,
 BH is the defensible choice.
 
-> **The guard is OFF under the default method.** `'sas'` reproduces SAS PROC
+> **The guard is OFF under `'sas'`** (which was the default until 2026-10-01,
+> and is still the method to use for SAS cross-checks). It reproduces SAS PROC
 > MULTTEST's PFDR exactly — which is the point, since LaBGAS cross-checks
 > analyses against SAS — and that fidelity includes not rejecting a π₀ the
 > lambda curve does not support. Under `'sas'` the reliability flag in `info` is
-> **advisory: reported, never enforced**. Under the other three methods the
-> guard is on and a bad π₀ is rejected. So read the flag, or pick a non-default
-> method when SAS agreement is not what you need. Since 2026-10-01 an unreliable
+> **advisory: reported, never enforced**. The guard is a veto on *one* failure
+> mode — a λ-curve estimate extrapolating into an empty upper tail — so it is on
+> only for `'lambda'` and `'spline'`, which read that curve. It is **off under
+> the new default too**, not because `'decreaseslope'` is unpoliced but because
+> it never touches the λ curve and so cannot fail that way (0.0% degenerate
+> estimates in 400 simulations at m = 8, against 25.5% for the spline). Since 2026-10-01 an unreliable
 > π₀ that is returned anyway also raises
 > `LaBGAScore_Storey_FDR:unreliablePi0`, so it cannot pass into a results table
 > silently. The guard is still **not** enforced under `'sas'` — deliberately, so
@@ -170,13 +184,37 @@ indicator columns plus the level names and the input as a categorical.
 A worked example running five real p-value sets through
 
 ```sas
-proc multtest inpvalues=<data> fdr pfdr afdr plots=all;
+proc multtest inpvalues=<data> fdr pfdr afdr m0=decreaseslope plots=all;
 ```
 
 which puts three corrections side by side — **FDR** (Benjamini–Hochberg, assumes
 π₀ = 1), **PFDR** (Storey, scales BH by an *estimated* number of true nulls m₀),
-**AFDR** (adaptive, estimates m₀ by LOWESTSLOPE (Benjamini & Hochberg 2000), built for small m) — plus the
-diagnostic plots, including the fitted m₀.
+**AFDR** (adaptive, applies m₀ as a step-up procedure rather than Storey's scalar
+rescaling) — plus the diagnostic plots, including the fitted m₀.
+
+**`M0=DECREASESLOPE` is set deliberately and is the lab default.** Left to
+itself, `PFDR` estimates m₀ with `SPLINE`, falling back to `BOOTSTRAP` — both of
+which read m₀ off the *upper tail* of the p-value distribution, which at this
+lab's sample sizes is nearly empty, so both extrapolate into a region with no
+data and extrapolate *downward*. Measured on 400 simulated datasets per cell with
+`LaBGAScore_Storey_FDR`, at m = 8 and all nulls against a nominal FDR of 0.05:
+
+| m₀ estimator | realised FDR | degenerate m₀ |
+|---|---|---|
+| `SPLINE` (SAS default for PFDR) | **0.178** | 25.5% of runs |
+| `DECREASESLOPE` | 0.065 | 0.0% |
+
+The spline default does not control FDR at small m; `DECREASESLOPE` does, and
+still beats plain BH on power (0.711 vs 0.674) where there is signal. The same
+change is now the default in `LaBGAScore_Storey_FDR`, so SAS and MATLAB agree out
+of the box.
+
+Two consequences of specifying `M0=`: it overrides **all** the per-adjustment
+defaults, so `PFDR` and `AFDR` report the same m₀ (and usually the same
+q-values); and the **LambdaPlot below is not produced**, since there is no λ
+curve for `DECREASESLOPE`. To see *why* the spline fails on your data, run the
+block once without `M0=` and read the plot — then report the `M0=DECREASESLOPE`
+numbers. (That plot behaviour is from the SAS documentation, not measured here.)
 
 **Everything turns on m₀, because q = (m₀/m) · q_BH.** Halve m₀ and every q
 halves. So check it, using the benchmark described above:
@@ -194,8 +232,9 @@ handful of tests.
 Syntax below is verified against the
 [SAS/STAT 14.1 MULTTEST documentation](https://support.sas.com/documentation/onlinedoc/stat/141/multtest.pdf).
 
-1. **Try another m₀ estimator.** The option is `NTRUENULL=`, with **`M0=` as a
-   documented alias**; `PTRUENULL=` takes a *proportion* instead of a count, and
+1. **Try another m₀ estimator** — the example already does, via
+   `M0=DECREASESLOPE`. The option is `NTRUENULL=`, with **`M0=` as a documented
+   alias**; `PTRUENULL=` takes a *proportion* instead of a count, and
    either accepts a plain number in place of a keyword. Keywords: `SPLINE`,
    `BOOTSTRAP`, `LOWESTSLOPE`, `DECREASESLOPE`, `LEASTSQUARES`, `KSTEST`,
    `MEANDIFF`. The defaults differ **by adjustment**, which is worth knowing
@@ -210,10 +249,13 @@ Syntax below is verified against the
    `LOWESTSLOPE` and `DECREASESLOPE` are the ones to reach for at small m: they
    read m₀ off the slope of the ordered p-values and need no well-populated upper
    tail — exactly what `SPLINE` and `BOOTSTRAP` lack when only a handful of
-   p-values exceed 0.05.
-2. **Or report `ADAPTIVEFDR`**, but only if *its* m₀ passes the same check. It
-   defaults to `LOWESTSLOPE` for this reason, and in all five examples it passes
-   whenever PFDR fails.
+   p-values exceed 0.05. `DECREASESLOPE` is the lab default for that reason;
+   `LOWESTSLOPE` is the natural second thing to try, and is the more conservative
+   of the two on all five datasets below.
+2. **Or report `ADAPTIVEFDR`**, but only if *its* m₀ passes the same check. Note
+   that once `M0=` is specified both adjustments use the estimator you named, so
+   this is no longer a second opinion on m₀ — drop `M0=`, or name a different
+   estimator, to get one.
 3. **Or report plain `FDR`.** Always defensible, and the honest answer when m₀ is
    not estimable — which it is not when only a handful of p-values exceed 0.05.
 
@@ -223,7 +265,7 @@ Syntax below is verified against the
 
 | plot | what it is |
 |---|---|
-| **LambdaPlot** | *"MSE or NTRUENULL by lambda"* — produced for `PFDR`, or `NTRUENULL=SPLINE`/`BOOTSTRAP`. **This is the λ curve the estimate is read off**, so look at its right-hand end, where m₀ is taken: flat and settled means identifiable; erratic, rising, or implying a proportion above 1 means it is not, and no choice of λ rescues it |
+| **LambdaPlot** | *"MSE or NTRUENULL by lambda"* — produced for `PFDR`'s own default, or `NTRUENULL=SPLINE`/`BOOTSTRAP`, so **not** under the lab default; run once without `M0=` to see it. **This is the λ curve the estimate is read off**, so look at its right-hand end, where m₀ is taken: flat and settled means identifiable; erratic, rising, or implying a proportion above 1 means it is not, and no choice of λ rescues it |
 | **RawUniformPlot** | raw p-values by rank plus their histogram. Near-uniform under a mostly-null family. Almost nothing above 0.05 (see K1ROI) says a small m₀ is plausible; flat across [0,1] says m₀ should be near m |
 
 Do **not** set m₀ by hand without external grounds for the number: m₀ = m is
@@ -232,28 +274,45 @@ the data.
 
 ### What the five examples show
 
-Computed with `LaBGAScore_Storey_FDR`, which reproduces PROC MULTTEST's PFDR
-spline exactly (verified on the first two to five decimals):
+Computed with `LaBGAScore_Storey_FDR`, which reproduces PROC MULTTEST exactly —
+the spline on the first two to five decimals, and `DECREASESLOPE` on both of
+those against real SAS output (m₀ = 2 and m₀ = 3, q-values agreeing to 5e-5):
 
-| dataset | m | #p>.05 | benchmark m₀ | PFDR m₀ | AFDR m₀ | verdict |
+| dataset | m | #p>.05 | benchmark m₀ | **`DECREASESLOPE`** | `SPLINE` | `LOWESTSLOPE` |
 |---|---|---|---|---|---|---|
-| CytokinesT1 | 7 | 2 | 2.1 | 1.24 | 6.00 | both pass |
-| CytokinesT2 | 7 | 6 | 6.3 | **0.18** | 5.00 | PFDR fails → report AFDR |
-| VTROI | 14 | 12 | 12.6 | 7.50 | 13.00 | both pass |
-| K1ROI | 14 | 1 | 1.1 | **0.00** | 14.00 | PFDR m₀ = 0, impossible |
-| SCFAs | 4 | 4 | 4.2 | **1.06** | 4.00 | PFDR fails → report FDR |
+| CytokinesT1 | 7 | 2 | 2.1 | **2.00** | 1.24 | 6.00 |
+| CytokinesT2 | 7 | 6 | 6.3 | **3.00** | *0.18* | 5.00 |
+| VTROI | 14 | 12 | 12.6 | **11.00** | 7.50 | 13.00 |
+| K1ROI | 14 | 1 | 1.1 | **14.00** | *0.00* | 14.00 |
+| SCFAs | 4 | 4 | 4.2 | **4.00** | *1.06* | 4.00 |
 
-**CytokinesT2** is the clearest failure: six of seven p-values exceed 0.05, yet
-PFDR puts the number of true nulls at 0.18. AFDR's 5 is credible.
+Read the `DECREASESLOPE` column against the benchmark: it is at or near it on
+four of five, where the spline sits far below on three (italicised). That is the
+whole case for the changed default, on five real datasets.
 
-**SCFAs** shows the floor of the method — m = 4, all above 0.17, and PFDR claims
-1.06 nulls. Four tests cannot support estimating m₀; report FDR.
+**CytokinesT1** — both pass, but they still disagree. `DECREASESLOPE`'s m₀ = 2
+lands exactly on the benchmark, and the smallest p-value, 0.0017, still comes
+back as q = 0.0025: even a passing m₀ moves things. *(Confirmed against SAS.)*
+
+**CytokinesT2** is the clearest spline failure: six of seven p-values exceed 0.05,
+yet `SPLINE` puts the number of true nulls at 0.18. `DECREASESLOPE` says 3 —
+better, but still half the benchmark, so **this dataset does not fully pass even
+under the new default**. Treat its q-values as optimistic and consider reporting
+plain FDR alongside. *(Confirmed against SAS: q = 0.3913, 0.0372, 0.2928, 0.1349,
+0.2515, 0.1259, 0.7543.)*
+
+**SCFAs** shows the floor of the method — m = 4, all above 0.17, and `SPLINE`
+claims 1.06 nulls. `DECREASESLOPE` returns 4, i.e. it declines to find signal and
+reproduces plain FDR exactly. Four tests cannot support estimating m₀, and the
+right estimator says so rather than guessing.
 
 **K1ROI** is the instructive edge case. Thirteen of fourteen p-values are *below*
 0.05, so the benchmark is low (1.1) and a small m₀ is genuinely plausible — but
-PFDR returns exactly 0, which cannot be right, while AFDR's 14 is
-over-conservative given the data. When the two bracket the answer that widely,
-say which you used and why.
+`SPLINE` returns exactly 0, which cannot be right. `DECREASESLOPE` returns 14, so
+here the lab default is the *conservative* one and its q-values equal BH's. This
+is the one dataset of the five where the new default costs power rather than
+saving it, and the shape of data — nearly everything significant — where that
+trade is cheap.
 
 ## Dependencies
 

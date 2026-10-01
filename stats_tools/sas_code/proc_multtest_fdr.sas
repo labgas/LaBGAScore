@@ -4,7 +4,7 @@
   Multiple-comparison correction with PROC MULTTEST, as a worked example for the
   lab. Each block below feeds one set of raw p-values to
 
-      proc multtest inpvalues=<data> fdr pfdr afdr plots=all;
+      proc multtest inpvalues=<data> fdr pfdr afdr m0=decreaseslope plots=all;
 
   which requests three corrections side by side, plus the diagnostic graphics:
 
@@ -13,12 +13,48 @@
       PFDR   Storey's positive FDR. Scales BH by an ESTIMATED number of true
              nulls (m0). More powerful when that estimate is good, and
              anti-conservative when it is not.
-      AFDR   Adaptive FDR. Also estimates m0, but by a different route
-             (LOWESTSLOPE, after Schweder & Spjotvoll 1982), which is built for
-             small numbers of tests and does not need a well-populated upper
-             tail of the p-value distribution.
+      AFDR   Adaptive FDR. Also estimates m0, but applies it as a step-up
+             procedure on m0 rather than as Storey's scalar rescaling.
+      M0=DECREASESLOPE   the estimator used for m0. THIS IS THE LAB DEFAULT and
+             is set deliberately here - see the next section. It overrides the
+             per-adjustment defaults, so PFDR and AFDR both use it and their
+             m0 agrees; their q-values then usually coincide too.
       PLOTS=ALL  the diagnostic plots, including the one that matters here: the
              fitted estimate of the number of true nulls.
+
+  ---------------------------------------------------------------------------
+  WHY M0=DECREASESLOPE RATHER THAN THE SAS DEFAULT
+  ---------------------------------------------------------------------------
+
+  Left to itself, PFDR estimates m0 with SPLINE, falling back to BOOTSTRAP. Both
+  read m0 off the UPPER tail of the p-value distribution, and at the sample sizes
+  this lab works at that tail is nearly empty - so both extrapolate into a region
+  with no data, and extrapolate DOWNWARD, which is the direction that invents
+  significance.
+
+  Measured, not assumed. 400 simulated datasets per cell, LaBGAScore_Storey_FDR
+  (which reproduces PROC MULTTEST's spline exactly):
+
+      m = 8, all nulls, nominal FDR 0.05
+          SPLINE default   realised FDR 0.178   degenerate m0 in 25.5% of runs
+          DECREASESLOPE    realised FDR 0.065   degenerate m0 in  0.0% of runs
+
+  The spline default does not control FDR at small m. DECREASESLOPE does, and
+  still beats plain BH on power (0.711 against 0.674) where there is signal.
+  On all five datasets below it also passes the sanity check that follows, which
+  the spline fails on three of them.
+
+  So: specify M0=DECREASESLOPE. The same change has been made to the lab's MATLAB
+  implementation (LaBGAScore_Storey_FDR, default 'decreaseslope' since
+  2026-10-01), so SAS and MATLAB agree out of the box.
+
+  ONE COST, worth knowing: the LambdaPlot described below is the diagnostic for
+  the SPLINE/BOOTSTRAP lambda curve, and per the SAS documentation it is produced
+  for PFDR's own default or for NTRUENULL=SPLINE|BOOTSTRAP - there is no lambda
+  curve to draw for DECREASESLOPE. If you want to SEE why the spline fails on
+  your data, run the same block once without M0= and look at the plot; report the
+  M0=DECREASESLOPE numbers. (Stated from the documentation, not measured here -
+  check your own output.)
 
   ---------------------------------------------------------------------------
   THE ONE CHECK YOU MUST DO: IS THE ESTIMATED NUMBER OF TRUE NULLS SANE?
@@ -51,8 +87,8 @@
   Syntax below verified against the SAS/STAT 14.1 MULTTEST documentation
   (support.sas.com/documentation/onlinedoc/stat/141/multtest.pdf).
 
-  1. Try a different m0 estimator. The option is NTRUENULL=, with M0= as a
-     documented alias; PTRUENULL= takes a PROPORTION instead of a count, and
+  1. Try a different m0 estimator - the blocks below already do this, via
+     M0=DECREASESLOPE. The option is NTRUENULL=, with M0= as a documented alias; PTRUENULL= takes a PROPORTION instead of a count, and
      either accepts a positive integer (resp. a proportion) in place of a
      keyword. The keywords are:
 
@@ -71,7 +107,9 @@
          MEANDIFF        mean of differences, Hsueh, Chen & Kodell (2003).
 
      The defaults differ by adjustment, which is worth knowing before you
-     conclude that two adjustments disagree about the data:
+     conclude that two adjustments disagree about the data - and worth knowing
+     because specifying M0= (as these blocks do) replaces ALL of them at once,
+     which is why PFDR and AFDR below report the same m0:
 
          PFDR            SPLINE first; if the estimate is nonpositive, or if the
                          slope of the spline at the last lambda exceeds 0.1 times
@@ -83,11 +121,14 @@
      LOWESTSLOPE and DECREASESLOPE are the ones to reach for at small m: they
      read m0 off the slope of the ordered p-values and need no well-populated
      upper tail, which is exactly what SPLINE and BOOTSTRAP lack when only a
-     handful of p-values exceed 0.05.
+     handful of p-values exceed 0.05. DECREASESLOPE is the lab default for that
+     reason; LOWESTSLOPE is the natural second thing to try, and is the more
+     conservative of the two on every dataset below.
 
   2. Or report ADAPTIVEFDR (alias AFDR) instead - but only if ITS m0 passes the
-     same check. It defaults to LOWESTSLOPE for that reason, and in the five
-     examples below it passes every time PFDR fails.
+     same check. Note that once you specify M0=, both adjustments use the
+     estimator you named, so this is no longer a way to get a SECOND opinion on
+     m0; drop the M0= option, or name a different estimator, to get one.
 
   3. Or report plain FDR (Benjamini-Hochberg). Always defensible, and the honest
      answer when m0 simply is not estimable - which it is not when only a handful
@@ -120,35 +161,53 @@
   WHAT TO EXPECT FROM THE FIVE EXAMPLES BELOW
   ---------------------------------------------------------------------------
 
-  Computed with LaBGAScore_Storey_FDR, which reproduces PROC MULTTEST's PFDR
-  spline exactly (verified on CytokinesT1/T2 to five decimals):
+  Computed with LaBGAScore_Storey_FDR, which reproduces PROC MULTTEST exactly -
+  the spline on CytokinesT1/T2 to five decimals, and DECREASESLOPE on both of
+  those against SAS output (m0 = 2 and m0 = 3, q-values agreeing to 5e-5):
 
-    dataset        m   #p>.05  benchmark m0   PFDR m0   AFDR m0   verdict
-    CytokinesT1    7      2        2.1          1.24      6.00    both pass
-    CytokinesT2    7      6        6.3          0.18      5.00    PFDR FAILS
-    VTROI         14     12       12.6          7.50     13.00    both pass
-    K1ROI         14      1        1.1          0.00     14.00    PFDR m0 = 0
-    SCFAs          4      4        4.2          1.06      4.00    PFDR FAILS
+                                       m0 if you ask for
+    dataset        m   #p>.05  bench   DECREASESLOPE  SPLINE   LOWESTSLOPE
+    CytokinesT1    7      2      2.1        2.00       1.24       6.00
+    CytokinesT2    7      6      6.3        3.00       0.18       5.00
+    VTROI         14     12     12.6       11.00       7.50      13.00
+    K1ROI         14      1      1.1       14.00       0.00      14.00
+    SCFAs          4      4      4.2        4.00       1.06       4.00
 
-  CytokinesT2 is the clearest failure: six of seven p-values exceed 0.05, yet
-  PFDR puts the number of true nulls at 0.18. AFDR says 5, which is credible.
+  Read the DECREASESLOPE column against the benchmark: it is at or near it on
+  four of five, where the spline sits far below on three. That is the whole case
+  for the changed default, visible on five real datasets.
 
-  SCFAs shows the floor of the method: with m = 4, all of them above 0.17, PFDR
-  claims 1.06 nulls. m = 4 is too few to estimate m0 at all - report FDR.
+  CytokinesT1 - both estimators pass, but they still disagree about the data.
+  DECREASESLOPE's m0 = 2 lands exactly on the benchmark. Note that the smallest
+  p-value, 0.0017, comes back as q = 0.0025: even a passing m0 moves things.
+
+  CytokinesT2 is the clearest spline failure: six of seven p-values exceed 0.05,
+  yet SPLINE puts the number of true nulls at 0.18. DECREASESLOPE says 3. That is
+  still BELOW the benchmark of 6.3, so this dataset does not fully pass even
+  under the new default - it is merely no longer absurd. Treat the q-values here
+  as optimistic and consider reporting plain FDR alongside them.
+
+  SCFAs shows the floor of the method: with m = 4, all of them above 0.17, SPLINE
+  claims 1.06 nulls. DECREASESLOPE returns 4 - i.e. it correctly declines to find
+  any signal, and its q-values equal BH's. m = 4 is too few to estimate m0 at
+  all, and the right estimator says so rather than guessing.
 
   K1ROI is the instructive edge case. Thirteen of fourteen p-values are BELOW
   0.05, so the benchmark is low (1.1) and a small m0 is genuinely plausible here
-  - but PFDR returns exactly 0, which asserts no nulls exist and cannot be right.
-  AFDR's 14 is the opposite extreme, over-conservative given the data. When the
-  two bracket the answer this widely, say which you used and why.
+  - but SPLINE returns exactly 0, which asserts no nulls exist and cannot be
+  right. DECREASESLOPE returns 14, the opposite extreme: here it is the
+  conservative one, and its q-values equal BH's. This is the one dataset of the
+  five where the lab default costs power rather than saving it, and it is the
+  shape of data - almost everything significant - where that trade is cheap.
 
   -------------------------------------------------------------------------
   by: Lukas Van Oudenhove  |  KU Leuven, October 2026
   -------------------------------------------------------------------------
-  proc_multtest_fdr.sas   v1.1   last modified: 2026/10/01
+  proc_multtest_fdr.sas   v1.2   last modified: 2026/10/01
 *****************************************************************************/
 
-/* m=7, 2 p-values > 0.05. benchmark m0 ~ 2.1; PFDR 1.24, AFDR 6.00 -> both pass */
+/* m=7, 2 p-values > 0.05. benchmark m0 ~ 2.1; DECREASESLOPE m0 = 2.00, exactly on the
+   benchmark. (The SAS default spline would give 1.24 - also passing, but lower.) */
 data CytokinesT1;
 input Raw_P;
 datalines;
@@ -162,10 +221,12 @@ datalines;
 ;
 
 ods graphics on;
-proc multtest inpvalues=cytokinesT1 fdr pfdr afdr plots=all;
+proc multtest inpvalues=cytokinesT1 fdr pfdr afdr m0=decreaseslope plots=all;
 run;
 
-/* m=7, 6 p-values > 0.05. benchmark m0 ~ 6.3; PFDR 0.18 FAILS the check, AFDR 5.00 passes -> report AFDR */
+/* m=7, 6 p-values > 0.05. benchmark m0 ~ 6.3; DECREASESLOPE m0 = 3.00. Better than the
+   spline's 0.18, which is absurd, but still half the benchmark - this one does NOT fully
+   pass. Report plain FDR alongside, or in place of, the q-values below. */
 data CytokinesT2;
 input Raw_P;
 datalines;
@@ -178,10 +239,11 @@ datalines;
 0.7543
 ;
 ods graphics on;
-proc multtest inpvalues=cytokinesT2 fdr pfdr afdr plots=all;
+proc multtest inpvalues=cytokinesT2 fdr pfdr afdr m0=decreaseslope plots=all;
 run;
 
-/* m=14, 12 p-values > 0.05. benchmark m0 ~ 12.6; PFDR 7.50, AFDR 13.00 -> both pass, PFDR notably lower */
+/* m=14, 12 p-values > 0.05. benchmark m0 ~ 12.6; DECREASESLOPE m0 = 11.00 -> passes.
+   (Spline 7.50: passes too, but buys significance the data does not support.) */
 data VTROI;
 input Raw_P;
 datalines;
@@ -201,12 +263,14 @@ datalines;
 0.8423
 ;
 ods graphics on;
-proc multtest inpvalues=VTROI fdr pfdr afdr plots=all;
+proc multtest inpvalues=VTROI fdr pfdr afdr m0=decreaseslope plots=all;
 run;
 
-/* m=14, only 1 p-value > 0.05 so the benchmark is low (~1.1) and a small m0 IS plausible -
-   but PFDR returns m0 = 0, which asserts no nulls exist and cannot be right. AFDR 14.00 is the
-   other extreme. State which you used. */
+/* m=14, only 1 p-value > 0.05 so the benchmark is low (~1.1) and a small m0 IS plausible.
+   The spline returns m0 = 0, which asserts no nulls exist and cannot be right. DECREASESLOPE
+   returns 14.00, so here the lab default is the CONSERVATIVE choice and its q-values equal
+   BH's. The one dataset of the five where the new default costs power - cheaply, since
+   thirteen of fourteen are significant either way. */
 data K1ROI;
 input Raw_P;
 datalines;
@@ -226,11 +290,12 @@ datalines;
 0.0699
 ;
 ods graphics on;
-proc multtest inpvalues=K1ROI fdr pfdr afdr plots=all;
+proc multtest inpvalues=K1ROI fdr pfdr afdr m0=decreaseslope plots=all;
 run;
 
-/* m=4, all 4 p-values > 0.05. benchmark m0 ~ 4.2; PFDR 1.06 FAILS, AFDR 4.00 = FDR.
-   m=4 is too few to estimate m0 at all -> report plain FDR */
+/* m=4, all 4 p-values > 0.05. benchmark m0 ~ 4.2; DECREASESLOPE m0 = 4.00, i.e. it declines
+   to find signal and reproduces plain FDR exactly. (Spline: 1.06, which FAILS.) m=4 is too
+   few to estimate m0 at all, and the right estimator says so rather than guessing. */
 data SCFAs;
 input Raw_P;
 datalines;
@@ -240,5 +305,5 @@ datalines;
 0.2235
 ;
 ods graphics on;
-proc multtest inpvalues=SCFAs fdr pfdr afdr plots=all;
+proc multtest inpvalues=SCFAs fdr pfdr afdr m0=decreaseslope plots=all;
 run;

@@ -300,9 +300,29 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 % they are allowed to OVERRULE the estimate and return BH instead is a separate
 % question, controlled by 'guard':
 %
-%   method 'sas'    guard OFF by default  -> reproduces SAS PROC MULTTEST PFDR
-%   other methods   guard ON  by default  -> rejects a pi0 the lambda curve
-%                                            does not support, returns BH
+%   'lambda', 'spline'        guard ON  by default -> rejects a pi0 the lambda
+%                                                    curve does not support,
+%                                                    and returns BH instead
+%   'sas'                     guard OFF by default -> reproduces PROC MULTTEST
+%   'decreaseslope' (DEFAULT), 'lsl', 'bky', 'adaptivefdr'
+%                             guard OFF by default -> these do not read the
+%                                                    lambda curve at all, so a
+%                                                    lambda-curve veto does not
+%                                                    apply to them
+%   'bh', 'holm', 'sidak', 'bonferroni', 'stepdown_sidak'
+%                             guard irrelevant     -> no pi0 is estimated
+%
+% The guard being off is NOT the same as the diagnostic being absent: an
+% unreliable pi0 that is returned anyway still raises
+% LaBGAScore_Storey_FDR:unreliablePi0 and still sets info.reliable = false,
+% under every method. Read the flag.
+%
+% Note what this means for the DEFAULT as of 2026-10-01: 'decreaseslope' runs
+% with the guard off. That is deliberate and is not the old 'sas' problem - the
+% guard exists to catch a lambda-curve extrapolation collapsing toward zero,
+% which is a failure mode 'decreaseslope' does not have (0.0%% degenerate
+% estimates in 400 simulations at m = 8, against 25.5%% for the spline). The
+% estimator is sound here rather than merely unpoliced.
 %
 % 'sas' has the guard off because SAS has no such check: PROC MULTTEST
 % estimates pi0 and uses it, full stop. A guard makes the output safer but no
@@ -360,7 +380,8 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 %   q           FDR-corrected p-values, same shape as p
 %   pi0         the estimated proportion of true nulls that was USED
 %   info        struct: .method_used, .pi0, .pi0_lambda, .lambda, .pi0_range,
-%               .pi0_spline, .reliable, .reasons, .q_BH,
+%               .pi0_spline, .reliable, .reasons, .reasons_lambda_curve,
+%               .uses_lambda_curve, .q_BH,
 %               .guard_on (was the guard active), .guard_fired (did it override)
 %
 % *WHAT THE ORIGINAL PAPERS SAY ABOUT THE NUMBER OF TESTS*
@@ -494,12 +515,14 @@ nboot   = ip.Results.nboot;
 verbose = logical(ip.Results.verbose);
 alpha   = ip.Results.alpha;
 
-% The reliability guard is an ADDITION to Storey, not part of it. SAS PROC
-% MULTTEST has no such check: it estimates pi0 and uses it. So the guard is OFF
-% for method 'sas', which now reproduces PROC MULTTEST PFDR rather than
-% second-guessing it, and ON for the other methods, where no external
-% reference is being matched and the degenerate-pi0 failure is worth catching.
-% Override either way with 'guard', true/false.
+% The reliability guard is an ADDITION to Storey, not part of it, and it is a
+% veto on ONE failure mode: a lambda-curve estimate extrapolating into an empty
+% upper tail. So it is ON only for the methods that read that curve ('lambda',
+% 'spline'); OFF for 'sas', which must reproduce PROC MULTTEST, warts included;
+% OFF for the slope-based estimators below, which never touch the lambda curve
+% and so cannot fail that way; and moot for the methods that estimate no pi0 at
+% all. Override either way with 'guard', true/false. Either way the diagnostic
+% is still computed, warned about, and returned in info.reliable.
 if isempty(ip.Results.guard)
     do_guard = ~ismember(lower(char(ip.Results.method)), ...
         {'sas','bh','stepdown_sidak','sidak','holm','bonferroni', ...
@@ -569,9 +592,36 @@ end
 
 % ------------------------- judge pi0 -------------------------------------
 
-reasons = {};
+% Two of the checks below are properties of the LAMBDA CURVE, not of whatever
+% estimate was actually returned: the curve swinging, and its top being empty.
+% They judge 'sas', 'lambda' and 'spline', which read that curve. They do NOT
+% judge 'decreaseslope', 'lsl' or 'bky', which read the slope of the ordered
+% p-values and never touch it - and since 'decreaseslope' became the default on
+% 2026-10-01, letting them count everywhere would fire the unreliablePi0 warning
+% on essentially every small-m call, about a curve the estimate did not come
+% from. A warning that always fires is one nobody reads.
+%
+% So they are always COMPUTED and always returned (info.reasons_lambda_curve),
+% because the diagnostic is worth seeing whatever the method; they only count
+% towards info.reliable for the methods they actually describe.
+%
+% What that is worth, over 2000 random panels (m uniform on 5..20, a uniform
+% number of true effects drawn Beta(0.2,8), the rest Uniform(0,1)):
+%
+%   method            info.reliable == false
+%   'sas'                   78.5%%        <- fires on nearly everything
+%   'decreaseslope'          0.3%%        <- fires on the benchmark check only
+%
+% and the DECREASESLOPE cases that do fire are the right ones, e.g. "pi0 = 0.1875
+% is far below the #{p>0.05} benchmark of 0.6579". The flag now carries
+% information; at 78.5%% it carried none.
+uses_lambda_curve = ismember(method, {'sas', 'lambda', 'spline'});
+
+reasons        = {};
+reasons_lambda = {};
+
 if pi0_range > 0.3
-    reasons{end+1} = sprintf('pi0 swings %.2f-%.2f across lambda, so it is not identifiable', ...
+    reasons_lambda{end+1} = sprintf('pi0 swings %.2f-%.2f across lambda, so it is not identifiable', ...
         min(pi0_lam), max(pi0_lam));
 end
 if ~isnan(pi0_use) && pi0_use < 0.01
@@ -612,20 +662,26 @@ end
 lam_top = 0.95;
 n_above_top = sum(p > lam_top);
 if n_above_top == 0
-    reasons{end+1} = sprintf(['no p-value exceeds %.2f, so the top of the lambda ' ...
+    reasons_lambda{end+1} = sprintf(['no p-value exceeds %.2f, so the top of the lambda ' ...
         'curve is empty and pi0 is not identified there (max p = %.4f)'], lam_top, max(p));
+end
+
+if uses_lambda_curve
+    reasons = [reasons, reasons_lambda];
 end
 
 reliable = isempty(reasons);
 
-% Point of this warning: under 'sas' the guard is deliberately OFF so the
-% function reproduces PROC MULTTEST, including its failures. An unreliable pi0
-% is therefore RETURNED, and silence would let it pass into a results table as
-% though it were trustworthy.
+% Point of this warning: where the guard is off, an unreliable pi0 is RETURNED,
+% and silence would let it pass into a results table as though it were
+% trustworthy. The guard is off under 'sas' so the function reproduces PROC
+% MULTTEST including its failures, and off under the slope-based estimators
+% because the lambda-curve veto does not describe them - different reasons, same
+% need to say so out loud.
 if ~reliable && ~do_guard
     warning('LaBGAScore_Storey_FDR:unreliablePi0', ...
         ['\npi0 = %.4f is flagged UNRELIABLE and is being returned anyway ' ...
-         '(guard off, as method ''%s'' requires for SAS fidelity):\n  - %s\n' ...
+         '(guard off under method ''%s''):\n  - %s\n' ...
          'Treat the q-values as provisional; BH (method ''bh'') is the safe fallback.'], ...
         pi0_use, method, strjoin(reasons, sprintf('\n  - ')));
 end
@@ -700,7 +756,10 @@ end
 
 info = struct('method_used', method_used, 'pi0', pi0_use, 'pi0_lambda', pi0_lam, ...
     'lambda', lam, 'pi0_range', pi0_range, 'pi0_spline', pi0_spline, ...
-    'reliable', reliable, 'reasons', {reasons}, 'q_BH', reshape(q_bh, sz), ...
+    'reliable', reliable, 'reasons', {reasons}, ...
+    'reasons_lambda_curve', {reasons_lambda}, ...   % always computed; counts towards .reliable only for 'sas'/'lambda'/'spline'
+    'uses_lambda_curve', uses_lambda_curve, ...
+    'q_BH', reshape(q_bh, sz), ...
     'guard_on', do_guard, 'guard_fired', guard_fired, ...
     'spline_slope_end', spl.slope_end, 'spline_fitted_range', spl.fitted_range, ...
     'spline_df_effective', spl.df_effective, 'spline_pi0_at_lambda1', spl.pi0_at_lambda1, ...

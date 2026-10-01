@@ -1629,9 +1629,19 @@ switch analysis_mode
         results.(performance_metric{1}).p_perm_unc = p_unc;
         
         % FDR through the lab's canonical implementation, so this script and
-        % prep_3a cannot drift apart. It estimates pi0 from Storey's fixed-lambda
-        % estimator over a grid, judges whether pi0 is identifiable at all, and
-        % returns Benjamini-Hochberg when it is not.
+        % prep_3a cannot drift apart. Called with no 'method', so it uses that
+        % function's default - DECREASESLOPE since 2026-10-01, previously the SAS
+        % spline. DECREASESLOPE reads pi0 off the slope of the ordered p-values
+        % rather than off the upper tail, which at panel sizes like this one is
+        % nearly empty; measured, the spline realises FDR 0.178 against a nominal
+        % 0.05 at m = 8, DECREASESLOPE 0.065.
+        %
+        % Consequence for the branch below: storey_info.reliable is now true far
+        % more often (0.3%% of random panels flagged, against 78.5%% under the
+        % spline), so the Storey q is kept where the script used to fall back to
+        % BH. That is the intended direction - the fallback was firing on a
+        % lambda-curve diagnostic that does not describe this estimator - but it
+        % does mean q_fdr here will differ from runs made before that date.
         %
         % The previous inline version took mafdr's spline pi0 and guarded only
         % aprioriprob > 0.99. That catches the conservative failure, not pi0 -> 0:
@@ -1744,9 +1754,19 @@ switch analysis_mode
         fmap = nan(size(nii.img));
 
         % FDR through the lab's canonical implementation, so this script and
-        % prep_3a cannot drift apart. It estimates pi0 from Storey's fixed-lambda
-        % estimator over a grid, judges whether pi0 is identifiable at all, and
-        % returns Benjamini-Hochberg when it is not.
+        % prep_3a cannot drift apart. Called with no 'method', so it uses that
+        % function's default - DECREASESLOPE since 2026-10-01, previously the SAS
+        % spline. DECREASESLOPE reads pi0 off the slope of the ordered p-values
+        % rather than off the upper tail, which at panel sizes like this one is
+        % nearly empty; measured, the spline realises FDR 0.178 against a nominal
+        % 0.05 at m = 8, DECREASESLOPE 0.065.
+        %
+        % Consequence for the branch below: storey_info.reliable is now true far
+        % more often (0.3%% of random panels flagged, against 78.5%% under the
+        % spline), so the Storey q is kept where the script used to fall back to
+        % BH. That is the intended direction - the fallback was firing on a
+        % lambda-curve diagnostic that does not describe this estimator - but it
+        % does mean q_fdr here will differ from runs made before that date.
         %
         % The previous inline version took mafdr's spline pi0 and guarded only
         % aprioriprob > 0.99. That catches the conservative failure, not pi0 -> 0:
@@ -1943,9 +1963,19 @@ switch analysis_mode
         fmap = nan(size(nii.img));
 
         % FDR through the lab's canonical implementation, so this script and
-        % prep_3a cannot drift apart. It estimates pi0 from Storey's fixed-lambda
-        % estimator over a grid, judges whether pi0 is identifiable at all, and
-        % returns Benjamini-Hochberg when it is not.
+        % prep_3a cannot drift apart. Called with no 'method', so it uses that
+        % function's default - DECREASESLOPE since 2026-10-01, previously the SAS
+        % spline. DECREASESLOPE reads pi0 off the slope of the ordered p-values
+        % rather than off the upper tail, which at panel sizes like this one is
+        % nearly empty; measured, the spline realises FDR 0.178 against a nominal
+        % 0.05 at m = 8, DECREASESLOPE 0.065.
+        %
+        % Consequence for the branch below: storey_info.reliable is now true far
+        % more often (0.3%% of random panels flagged, against 78.5%% under the
+        % spline), so the Storey q is kept where the script used to fall back to
+        % BH. That is the intended direction - the fallback was firing on a
+        % lambda-curve diagnostic that does not describe this estimator - but it
+        % does mean q_fdr here will differ from runs made before that date.
         %
         % The previous inline version took mafdr's spline pi0 and guarded only
         % aprioriprob > 0.99. That catches the conservative failure, not pi0 -> 0:

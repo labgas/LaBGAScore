@@ -51,7 +51,8 @@ function report = LaBGAScore_stats_rederive_storey_q(modeldirs, varargin)
 %
 % * outdir          where the report goes, default <modeldir>/results/notes
 %
-% * method          method passed to LaBGAScore_Storey_FDR, default 'sas'
+% * method          method passed to LaBGAScore_Storey_FDR; empty (default) uses that
+%                   function's OWN default, so the two cannot drift apart
 %
 % * verbose         default true; print the per-table summary as it goes
 %
@@ -105,7 +106,9 @@ ip = inputParser;
 ip.addParameter('alpha',   0.05,  @isnumeric);
 ip.addParameter('write',   false, @(x) islogical(x) || isnumeric(x));
 ip.addParameter('outdir',  '',    @ischar);
-ip.addParameter('method',  'sas', @(x) ischar(x) || isstring(x));
+ip.addParameter('method',  '', @(x) ischar(x) || isstring(x));   % empty = follow LaBGAScore_Storey_FDR's own default
+                                                                 % (it hardcoded 'sas' until 2026-10-01, which silently
+                                                                 %  overrode the function's default when that changed)
 ip.addParameter('verbose', true,  @(x) islogical(x) || isnumeric(x));
 ip.parse(varargin{:});
 alpha   = ip.Results.alpha;
@@ -141,6 +144,13 @@ for d = 1:numel(modeldirs)
         end
 
     files = dir(fullfile(resdir, '*stats*.mat'));
+
+    % Exclude this tool's OWN output. '*_storeyfix.mat' matches '*stats*.mat',
+    % so a second pass would re-derive from already-corrected tables, compare
+    % them against themselves, and write '..._storeyfix_storeyfix.mat'. Re-runs
+    % are expected - the default estimator changed on 2026-10-01 - so this has to
+    % be skipped rather than merely avoided by hand.
+    files = files(~endsWith({files.name}, '_storeyfix.mat'));
 
         if verbose
             fprintf('\n%s\n  %d results file(s) with "stats" in the name\n', modelname, numel(files));
@@ -214,8 +224,12 @@ for d = 1:numel(modeldirs)
                     sel = ok & (gid == g);
                         if sum(sel) < 4, continue, end
 
-                    [q_new, pi0_new, info] = LaBGAScore_Storey_FDR(p(sel), ...
-                        'method', method, 'verbose', false);
+                        if isempty(method)
+                            [q_new, pi0_new, info] = LaBGAScore_Storey_FDR(p(sel), 'verbose', false);
+                        else
+                            [q_new, pi0_new, info] = LaBGAScore_Storey_FDR(p(sel), ...
+                                'method', method, 'verbose', false);
+                        end
 
                 % In the TABLE form q_Storey is full-length and aligns with p, so it
                 % is indexed by ok. In the STRUCT form prep_3a stored only the
