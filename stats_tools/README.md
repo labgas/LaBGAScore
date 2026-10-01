@@ -1,11 +1,18 @@
 # stats_tools — statistics helpers used across the pipeline
 
-Four MATLAB functions that are not specific to any one analysis, plus the SAS
-macros for mixed-model effect sizes.
+Four MATLAB functions that are not specific to any one analysis, plus SAS code
+in two flavours: macros for mixed-model effect sizes, and a worked example of
+multiple-comparison correction with PROC MULTTEST.
 
-**[`sas_macros/README.md`](sas_macros/README.md) is authoritative for the SAS
-side** (`mixed_effectsize.sas`, `es_identify.sas`) — a different language, its
-own conventions, and its own caveats. This file covers `functions/` only.
+```
+functions/              4 MATLAB helpers (below)
+sas_macros/             mixed_effectsize.sas, es_identify.sas  -> own README
+sas_code/               proc_multtest_fdr.sas, a worked FDR example for the lab
+```
+
+**[`sas_macros/README.md`](sas_macros/README.md) is authoritative for the
+effect-size macros** — a different language, its own conventions, and its own
+caveats.
 
 ---
 
@@ -157,6 +164,70 @@ for an unordered factor should go through this function.
 
 Accepts numeric, logical, char, cellstr, string or categorical; returns double
 indicator columns plus the level names and the input as a categorical.
+
+## `sas_code/proc_multtest_fdr.sas` — and the one check to do every time
+
+A worked example running five real p-value sets through
+
+```sas
+proc multtest inpvalues=<data> fdr pfdr afdr plots=all;
+```
+
+which puts three corrections side by side — **FDR** (Benjamini–Hochberg, assumes
+π₀ = 1), **PFDR** (Storey, scales BH by an *estimated* number of true nulls m₀),
+**AFDR** (adaptive, estimates m₀ by LOWESTSLOPE, built for small m) — plus the
+diagnostic plots, including the fitted m₀.
+
+**Everything turns on m₀, because q = (m₀/m) · q_BH.** Halve m₀ and every q
+halves. So check it, using the benchmark described above:
+
+> **How many p-values exceed 0.05?** That count, over 0.95, is itself a rough
+> estimate of m₀, biased upward. An m₀ far *below* it is the direction that
+> invents significance; at or above it is merely conservative.
+
+Two estimates are wrong on their face regardless: **m₀ = 0** asserts no
+hypothesis is null, and **m₀ < 1 with m < 10** claims less than one null among a
+handful of tests.
+
+### When the check fails
+
+1. **Try another m₀ estimator for PFDR.** SAS's PFDR default is SPLINE falling
+   back to BOOTSTRAP; DECREASESLOPE and LOWESTSLOPE are steadier at small m. Set
+   it with `NTRUENULL=` — **confirm the syntax against the SAS documentation for
+   your version**, since nothing in these folders has been executed in SAS.
+2. **Or report AFDR**, but only if *its* m₀ passes the same check. It behaves far
+   better at small m, and in all five examples it passes whenever PFDR fails.
+3. **Or report plain FDR.** Always defensible, and the honest answer when m₀ is
+   not estimable — which it is not when only a handful of p-values exceed 0.05.
+
+Do **not** set m₀ by hand without external grounds for the number: m₀ = m is
+exactly BH, and anything lower buys significance by assumption rather than from
+the data.
+
+### What the five examples show
+
+Computed with `LaBGAScore_Storey_FDR`, which reproduces PROC MULTTEST's PFDR
+spline exactly (verified on the first two to five decimals):
+
+| dataset | m | #p>.05 | benchmark m₀ | PFDR m₀ | AFDR m₀ | verdict |
+|---|---|---|---|---|---|---|
+| CytokinesT1 | 7 | 2 | 2.1 | 1.24 | 6.00 | both pass |
+| CytokinesT2 | 7 | 6 | 6.3 | **0.18** | 5.00 | PFDR fails → report AFDR |
+| VTROI | 14 | 12 | 12.6 | 7.50 | 13.00 | both pass |
+| K1ROI | 14 | 1 | 1.1 | **0.00** | 14.00 | PFDR m₀ = 0, impossible |
+| SCFAs | 4 | 4 | 4.2 | **1.06** | 4.00 | PFDR fails → report FDR |
+
+**CytokinesT2** is the clearest failure: six of seven p-values exceed 0.05, yet
+PFDR puts the number of true nulls at 0.18. AFDR's 5 is credible.
+
+**SCFAs** shows the floor of the method — m = 4, all above 0.17, and PFDR claims
+1.06 nulls. Four tests cannot support estimating m₀; report FDR.
+
+**K1ROI** is the instructive edge case. Thirteen of fourteen p-values are *below*
+0.05, so the benchmark is low (1.1) and a small m₀ is genuinely plausible — but
+PFDR returns exactly 0, which cannot be right, while AFDR's 14 is
+over-conservative given the data. When the two bracket the answer that widely,
+say which you used and why.
 
 ## Dependencies
 
