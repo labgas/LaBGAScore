@@ -18,9 +18,10 @@ function report = LaBGAScore_stats_rederive_storey_q(modeldirs, varargin)
 %
 % 1. find every <modeldir>/results/*stats*.mat
 %
-% 2. search each file for tables carrying BOTH a 'p' and a 'q_Storey' column,
-%   including tables nested inside cells and struct fields (roi_glm_stats{c},
-%   parcelwise and neurotransmitter stats are all shaped that way)
+% 2. search each file for anything carrying BOTH a 'p' and a 'q_Storey' entry,
+%   in either shape it is stored in: a TABLE with those columns (roi_glm_stats)
+%   or a STRUCT with those fields (neurotransmitter_fdr,
+%   neurotransmitter_group_fdr), each possibly wrapped one level deep in a cell
 %
 % 3. recompute pi0 and q with the CURRENT LaBGAScore_Storey_FDR, and compare
 %   against what is stored
@@ -72,12 +73,18 @@ function report = LaBGAScore_stats_rederive_storey_q(modeldirs, varargin)
 % OUTPUT: a table, one row per recomputed stats table, also written as
 % storey_rederive_report.tsv under outdir when 'write' is true
 %
-% WHAT THIS DOES NOT COVER. Storey is also applied to large-n voxelwise and
-% parcelwise p-value vectors inside prep_3a and the decoding scripts. Those
-% vectors are not always saved as tables, and at large n the upper tail of the
-% lambda curve is populated, which is exactly where pi0 estimators agree - so
-% the expected change there is small. Confirm with this report first; only
-% re-run prep_3a if it shows movement.
+% COVERAGE. Every place prep_3a applies Storey saves the p-values it used, so
+% all of them are correctable from disk and NOTHING needs re-running:
+%
+%   roi GLM                  roi_glm_stats{c}            table  (p, q_Storey, pi0)
+%   neurotransmitter maps    neurotransmitter_fdr{c}     struct (prep_3a ~L3441)
+%   neurotransmitter groups  neurotransmitter_group_fdr{c} struct (prep_3a ~L3385)
+%
+% VOXELWISE NEEDS NOTHING: that path is thresholded with CANlab's threshold(),
+% which is Benjamini-Hochberg, not Storey. The decoding scripts do apply Storey
+% to large-n voxelwise permutation p-values, but at large n the upper tail of the
+% lambda curve is populated - which is exactly where pi0 estimators agree - and
+% those are not second-level results files, so they are out of scope here.
 %
 % -------------------------------------------------------------------------
 %
@@ -159,8 +166,26 @@ for d = 1:numel(modeldirs)
             for c = 1:numel(X)
 
                 T = X{c};
-                    if ~istable(T), continue, end
-                cols = T.Properties.VariableNames;
+
+                % Two shapes carry Storey output, and both have to be handled:
+                %   TABLE   roi_glm_stats{c}, with p / q_Storey / pi0 columns
+                %   STRUCT  neurotransmitter_fdr{c} and
+                %           neurotransmitter_group_fdr{c}, same information in
+                %           fields rather than columns (prep_3a lines ~3385 and
+                %           ~3441). Looking only for tables missed the
+                %           neurotransmitter maps entirely on the first pass.
+                % Voxelwise maps are NOT here and need nothing: that path is
+                % thresholded with CANlab's threshold(), which is Benjamini-
+                % Hochberg, not Storey.
+                    if istable(T)
+                        shape = 'table';
+                        cols  = T.Properties.VariableNames;
+                    elseif isstruct(T) && numel(T) == 1
+                        shape = 'struct';
+                        cols  = fieldnames(T)';
+                    else
+                        continue
+                    end
                     if ~all(ismember({'p','q_Storey'}, cols)), continue, end
 
                 p  = T.p(:);
@@ -173,16 +198,28 @@ for d = 1:numel(modeldirs)
                 [q_new, pi0_new, info] = LaBGAScore_Storey_FDR(p(ok), ...
                     'method', method, 'verbose', false);
 
-                q_old   = T.q_Storey(ok);
-                pi0_old = NaN;
-                    if ismember('pi0', cols), pi0_old = T.pi0(find(ok,1)); end
+                % In the TABLE form q_Storey is full-length and aligns with p, so it
+                % is indexed by ok. In the STRUCT form prep_3a stored only the
+                % usable entries, so it is ALREADY the subset and indexing it
+                % again would misalign every value after the first NaN.
+                q_allold = T.q_Storey(:);
+                    if numel(q_allold) == sum(ok)
+                        q_old = q_allold;
+                    else
+                        q_old = q_allold(ok);
+                    end
+                pi0_old  = NaN;
+                    if ismember('pi0', cols)
+                        pi0_allold = T.pi0(:);
+                        pi0_old    = pi0_allold(1);
+                    end
 
                 % stored q identical to p means the q >= p floor took over, i.e.
                 % the column is an uncorrected p-value under an FDR name
                 q_was_p = all(abs(q_old - p(ok)) < 1e-10);
 
                 rows(end+1,:) = { modelname, files(f).name, ...
-                    sprintf('%s{%d}', fn{v}, c), sum(ok), max(p(ok)), ...
+                    sprintf('%s{%d} [%s]', fn{v}, c, shape), sum(ok), max(p(ok)), ...
                     pi0_old, pi0_new, max(abs(q_new - q_old)), ...
                     sum(q_old < alpha), sum(q_new < alpha), ...
                     sum((q_old < alpha) ~= (q_new < alpha)), ...
@@ -200,9 +237,17 @@ for d = 1:numel(modeldirs)
 
                     if dowrite
                         Tnew = T;
-                        Tnew.q_Storey(ok) = q_new;
-                            if ismember('pi0', cols),             Tnew.pi0(ok) = pi0_new; end
-                            if ismember('storey_reliable', cols), Tnew.storey_reliable(ok) = info.reliable; end
+                            if strcmp(shape, 'table')
+                                Tnew.q_Storey(ok) = q_new;
+                                    if ismember('pi0', cols),             Tnew.pi0(ok) = pi0_new; end
+                                    if ismember('storey_reliable', cols), Tnew.storey_reliable(ok) = info.reliable; end
+                            else
+                                % struct form: q_Storey is the vector of the ok
+                                % entries only, as prep_3a stored it
+                                qv = Tnew.q_Storey; qv(ok(1:numel(qv))) = q_new(1:sum(ok)); Tnew.q_Storey = qv;
+                                    if isfield(Tnew,'pi0'),             Tnew.pi0 = pi0_new; end
+                                    if isfield(Tnew,'storey_reliable'), Tnew.storey_reliable = info.reliable; end
+                            end
                         X{c} = Tnew;
                         changed_any = true;
                     end
