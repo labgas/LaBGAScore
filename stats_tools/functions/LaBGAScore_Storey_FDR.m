@@ -59,6 +59,46 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 % SAS is now exact; it is not a claim that either number is usable. This is
 % reported as an explicit reason in info.reasons and raised as a warning.
 %
+% *THE #{p>0.05} SANITY BENCHMARK*
+%
+% info.pi0_benchmark reports #{p > 0.05}/(n*0.95), clamped at 1. This is not a
+% competing method; it is a CHEAP CHECK on whichever pi0 the chosen method
+% returned, and a pi0 far below it earns an entry in info.reasons.
+%
+% Why it works. It is Storey's own estimator at lambda = 0.05, so it rests on the
+% same fact: under the null p ~ Uniform(0,1), hence only (1-lambda) of the true
+% nulls land above lambda - which is what the /(1-0.05) divisor corrects for.
+% Omitting that divisor, i.e. using #{p>0.05}/n, undercounts the nulls; the
+% difference is 5% at lambda = 0.05 but a factor of two at lambda = 0.5.
+%
+% Why it is a benchmark and not a replacement. Small p is where the ALTERNATIVES
+% live, so every underpowered true effect is counted as a null and the estimate
+% is biased UPWARD. That makes it a soft upper reference, one-sided by nature:
+%
+%   pi0 far BELOW the benchmark  -> suspect, and it is the dangerous direction
+%   pi0 above the benchmark      -> usually benign, just conservative
+%
+% It is also coarse - at n = 8 it moves in steps of 1/(8*0.95) = 0.13 - so it
+% catches order-of-magnitude disagreement, not fine differences.
+%
+% Note this benchmark does NOT escape the frequentist objection by accident: it
+% estimates a MIXTURE PROPORTION, never asserting that any individual null is
+% true, which is why estimating pi0 at all is legitimate.
+%
+% Calibration, on the six cases where the right answer is known:
+%
+%   case             n   #p>.05   benchmark   pi0 before   pi0 after
+%   SAS example 1    7      2       0.301       0.003        0.177
+%   SAS example 2    7      6       0.902       0.007        0.025
+%   proj_cfs m2b     8      7       0.921       0.012        0.000
+%   proj_cfs m2c     8      8       1.053       0.246        0.863
+%   moodbugs roi{2}  8      6       0.789       0.034        0.570
+%   moodbugs roi{4}  8      5       0.658       0.128        0.815
+%
+% All six "before" values are below a third of their benchmark. After the fix the
+% check still fires on SAS example 2 and proj_cfs m2b - correctly, since those
+% two are independently unidentifiable (an empty upper tail in both cases).
+%
 % *RELATION TO SAS PROC MULTTEST*
 %
 % The old header claimed this implemented Storey "as in SAS proc multtest". It
@@ -478,6 +518,28 @@ if isnan(pi0_use)
     reasons{end+1} = 'pi0 could not be estimated';
 end
 
+% SANITY BENCHMARK. #{p > 0.05}/(n*0.95) is itself a legitimate pi0 estimate -
+% Storey's own estimator evaluated at lambda = 0.05 - and it is cheap, needs no
+% spline and no bootstrap. It is biased UPWARD, because every underpowered true
+% effect (p = .08, p = .12) is counted as a null, so it works as a soft UPPER
+% reference rather than a target: a procedure landing far BELOW it is suspect,
+% landing above it usually is not. That asymmetry is the useful part, since
+% pi0 -> 0 is the damaging direction.
+%
+% Clamped at 1: with every p-value above 0.05 the ratio is n/(n*0.95) = 1.053.
+%
+% The factor of 3 was calibrated on the six cases where a wrong pi0 is known
+% (the two SAS validation sets plus four saved roi tables): every pre-fix
+% estimate sat below a third of its benchmark, while the post-fix values that
+% are credible sit within about 2x of it. Had this check existed, the mafdr
+% defect would have announced itself on its first run.
+pi0_benchmark = min(1, sum(p > 0.05)/(n*0.95));
+if ~isnan(pi0_use) && pi0_use < pi0_benchmark/3
+    reasons{end+1} = sprintf(['pi0 = %.4f is far below the #{p>0.05} benchmark of %.4f ' ...
+        '(%d of %d p-values exceed 0.05), which is the direction that inflates significance'], ...
+        pi0_use, pi0_benchmark, sum(p > 0.05), n);
+end
+
 % The upper end of the lambda curve is where pi0 is identified. With no
 % p-value above the last lambda, pi0(lambda) is exactly 0 there and ANY
 % estimator extrapolating into that region collapses toward 0 - which is what
@@ -580,7 +642,8 @@ info = struct('method_used', method_used, 'pi0', pi0_use, 'pi0_lambda', pi0_lam,
     'spline_slope_end', spl.slope_end, 'spline_fitted_range', spl.fitted_range, ...
     'spline_df_effective', spl.df_effective, 'spline_pi0_at_lambda1', spl.pi0_at_lambda1, ...
     'spline_pi0_raw', spl.pi0_raw, ...
-    'n_p_above_0_95', n_above_top, 'bootstrap_seed', boot_seed);
+    'n_p_above_0_95', n_above_top, 'bootstrap_seed', boot_seed, ...
+    'pi0_benchmark', pi0_benchmark, 'n_p_above_0_05', sum(p > 0.05));
 
 pi0 = pi0_use;
 q   = reshape(q, sz);

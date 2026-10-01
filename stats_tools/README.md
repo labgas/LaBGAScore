@@ -59,6 +59,47 @@ Storey & Tibshirani's paper writes π₀ = s(1), while the qvalue package and SA
 both read off max(λ) — at λ=1 those two sets give 0.14133 and **−0.02118**.
 `info.spline_pi0_at_lambda1` reports it so the choice stays visible.
 
+**The `#{p>0.05}` sanity benchmark.** `info.pi0_benchmark` reports
+`#{p>0.05}/(n·0.95)`, clamped at 1, and π₀ falling below a third of it earns an
+entry in `info.reasons`. This is not a competing estimator — it's a cheap check
+on whichever π₀ the chosen method returned.
+
+It works because it *is* Storey's estimator at λ = 0.05, resting on the same
+fact: under the null p ~ Uniform(0,1), so only (1−λ) of the true nulls land above
+λ. That is what the `/(1−0.05)` divisor corrects for; using `#{p>0.05}/n`
+instead undercounts the nulls — a 5% error at λ = 0.05, but a factor of two at
+λ = 0.5.
+
+It is a benchmark and **not** a replacement because small p is where the
+*alternatives* live: every underpowered true effect is counted as a null, so the
+estimate is biased **upward**. That makes it a one-sided reference —
+
+| if π₀ is | then |
+|---|---|
+| **far below** the benchmark | suspect — and it is the direction that inflates significance |
+| above the benchmark | usually benign, merely conservative |
+
+— and a coarse one: at n = 8 it moves in steps of 1/(8·0.95) = 0.13, so it
+catches order-of-magnitude disagreement, not fine differences. Note it estimates
+a *mixture proportion* and never asserts any individual null is true, which is
+why estimating π₀ at all is legitimate frequentist practice.
+
+Calibrated on the six cases where the right answer is known:
+
+| case | n | #p>.05 | benchmark | π₀ before | π₀ after |
+|---|---|---|---|---|---|
+| SAS example 1 | 7 | 2 | 0.301 | 0.003 | 0.177 |
+| SAS example 2 | 7 | 6 | 0.902 | 0.007 | 0.025 |
+| proj_cfs m2b | 8 | 7 | 0.921 | 0.012 | 0.000 |
+| proj_cfs m2c | 8 | 8 | 1.053 | 0.246 | 0.863 |
+| moodbugs roi{2} | 8 | 6 | 0.789 | 0.034 | 0.570 |
+| moodbugs roi{4} | 8 | 5 | 0.658 | 0.128 | 0.815 |
+
+All six "before" values sit below a third of their benchmark, so **this check
+would have caught the `mafdr` defect on its first run**. After the fix it still
+fires on SAS example 2 and proj_cfs m2b — correctly: both have an empty upper
+tail and π₀ is not identifiable in either.
+
 **Where π₀ is identified, and when it isn't.** π₀ is read off the *top* of the λ
 curve. With no p-value above the last λ, π̂₀(λ) is exactly 0 there and any
 estimator extrapolating into that region collapses toward 0 — which is what
