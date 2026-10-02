@@ -101,6 +101,101 @@ history, so the overwrite stays reversible.
 | `LaBGAScore_move_repos_matlabpath.m` | moves one repo below another on the MATLAB path and calls `savepath` — for when path order decides which of two same-named functions wins |
 | `LaBGAScore_smart_parallel_pool_setup.m` | sizes a `parpool` to a fraction of available cores (~60%). The one **script** here; called from the second-level scripts before bootstrapping or permutation |
 
+### Reclaiming space with `git annex drop` — five ways it goes wrong
+
+None of this is in the DataLad docs in one place, and all five have cost real
+time on this server. Measured examples are from `proj_bitter-reward`, 2026-10-02.
+
+**1. `dropunused` works from a single shared list, not one list per remote.**
+`git annex unused` writes `.git/annex/unused`, and **every invocation overwrites
+it**. `git annex dropunused --from <remote> all` then operates on whatever that
+file currently holds, regardless of the `--from` you pass to the *drop*. So this
+sequence silently reclaims nothing:
+
+```bash
+git annex unused --from gin          # 319 keys, 163.89 GB  -> written to the list
+git annex unused                     # 4 local keys         -> OVERWRITES the list
+git annex dropunused --force --from gin all   # drops those 4, not the 319
+```
+
+It exits 0 and reports success. Always regenerate the list for the remote
+*immediately* before the drop, in one chain, with nothing in between:
+
+```bash
+git annex unused --from gin && git annex dropunused --force --from gin all
+```
+
+**2. Push the deletion before dropping.** Until the commit that removed the files
+is on the remote, that remote's `master` still references their content, so the
+content is not "unused" there and the drop reclaims nothing — again silently.
+
+**3. Diff the key sets before any forced drop, because annex deduplicates by
+content hash.** One object can back identical files in several models. In
+`proj_bitter-reward/firstlevel`, all **84** `mask.nii` files across four models
+shared a single key — SPM's analysis mask does not depend on the motion
+regressors, so the defective and corrected fits produced byte-identical masks. A
+path-scoped `git annex drop --force model_1_food_images model_2_FID` would have
+destroyed the mask for the two models being *kept*.
+
+**Prefer `dropunused` precisely because its key list is computed from
+reachability rather than from paths** — a key still referenced by anything cannot
+appear in it. Verify anyway, since it is two commands:
+
+```bash
+git annex unused --from gin | grep -oE '(MD5E|SHA256E)-[^ ]+' | sort -u > /tmp/unused.txt
+git annex find --include '*' --format='${key}\n' | sort -u > /tmp/used.txt
+comm -12 /tmp/unused.txt /tmp/used.txt     # MUST be empty
+```
+
+**4. `numcopies` will refuse, and `--force` means the content is gone.** Where
+the remote holds the only copy — normal here, since local content is routinely
+dropped — the drop fails with *"Could not verify the existence of the 1 necessary
+copy"* on every key. Overriding with `--force` destroys the last copy: git keeps
+the filenames in history, so checking out the pre-removal commit afterwards gives
+broken annex symlinks with nothing behind them. For a superseded model that is
+the intent; know that refitting is the only way back.
+
+Related: **drop from the remote first, while you still hold a local copy.** Then
+`numcopies` is satisfied by the local copy and that step needs no `--force` at
+all — only the final copy does. Doing it the other way round forces both steps
+and gives up the check earlier than necessary.
+
+**5. After dropping, push again — the location log changed even though nothing
+else did.** A drop does not touch the working tree or `master`; `git status` stays
+clean and `master` stays at the same commit, so it looks like there is nothing to
+save or push. But the drop records "this remote no longer has these keys" in the
+location log, which lives on the **`git-annex` branch**. Measured after the two
+drops above: `master` 0 ahead, `git-annex` **3 ahead** in `derivatives` and **2
+ahead** in `firstlevel`.
+
+Until that is pushed, the remote's own copy of the log still claims it holds
+content it has deleted, so a later `datalad get` from a fresh clone is told the
+content is available, tries to fetch it, and fails confusingly instead of
+reporting cleanly that it is gone. `datalad save` is **not** what you want here —
+nothing in the tree changed — just:
+
+```bash
+datalad push --to gin      # transfers no content, only the log commits
+```
+
+A worked sequence that gets all five right:
+
+```bash
+cd <subdataset>
+git rm -r <superseded_model> && datalad save -m "remove ..."   # 1. remove
+datalad push --to gin                                          # 2. push FIRST
+git annex unused --from gin                                    # 3. list, then verify
+#    ... run the comm check above ...
+git annex dropunused --force --from gin all                    # 4. drop, nothing in between
+datalad push --to gin                                          # 5. push the location log
+```
+
+Verify afterwards that nothing still needed was taken — this should print 0:
+
+```bash
+git annex find --not --in gin | wc -l
+```
+
 ## Conventions
 
 Two small things specific to this folder:
