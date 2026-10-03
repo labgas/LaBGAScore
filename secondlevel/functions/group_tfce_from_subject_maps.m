@@ -172,10 +172,28 @@ switch design
    case 'onesample'
        assert(isempty(group));
    case 'twosample'
-       assert(~isempty(group));
-       assert(numel(group)==nSubj);
+       assert(~isempty(group), ...
+           'design ''twosample'' needs a grouping variable, but group is empty.');
+       assert(numel(group)==nSubj, ...
+           'group has %d elements but there are %d subjects.', numel(group), nSubj);
        grp_vals = unique(group(:));
-       assert(numel(grp_vals)==2);
+       % A bare assert here reads as "Assertion failed" and says nothing, which on
+       % 2026-10-02 cost 17 failed prep_3a runs and ~2.5 h before the cause was
+       % found. The usual cause is NOT a malformed grouping variable: it is a
+       % CONTINUOUS second-level predictor stored in DAT.BETWEENPERSON.group,
+       % which several LaBGAS models do deliberately - the field is named "group"
+       % for plumbing and plot labels while holding a continuous score. This
+       % function implements 'onesample' and 'twosample' only; there is no
+       % continuous-predictor TFCE design, so doTFCE must be false for those
+       % models.
+       assert(numel(grp_vals)==2, ...
+           ['design ''twosample'' needs exactly 2 group levels, found %d ' ...
+            '(values: %s).\nIf this is a CONTINUOUS predictor stored in ' ...
+            'DAT.BETWEENPERSON.group - which several models do, naming it ' ...
+            '"group" only for plumbing - then TFCE does not apply: this ' ...
+            'function implements onesample and twosample designs only. Set ' ...
+            'doTFCE = false for that model.'], ...
+           numel(grp_vals), mat2str(grp_vals(1:min(6,end))', 4));
    otherwise
        error('Unknown design');
 end
