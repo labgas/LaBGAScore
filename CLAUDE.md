@@ -265,10 +265,24 @@ model script directory before launching any long chain.
   and read them rather than chase them.
 
 Both ship positive controls in `clean/checker_positive_controls/`, run by
-`run_controls.sh`, which asserts that each checker flags its own control and
-ignores the other's. **`checkcode` reports zero messages on either control
-file** — measured, not assumed — which is precisely why these exist alongside
-it. If a change to a checker makes its control pass, the checker is broken.
+`run_controls.sh`, which asserts that each checker flags its own control(s) and
+ignores the other's. **`checkcode` reports zero messages on any control file** —
+measured, not assumed — which is precisely why these exist alongside it. If a
+change to a checker makes its control pass, the checker is broken.
+
+**`use_before_def.py` was itself broken until 2026-10-05, in the worst
+direction: it reported PASS while examining nothing.** It collected option names
+from bare `name = value` lines only, so every option assigned inside the
+one-line `if ~exist('x','var'), x = []; end` guard — the dominant idiom in these
+templates, and **all 11 of 11** guarded options in `prep_3a` — recorded zero uses
+and passed unconditionally. It was concealing a real case: `cv_seed_mvpa_reg_cov`
+read by the `tuned_seed` default four lines above its own guard, fatal in any
+model script not setting that option itself. Fixed, with a second control
+(`control_use_before_def_guard.m`) for the guard spelling, and re-run clean
+across every template and study model dir. **The lesson: a positive control per
+*idiom the checker must handle*, not per *failure it was written for* — a checker
+that examines nothing is indistinguishable from a clean result.** `checkcode`
+reports zero messages on both `use_before_def` controls, as before.
 
 These two automate traps 6 and 7 of the ten catalogued in
 `LaBGAS_fMRI_analysis_workflow.md`; the rest still need reading.

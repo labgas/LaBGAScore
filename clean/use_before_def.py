@@ -37,10 +37,21 @@ NAME = re.compile(r'\b([a-z][a-z0-9_]{3,})\b')
 rows = []
 for f in sorted(D.glob('*.m')):
     src = [strip_comment(l) for l in f.read_text(errors='replace').splitlines()]
+    # An option counts as option-ish if it is assigned ANYWHERE in the file. Both
+    # forms must be collected: a bare assignment, AND the name inside a ~exist
+    # guard. The guard form was missed until 2026-10-05, and it is the DOMINANT
+    # one in these templates - in prep_3a all 11 guarded options are assigned
+    # only inside a one-line "if ~exist('x','var'), x = []; end", which does not
+    # match the bare-assignment pattern. Options absent from this set record no
+    # uses at all, so the check silently passed every one of them: on prep_3a it
+    # could only ever return PASS. It missed a live case that way -
+    # cv_seed_mvpa_reg_cov, read by the tuned_seed default four lines above its
+    # own guard.
     assigned = set()
     for l in src:
         m = re.match(r'\s*([a-z][a-z0-9_]{3,})\s*=\s*[^=]', l)
         if m: assigned.add(m.group(1))
+        assigned.update(re.findall(r"~exist\('([a-z][a-z0-9_]{3,})'", l))
     guards = defaultdict(list); defs = defaultdict(list); uses = defaultdict(list)
     for i, l in enumerate(src, 1):
         for g in re.findall(r"~exist\('([a-z][a-z0-9_]{3,})'", l):
@@ -48,6 +59,8 @@ for f in sorted(D.glob('*.m')):
         m = re.match(r'\s*([a-z][a-z0-9_]{3,})\s*=\s*[^=]', l)
         if m: defs[m.group(1)].append(i)
         for n in NAME.findall(l):
+            # "~exist('n'" in l excludes the guard line itself, where the name
+            # appears on both sides of its own default.
             if n in assigned and (not m or n != m.group(1)) and "~exist('%s'" % n not in l:
                 uses[n].append(i)
     for opt in sorted(set(guards)):        # only options that rely on a guard

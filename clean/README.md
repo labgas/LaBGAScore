@@ -45,11 +45,42 @@ This file is an index, and does not repeat it.
 | `use_before_def.py` | an option **read above the line that defines it** | a gate — dies at runtime with *"Unrecognized function or variable"* |
 | `set_after_use.py` | an option **set below the line that already consumed it** | **advisory, not a gate** — legitimate reuse (`savefilename`, `figtitle`) trips it; expect a handful per model and read them |
 
-`checker_positive_controls/` holds one control file per Python checker plus
-`run_controls.sh`, which asserts that each checker flags its own control and
-ignores the other's. **`checkcode` reports zero messages on either control
-file** — measured, not assumed, which is exactly why these exist alongside it.
-If a change to a checker makes its control pass, the checker is broken.
+`checker_positive_controls/` holds `run_controls.sh` plus **three** checker
+control files — two for `use_before_def.py`, one per guard spelling, and one for
+`set_after_use.py`. The runner asserts that each checker flags its own
+control(s) and ignores the other's. (`control_mvpa_reg_cov_permutation.m` also
+lives there but is a different animal: a runnable statistical control for
+`prep_3a`'s permutation block, not a checker control. Both checkers scan it and
+neither should flag it, which is why the runner reports four scripts.) **`checkcode` reports zero messages on any
+control file** — measured, not assumed, which is exactly why these exist
+alongside it. If a change to a checker makes its control pass, the checker is
+broken.
+
+**Why `use_before_def.py` needs two controls.** Until 2026-10-05 it built its
+set of option-ish names from bare `name = value` assignments only. The templates
+overwhelmingly use the one-line guard instead —
+
+```matlab
+if ~exist('x','var'), x = []; end
+```
+
+— whose assignment is not at the start of a line, so those options were never
+recognised as options, recorded **zero uses**, and passed unconditionally. In
+`prep_3a` that was **all 11 of 11** guarded options: the check could only ever
+return PASS, and did. It was hiding a live case — `cv_seed_mvpa_reg_cov`, read
+by the `tuned_seed` default four lines above its own guard, which would have
+died on *"Unrecognized function or variable"* in any model script that did not
+set `cv_seed_mvpa_reg_cov` itself (`a2_set_default_options` always does, which is
+what masked it). The fix adds guard-form names to that set;
+`control_use_before_def_guard.m` is the regression test, and the original
+control covers the three-line spelling, whose assignment the old pattern did
+see. Re-run across every template and study model directory after the fix: no
+other live case.
+
+**The lesson generalises past this checker.** A checker that silently examines
+nothing reports PASS, which is indistinguishable from a clean result and worse
+than no checker at all. A positive control per *idiom the checker must handle*,
+not per *failure it was written for*, is what catches that.
 
 Between them these three cover parse errors and the two ordering failures. They
 do **not** catch undefined variables used at runtime, calls to functions that do
