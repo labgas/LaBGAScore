@@ -284,19 +284,26 @@ function [q, pi0, info] = LaBGAScore_Storey_FDR(p, varargin)
 % estimated from six tests. Prefer 'adaptivefdr' or 'bky' when the panel is
 % small and the question is whether an effect survives correction at all.
 %
-% Two Storey methods are offered here:
+% THE lambda-CURVE METHODS. Two of the Storey methods estimate pi0 from the
+% lambda curve, and BOTH ARE NOW OPT-IN - neither is the default. This block
+% used to open "'sas' (DEFAULT)", which was true until 2026-10-01 and is not
+% any more; see *THE DEFAULT* above, which is authoritative.
 %
-%   'sas' (DEFAULT) - SPLINE first, falling back to the Storey & Tibshirani
-%       BOOTSTRAP on SAS's own trigger, i.e. SAS PROC MULTTEST's PFDR default.
-%       This is the default deliberately: LaBGAS cross-checks analyses against
-%       SAS, and a q-value that cannot be reproduced by PROC MULTTEST is worth
-%       less than a slightly better-estimated one that can.
+%   'sas' - SPLINE first, falling back to the Storey & Tibshirani BOOTSTRAP on
+%       SAS's own trigger, i.e. SAS PROC MULTTEST's PFDR default. It was the
+%       default for one reason: LaBGAS cross-checks analyses against SAS, and a
+%       q-value PROC MULTTEST cannot reproduce is worth less than a
+%       better-estimated one that can. THAT REASON NO LONGER SELECTS IT -
+%       'decreaseslope' is NTRUENULL=DECREASESLOPE in PROC MULTTEST and is
+%       verified against SAS on both validation sets, so it is SAS-reproducible
+%       too, and it controls FDR at small m where the spline does not. Use 'sas'
+%       explicitly only when reproducing a PFDR-default SAS run is the point.
 %   'lambda' - pi0 is the median of Storey's fixed-lambda estimator
 %       pi0(lambda) = #{p > lambda} / (n * (1 - lambda))
 %       over a grid. Not a SAS method; closest to a robustified LAMBDA=.
 %
-% The accuracy cost of that choice is real and is recorded here so nobody has
-% to rediscover it. Simulated at n = 200 with a true pi0 of 0.70, 100 runs:
+% The accuracy cost of the lambda-curve estimators is real and is recorded here
+% so nobody has to rediscover it. Simulated at n = 200, true pi0 = 0.70, 100 runs:
 %
 %   lambda median     bias +0.006   sd 0.039
 %   mafdr spline      bias -0.168   sd 0.171
