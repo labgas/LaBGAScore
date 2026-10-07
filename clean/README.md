@@ -6,7 +6,7 @@ day, and does the chores.
 
 Almost everything is a **function called from elsewhere** rather than a script
 you run by hand — 16 of the 17 `.m` files are functions, the exception being
-`LaBGAScore_smart_parallel_pool_setup.m`. The two `.py` checkers and the two
+`LaBGAScore_smart_parallel_pool_setup.m`. The two `.py` checkers and the three
 `.sh` wrappers are run directly.
 
 **[`README_provenance.md`](README_provenance.md) is authoritative for the
@@ -131,6 +131,55 @@ history, so the overwrite stays reversible.
 | `LaBGAScore_clean_sourcedata.m` | cleans the `sourcedata` subdataset, branching on whether DICOMs are gitignored or annexed |
 | `LaBGAScore_move_repos_matlabpath.m` | moves one repo below another on the MATLAB path and calls `savepath` — for when path order decides which of two same-named functions wins |
 | `LaBGAScore_smart_parallel_pool_setup.m` | sizes a `parpool` to a fraction of available cores (~60%). The one **script** here; called from the second-level scripts before bootstrapping or permutation |
+
+### GitHub authentication, and rotating the PAT
+
+| file | |
+|---|---|
+| `labgascore_rotate_github_pat.sh` | updates every place the GitHub PAT is stored, from one file, **after validating it against the API** so a bad paste cannot replace working credentials with broken ones |
+
+All clones under `/data/master_github_repos` use HTTPS remotes and share one
+PAT, stored in **three** places that must agree — `~/tokens/<file>` (the copy
+you keep), `~/.git-credentials` (`credential.helper=store`, used by git), and
+`~/.config/gh/hosts.yml` (used by `gh`). The script writes the last two from the
+first and verifies with an authenticated `ls-remote`.
+
+**Two things make an expired token hard to recognise.** First, the error names
+the wrong thing:
+
+```
+remote: Invalid username or token. Password authentication is not supported
+fatal: Authentication failed for 'https://github.com/labgas/<repo>.git/'
+```
+
+That appears only *after* git has given up on the stored credential and
+prompted, because `credential.helper=store` **erases** a credential the server
+rejects — so `~/.git-credentials` is left **empty (0 bytes)** and what actually
+failed is the password typed at the prompt, which can never work (GitHub
+removed password auth for git operations in 2021). `gh auth status` names the
+real cause directly: *"The token in ~/.config/gh/hosts.yml is invalid."*
+
+Second, **an expired token breaks reads too**, not just pushes. `~/.gitconfig`
+carries
+
+```
+git config --global 'http.https://github.com/.proactiveAuth' basic
+```
+
+which exists because git sends no credentials when fetching a *public* repo —
+GitHub answers the anonymous request with 200, so git never sees the 401 that
+would make it consult the credential helper, and every fetch went against the
+server's IP-wide anonymous quota, which GitHub began throttling on 2026-09-03.
+(Neither `gh auth login` nor `gh auth setup-git` fixes that: they register a
+helper, and a helper that is never consulted changes nothing. Requires git
+≥ 2.46.) The side effect is that with no valid credential git now *demands* one
+for public repos instead of falling back to anonymous, so headless fetches hang
+or fail rather than quietly working.
+
+**Scopes:** pushing needs only `repo`. `gh` additionally requires `read:org`
+and refuses a classic token without it — which is why the script's `gh` step is
+non-fatal and exits 3 rather than 1: a token that is fine for git should not be
+reported as a total failure. Nothing here needs `admin:org` or `delete_repo`.
 
 ### Reclaiming space with `git annex drop` — five ways it goes wrong
 
