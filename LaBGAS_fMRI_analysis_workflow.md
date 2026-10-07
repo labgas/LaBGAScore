@@ -861,6 +861,35 @@ rm -r work
   - *sourcedata subdataset*: create a new subject-specific subdirectory **within the logfiles subdirectory**, `sourcedata/sub-xxx/logfiles/off_study`, and move (not copy) the log files corresponding to the excluded run(s) there — do NOT move nor delete DICOMs!
   - save the changes to your datalad sub- and superdatasets — see [instructions](http://handbook.datalad.org/en/latest/basics/101-136-filesystem.html#moving-files-from-or-into-subdirectories) about moving files/directories.
 
+**NOTE — run `git annex fix` after the move, but only if the files were already saved.** This
+is the common case at this stage: you have run `datalad save`, so the images are annexed and
+appear in the working tree as **symlinks whose target is a RELATIVE path** into
+`.git/annex/objects`. Moving a file one directory deeper (which every move above does) leaves
+that target pointing one level too high, and the symlink breaks — silently, because `git mv`
+reports success and `git status` shows a clean rename. Repair it from the subdataset root
+before saving:
+
+```bash
+git annex fix <the moved path>      # e.g. git annex fix sub-0190 sub-0383
+```
+
+Measured on `proj_cfs` while moving two subjects into `off_study`: immediately after `git mv`,
+**15 of the 30 files in `BIDS` were broken symlinks**; `git annex fix` rewrote all of them and
+left 0 broken. Exactly the annexed files broke — the `.json` sidecars, which `.gitattributes`
+keeps in git proper rather than the annex, are real files and were unaffected.
+
+**When you do NOT need it:**
+
+- **the data are not saved yet** — freshly converted images that are still untracked are real
+  files, so a plain `mv` is all that is needed. This is often the situation if you exclude a
+  subject or run right after conversion and QC, before the first `datalad save`;
+- **the annexed files are unlocked** (`git annex unlock`, or a v7 adjusted branch) — those are
+  also real files in the working tree, not symlinks, so nothing relative can break.
+
+So the rule of thumb is: **if `ls -l` shows an `l` and a `../../..` target, you need
+`git annex fix` after moving it.** Check with `find <path> -xtype l` — it lists exactly the
+broken symlinks, and should return nothing once you are done.
+
 ## Creating events.tsv files (and a phenotype file)
 
 **Before choosing between the three cases below, check your logfiles.** A task can
