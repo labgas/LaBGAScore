@@ -1775,7 +1775,7 @@ Each study records its own policy in a `CLAUDE.md` at its superdataset root
 |---|---|
 | `proj_discoverie` | BIDS, firstlevel, pipeline complete. `secondlevel`: models 2h–2l + PET only. `derivatives`: PET, smoothed rest, `func/run-N/`, T1w and the `xfm` transforms — the **unsmoothed** preprocessed BOLD (465 GB) stays local-only |
 | `proj_cfs` | all complete except `secondlevel`, which holds only the final models 2b/2c + masks + PET |
-| `proj_moodbugs_wp2` | everything; no selective policy |
+| `proj_moodbugs_wp2` | `derivatives`: `s6` MIST (already gzipped), the `ssub` rest images CONN reads, `anat`, `osprey`, `model_3_basic`. The **unsmoothed** preprocessed BOLD (564 GB), `FilesSPM` and the `dssub` denoised rest images all stay local-only. Other subdatasets complete |
 | `proj_bitter-reward` | the reverse — GIN is the **only** copy of most BIDS/derivatives content, dropped locally |
 | all four | `sourcedata` and `rsfmri` are never on GIN (sourcedata is backed up on a separate KU Leuven server; `rsfmri` has no sibling yet) |
 
