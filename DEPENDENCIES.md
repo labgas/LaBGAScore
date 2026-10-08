@@ -3,7 +3,7 @@
 > **Generated file — do not edit.** Regenerate with
 > `LaBGAScore_dep_report('/data/master_github_repos/LaBGAScore')`
 > (see `clean/LaBGAScore_dep_report.m` in LaBGAScore).
-> Generated 2026-09-29 by MATLAB 2021a.
+> Generated 2026-10-08 by MATLAB 2021a.
 
 This document records which **external** functions each file calls and which
 repository those live in. Calls that resolve back into this repository, and
@@ -49,12 +49,14 @@ than guessed:
 | `LaBGAScore_prov_snapshot` | clean | — | 0 | 1 |
 | `LaBGAScore_run_reports` | clean | — | 0 | 0 |
 | `LaBGAScore_smart_parallel_pool_setup` | clean | — | 0 | 0 |
+| `LaBGAScore_stats_rederive_storey_q` | clean | — | 0 | 0 |
 | `control_mvpa_reg_cov_permutation` | clean | CanlabCore | 3 | 2 |
 | `control_set_after_use` | clean | — | 0 | 0 |
 | `control_use_before_def` | clean | — | 0 | 0 |
+| `control_use_before_def_guard` | clean | — | 0 | 0 |
 | `LaBGAScore_cosmomvpa_searchlight_rsa` | cosmomvpa | CANlab_help_examples, CanlabCore, CoSMoMVPA | 25 | 1 |
 | `LaBGAScore_decoding_SVM_between_subjects` | decoding_toolbox | CANlab_help_examples, CanlabCore, ComBatHarmonization, spm12 | 9 | 1 |
-| `LaBGAScore_decoding_template_xclass_acc` | decoding_toolbox | — | 0 | 1 |
+| `LaBGAScore_decoding_template_xclass_acc` | decoding_toolbox | CANlab_help_examples, CanlabCore, spm12 | 12 | 4 |
 | `LaBGAScore_export_scaled_contrasts` | decoding_toolbox | — | 0 | 0 |
 | `canlabCmap` | figures | — | 0 | 0 |
 | `cluster_surface_plots` | figures | spm12 | 2 | 0 |
@@ -93,15 +95,24 @@ than guessed:
 | `LCN12_smooth` | pet | spm12 | 1 | 0 |
 | `LCN12_write_image` | pet | spm12 | 2 | 2 |
 | `LCN_3Dimage_dilate` | pet | — | 0 | 0 |
+| `LCN_DPA714_analysis_metab` | pet | — | 0 | 1 |
 | `LCN_LOGAN` | pet | — | 0 | 0 |
 | `LCN_calc2_model_2T4k` | pet | — | 0 | 0 |
 | `LCN_calc2_model_2T4k_Vb` | pet | — | 0 | 0 |
+| `LCN_calc_intact_tracer_biexp_con` | pet | — | 0 | 0 |
+| `LCN_calc_intact_tracer_biexp_delay` | pet | — | 0 | 0 |
 | `LCN_calc_intact_tracer_hill` | pet | — | 0 | 0 |
+| `LCN_calc_intact_tracer_monoexp` | pet | — | 0 | 0 |
+| `LCN_calc_intact_tracer_monoexp_con` | pet | — | 0 | 0 |
 | `LCN_calc_model_2T4k_vasc1k` | pet | — | 0 | 0 |
 | `LCN_calc_model_2T4k_vasc2k` | pet | — | 0 | 0 |
 | `LCN_calc_model_selection` | pet | — | 0 | 0 |
 | `LCN_check_filename` | pet | — | 0 | 0 |
+| `LCN_cost_intact_tracer_biexp_con` | pet | — | 0 | 0 |
+| `LCN_cost_intact_tracer_biexp_delay` | pet | — | 0 | 0 |
 | `LCN_cost_intact_tracer_hill` | pet | — | 0 | 0 |
+| `LCN_cost_intact_tracer_monoexp` | pet | — | 0 | 0 |
+| `LCN_cost_intact_tracer_monoexp_con` | pet | — | 0 | 0 |
 | `LCN_string` | pet | — | 0 | 0 |
 | `LaBGAScore_pet_a2_set_default_options` | pet | — | 0 | 0 |
 | `LaBGAScore_pet_a_set_up_paths_always_run_first` | pet | — | 0 | 0 |
@@ -188,12 +199,12 @@ than guessed:
 
 | Repository | Call edges | Distinct functions |
 |---|---:|---:|
-| CanlabCore | 663 | 61 |
-| spm12 | 193 | 30 |
+| CanlabCore | 669 | 62 |
+| spm12 | 202 | 32 |
 | ooFmriDataObjML | 18 | 11 |
 | osprey | 16 | 8 |
 | CoSMoMVPA | 15 | 15 |
-| CANlab_help_examples | 11 | 2 |
+| CANlab_help_examples | 12 | 2 |
 | CanlabPrivate | 6 | 2 |
 | canlab_single_trials | 4 | 2 |
 | ComBatHarmonization | 2 | 1 |
@@ -334,6 +345,12 @@ No external dependencies.
 
 No external dependencies.
 
+### `LaBGAScore_stats_rederive_storey_q`
+
+`clean/LaBGAScore_stats_rederive_storey_q.m`
+
+No external dependencies.
+
 ### `control_mvpa_reg_cov_permutation`
 
 `clean/checker_positive_controls/control_mvpa_reg_cov_permutation.m`
@@ -353,6 +370,12 @@ No external dependencies.
 ### `control_use_before_def`
 
 `clean/checker_positive_controls/control_use_before_def.m`
+
+No external dependencies.
+
+### `control_use_before_def_guard`
+
+`clean/checker_positive_controls/control_use_before_def_guard.m`
 
 No external dependencies.
 
@@ -423,7 +446,26 @@ No external dependencies.
 
 `decoding_toolbox/LaBGAScore_decoding_template_xclass_acc.m`
 
-No external dependencies.
+**CANlab_help_examples**
+
+- `a_set_up_paths_always_run_first`
+
+**CanlabCore**
+
+- `confusion_matrix` *(@predictive_model)* — `dotcall`, 2 candidates
+- `fmri_data` *(@fmri_data)*
+- `fmri_mask_image` *(@fmri_mask_image)*
+- `resample_space` *(@image_vector)* — `ambiguous_within_repo`, 2 candidates
+
+**spm12**
+
+- `decoding`
+- `decoding_defaults`
+- `decoding_describe_data`
+- `design_from_spm`
+- `dim` *(@file_array)* — `dotcall`, 2 candidates
+- `make_design_cv`
+- `spm_vol` — `ambiguous_within_repo`, 2 candidates
 
 ### `LaBGAScore_export_scaled_contrasts`
 
@@ -830,6 +872,12 @@ No external dependencies.
 
 No external dependencies.
 
+### `LCN_DPA714_analysis_metab`
+
+`pet/scripts/LCN_DPA714_analysis_metab.m`
+
+No external dependencies.
+
 ### `LCN_LOGAN`
 
 `pet/functions/LCN_LOGAN.m`
@@ -848,9 +896,33 @@ No external dependencies.
 
 No external dependencies.
 
+### `LCN_calc_intact_tracer_biexp_con`
+
+`pet/functions/LCN_calc_intact_tracer_biexp_con.m`
+
+No external dependencies.
+
+### `LCN_calc_intact_tracer_biexp_delay`
+
+`pet/functions/LCN_calc_intact_tracer_biexp_delay.m`
+
+No external dependencies.
+
 ### `LCN_calc_intact_tracer_hill`
 
 `pet/functions/LCN_calc_intact_tracer_hill.m`
+
+No external dependencies.
+
+### `LCN_calc_intact_tracer_monoexp`
+
+`pet/functions/LCN_calc_intact_tracer_monoexp.m`
+
+No external dependencies.
+
+### `LCN_calc_intact_tracer_monoexp_con`
+
+`pet/functions/LCN_calc_intact_tracer_monoexp_con.m`
 
 No external dependencies.
 
@@ -878,9 +950,33 @@ No external dependencies.
 
 No external dependencies.
 
+### `LCN_cost_intact_tracer_biexp_con`
+
+`pet/functions/LCN_cost_intact_tracer_biexp_con.m`
+
+No external dependencies.
+
+### `LCN_cost_intact_tracer_biexp_delay`
+
+`pet/functions/LCN_cost_intact_tracer_biexp_delay.m`
+
+No external dependencies.
+
 ### `LCN_cost_intact_tracer_hill`
 
 `pet/functions/LCN_cost_intact_tracer_hill.m`
+
+No external dependencies.
+
+### `LCN_cost_intact_tracer_monoexp`
+
+`pet/functions/LCN_cost_intact_tracer_monoexp.m`
+
+No external dependencies.
+
+### `LCN_cost_intact_tracer_monoexp_con`
+
+`pet/functions/LCN_cost_intact_tracer_monoexp_con.m`
 
 No external dependencies.
 

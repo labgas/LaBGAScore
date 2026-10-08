@@ -10,7 +10,7 @@ Not everything here is MATLAB: `stats_tools/sas_macros/` holds SAS macros (`.sas
 
 ## Dependencies (not vendored)
 
-Most workflows require **CANlabCore** and **SPM12** on the MATLAB path. Some domain folders assume their own external toolbox, also not vendored: `cosmomvpa/` → CoSMoMVPA, `decoding_toolbox/` → The Decoding Toolbox (TDT), `graphvar/` → GraphVar, `juspace/` → JuSpace, `mrs/` → Osprey, `stats_tools/sas_macros/` → SAS with SAS/STAT (no MATLAB involved). Exception: `pet/functions/LCN_*.m` are legacy KU Leuven PET-processing functions vendored directly into the repo. No package manager/manifest.
+Most workflows require **CANlabCore** and **SPM12** on the MATLAB path. Some domain folders assume their own external toolbox, also not vendored: `cosmomvpa/` → CoSMoMVPA, `decoding_toolbox/` → The Decoding Toolbox (TDT), `graphvar/` → GraphVar, `juspace/` → JuSpace, `mrs/` → Osprey, `stats_tools/sas_macros/` → SAS with SAS/STAT (no MATLAB involved). Exception: `pet/functions/LCN_*.m` are legacy KU Leuven PET-processing functions vendored directly into the repo. No package manager/manifest. **`pet/` is the one substantial domain with no README.** On 2026-10-08 nine DPA714 metabolite-model files were adopted from `proj_cfs/code/pet/tmp`, where they were the only copy anywhere (`751c791`): `LCN_DPA714_analysis_metab.m` plus the four `LCN_{calc,cost}_intact_tracer_{mono,bi}exp[_con|_delay]` pairs, which compare alternative parent-fraction models against the Hill model the TSPO pipeline actually uses. That script is **unadapted legacy** - hardcoded `C:\DATA` paths, `xlswrite`, a hardcoded subject list - and says so in a prepended note.
 
 ## Repository structure
 
@@ -173,41 +173,94 @@ second-level record from 1639 rows to 552 and removed BrainSpace, gift, cocoanCO
 ExploreASL and others that nothing here calls. See `clean/README_provenance.md` — do not
 relax these without re-checking the negative controls documented there.
 
-**State as of 2026-10-01** (re-measured; the 2026-09-23 figures this table used to
-carry were stale in every row, and understated what is committed by a wide margin):
-the retrospective has been run over `proj_cfs` and `proj_discoverie`, second and
-first level, and **all four subdatasets are now committed**.
+**Per-project state now lives with each project.** Every study superdataset has
+its own `CLAUDE.md` at the root, written 2026-10-08, carrying the measured
+subdataset table, the model inventory, what belongs on GIN, and the open items:
 
-| dataset | tracked | untracked | untracked sits where |
-|---|---|---|---|
-| `proj_discoverie/secondlevel` | **688** | 702 | entirely inside the untracked `model_2a`–`model_2g` dirs |
-| `proj_discoverie/firstlevel` | **220** | 0 | — |
-| `proj_cfs/secondlevel` | **170** | 83 | 47 in models 6/7/9/10/11, 36 inside untracked `model_1a` |
-| `proj_cfs/firstlevel` | **250** | 0 | — |
+| project | path |
+|---|---|
+| DISCOVERIE | `/data/proj_discoverie/CLAUDE.md` |
+| CFS | `/data/proj_cfs/CLAUDE.md` |
+| MOODBUGS WP2 | `/data/proj_moodbugs/proj_moodbugs_wp2/CLAUDE.md` (note the nested path) |
+| bitter-reward | `/data/proj_bitter-reward/CLAUDE.md` |
 
-The two firstlevel subdatasets are fully committed. The untracked remainder in the
-two secondlevel ones is **not a pending commit** — it is provenance belonging to
-model directories that are themselves deliberately untracked:
+**Read the project's own `CLAUDE.md` before touching its data.** Two of the four
+run a deliberate selective-backup policy — `proj_cfs/secondlevel` holds only the
+final models on GIN, and `proj_discoverie/derivatives` deliberately keeps 464.82
+GB of unsmoothed preprocessed BOLD **local-only** — so content missing from GIN
+there is a decision, not a defect, and `datalad push` would undo it. The reverse
+also holds: in `proj_bitter-reward`, GIN is the *only* copy of most `BIDS` and
+`derivatives` content, which is dropped locally.
 
-- `proj_discoverie/secondlevel`: all 702 sit inside `model_2a`–`model_2g`, the
-  ~123 GB of centre-harmonisation comparison runs superseded by `model_2h`. The
-  record of why `model_2h` won is tracked as
-  `README_centre_harmonisation_model_selection.md`; the runs themselves are not
-  meant for GIN.
-- `proj_cfs/secondlevel`: 36 sit inside the untracked `model_1a_casecontrol_glm`
-  (7.6 GB, work in progress). The other **47 are a genuine gap** — models
-  `model_6`/`7`/`9`/`10`/`11` are tracked models whose sidecars were never
-  committed, because `c898950` deliberately scoped the provenance commit to
-  "model_2b and model_2c, the current final models" and `86a801c` removed the
-  superseded ones. Committing them is cheap (628 KB) but reverses that scoping
-  decision, so it is a choice, not an oversight to fix.
+**Re-derive counts rather than trusting them** — `git ls-files | grep -c provenance`
+against `git status --porcelain | grep -c provenance` in each subdataset — since they
+move whenever someone runs a `datalad save`. One trap in that second command: an
+untracked *directory* collapses to a single porcelain line, so it can report 0 where
+the file-level count is in the hundreds. Walk the untracked directories to get the
+real number.
 
-**Re-derive these counts rather than trusting them** — `git ls-files | grep -c provenance`
-against `git status --porcelain | grep -c provenance` in each subdataset — since they move
-whenever someone runs a `datalad save`. One trap in that second command: an untracked
-*directory* collapses to a single porcelain line, so it reports 0 for
-`proj_discoverie/secondlevel` and 37 for `proj_cfs/secondlevel` where the file-level
-counts are 702 and 83. Walk the untracked directories to get the real number.
+## Working with git-annex and GIN
+
+The operational detail is in **`clean/README.md`, "Reclaiming space with
+`git annex drop` — nine ways it goes wrong"**. The five that matter most before
+you touch a remote:
+
+- **Diff the key sets before any drop.** Annex deduplicates by content, so
+  dropping via one model's path can remove a key a *kept* model still needs.
+  Local copies protect the dropped model, not the kept ones. This recurred on
+  2026-10-08 and cost 49 files in `proj_discoverie/secondlevel`.
+- **`datalad push` re-uploads a selective drop of tracked content.** For *unused*
+  keys a push moves nothing and is the right way to publish the location log; for
+  tracked content it restores exactly what you dropped. Publish refs only:
+  `git push <ssh-url> master:master git-annex:git-annex`.
+- **`git annex unused` counts the whole branch history** and so understates — 83.90
+  GB against 500.71 GB on one subdataset. Use
+  `--used-refspec='+refs/heads/master'` (the `+` is required), and never run
+  another `unused` between the scan and the `dropunused`, because each run
+  rewrites the numbering.
+- **`git annex unused --from gin`** finds orphans that were never local and are
+  invisible to any local scan — 138.18 GB in one subdataset.
+- **The `gin` fetch URL is https while push is ssh** in most subdatasets, so any
+  *read* from GIN hangs on a credential prompt with no error, and every
+  `gin/master` remote-tracking ref is stale. Get the real tip with
+  `git ls-remote "$(git remote get-url --push gin)" refs/heads/master`.
+
+Verify remote content with `git annex checkpresentkey <key> gin`, which signals
+through its exit status (0 present, 1 absent) and prints nothing — a directory
+still appearing in GIN's listing only means the ~140-byte symlinks are tracked.
+
+**`git annex fix` after moving annexed files** — annex symlinks are relative, so a
+move to a different depth breaks them. See `LaBGAS_fMRI_analysis_workflow.md`,
+the `off_study` section. `find <path> -xtype l` lists the casualties.
+
+**Never `datalad save` a live analysis tree**: saving makes results read-only
+symlinks, which kills a running MATLAB job mid-write.
+
+**`sourcedata` is backed up on a separate KU Leuven server, not GIN** — it holds
+identifiable DICOMs. A `sourcedata` reading 0 GB on GIN is correct; never propose
+pushing it. Its local subject directories may legitimately be empty skeletons, and
+its DICOMs are often not named `*.dcm` (some use DICOM-UID filenames like `.98`),
+so count files rather than filtering on extension.
+
+**Study `.m` files are latin-1 encoded.** Shell `grep` silently returns nothing on
+them — read them with Python and an explicit `encoding='latin-1'`. Never write
+latin-1 bytes into a `.md`.
+
+**Exercise a template fix in a real run before committing it.** A single-subject
+run is enough and has repeatedly caught what reading could not.
+
+## GitHub authentication
+
+`clean/labgascore_rotate_github_pat.sh <token-file>` updates every place the PAT
+lives, after validating it against the API so a typo cannot replace working
+credentials with broken ones. Detail in `clean/README.md`, "GitHub authentication,
+and rotating the PAT". Two traps: an expired token reports *"Invalid username or
+token. Password authentication is not supported"*, which is about the interactive
+prompt rather than the real cause — the real diagnostic is `~/.git-credentials`
+sitting at **0 bytes**, because `credential.helper=store` erases a rejected
+credential. And because `http.<host>.proactiveAuth` is set, an expired token
+breaks **reads** too, so public-repo fetches fail instead of falling back to
+anonymous. GIN is unaffected: separate PAT, ssh remotes.
 
 ## Running scripts and publishing reports
 

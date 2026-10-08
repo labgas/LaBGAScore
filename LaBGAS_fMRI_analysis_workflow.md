@@ -1763,6 +1763,54 @@ This process is nicely described [here](https://handbook.datalad.org/en/latest/b
 
 As is clear from the [Datalad handbook](https://handbook.datalad.org/en/latest/basics/101-136-filesystem.html#removing-annexed-content-entirely) and the [`datalad drop` man page](https://docs.datalad.org/en/stable/generated/man/datalad-drop.html), you can choose to drop the entire subdataset, or selected files only.
 
+##### 7. What belongs on GIN, per study — and the traps when reclaiming space
+
+Not every study pushes everything. Three of the four current studies run a
+**deliberate selective-backup policy**, so content missing from GIN is a decision
+rather than a defect, and "fixing" it with `datalad push` undoes the decision.
+Each study records its own policy in a `CLAUDE.md` at its superdataset root
+(`/data/proj_discoverie/CLAUDE.md` and so on) — read that before touching its data.
+
+| study | the short version |
+|---|---|
+| `proj_discoverie` | BIDS, firstlevel, pipeline complete. `secondlevel`: models 2h–2l + PET only. `derivatives`: PET, smoothed rest, `func/run-N/`, T1w and the `xfm` transforms — the **unsmoothed** preprocessed BOLD (465 GB) stays local-only |
+| `proj_cfs` | all complete except `secondlevel`, which holds only the final models 2b/2c + masks + PET |
+| `proj_moodbugs_wp2` | everything; no selective policy |
+| `proj_bitter-reward` | the reverse — GIN is the **only** copy of most BIDS/derivatives content, dropped locally |
+| all four | `sourcedata` and `rsfmri` are never on GIN (sourcedata is backed up on a separate KU Leuven server; `rsfmri` has no sibling yet) |
+
+Six things that cost real time when reclaiming space. Full detail, with measured
+examples, in [`clean/README.md`](https://github.com/labgas/LaBGAScore/blob/main/clean/README.md),
+"Reclaiming space with `git annex drop` — nine ways it goes wrong":
+
+1. **Diff the key sets before dropping anything.** git-annex stores one copy per
+   *content*, so two models holding an identical file share a key, and dropping
+   via one model's path removes it from the other too. Having a local copy
+   protects the model you are dropping, not the ones you are keeping.
+2. **After a selective drop, push refs only** —
+   `git push <ssh-url> master:master git-annex:git-annex`. A plain
+   `datalad push` makes the sibling hold everything the tree references, so it
+   re-uploads what you just dropped. (For *unused* content a `datalad push` is
+   fine and is the right way to publish the location log.)
+3. **`git annex unused` understates**, because it counts the whole branch history.
+   `git annex unused --used-refspec='+refs/heads/master'` counts only the tip; on
+   one subdataset that was the difference between 84 GB and 501 GB. The `+` prefix
+   is required.
+4. **Content that was never local is invisible to a local scan** — use
+   `git annex unused --from gin` to find orphans sitting only on the remote.
+5. **A directory still listed on GIN does not mean its content is there.** The
+   tree tracks ~140-byte symlinks. Ask the remote:
+   `git annex checkpresentkey <key> gin` (exit 0 present, 1 absent; it prints
+   nothing).
+6. **`git annex fix` after moving annexed files**, and never `datalad save` a tree
+   with a running MATLAB job — saving makes results read-only mid-write.
+
+One configuration wart to know about: in most subdatasets the `gin` remote's
+**fetch** URL is https while its **push** URL is ssh. Pushing works, but anything
+that *reads* from GIN hangs on a username prompt that never appears, and
+`gin/master` remote-tracking refs are stale as a result. Get the real remote tip
+with `git ls-remote "$(git remote get-url --push gin)" refs/heads/master`.
+
 #### Manual approach — DEPRECATED
 
 ##### 1. Create an SSH key pair and a personal access token for authentication

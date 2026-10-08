@@ -181,7 +181,7 @@ and refuses a classic token without it — which is why the script's `gh` step i
 non-fatal and exits 3 rather than 1: a token that is fine for git should not be
 reported as a total failure. Nothing here needs `admin:org` or `delete_repo`.
 
-### Reclaiming space with `git annex drop` — five ways it goes wrong
+### Reclaiming space with `git annex drop` — nine ways it goes wrong
 
 None of this is in the DataLad docs in one place, and all five have cost real
 time on this server. Measured examples are from `proj_bitter-reward`, 2026-10-02.
@@ -258,7 +258,7 @@ nothing in the tree changed — just:
 datalad push --to gin      # transfers no content, only the log commits
 ```
 
-A worked sequence that gets all five right:
+A worked sequence that gets the first five right:
 
 ```bash
 cd <subdataset>
@@ -275,6 +275,127 @@ Verify afterwards that nothing still needed was taken — this should print 0:
 ```bash
 git annex find --not --in gin | wc -l
 ```
+
+The five above all concern **unused** keys — content no longer referenced by the
+tree. The next four were found on 2026-10-08 while reclaiming ~1.1 TB across
+`proj_cfs` and `proj_discoverie`, and three of them only bite once you start
+dropping content that is **still tracked**.
+
+**6. Dropping tracked content is a different operation, and there `datalad push`
+DOES undo it.** Step 5 above is safe for unused keys precisely because nothing in
+the tree references them, so the push moves no content. But a *selective* drop —
+keeping a model's files in the tree while removing their content from the remote
+— is the opposite case: `datalad push` exists to make the sibling hold everything
+the tree references, so it re-uploads exactly what you just dropped. Measured on
+`proj_cfs/secondlevel`: 6.24 GB dropped from five tracked models, then a
+`datalad push --to gin` intended only to sync the location log began restoring it
+and was cut off by a 2-minute timeout, leaving models 6/10/11 fully back and
+model_7 half back — a partial-transfer fingerprint, not a bookkeeping glitch.
+After a selective drop of **tracked** content, publish refs only:
+
+```bash
+git push git@gin.g-node.org:/labgas/<repo>.git master:master git-annex:git-annex
+```
+
+That carries the location log and no content. Verify against the remote itself
+rather than the log: `git annex checkpresentkey <key> gin` queries it directly and
+signals through its **exit status** (0 present, 1 absent) while printing nothing,
+so capture `$?`.
+
+**7. `git annex unused` counts the branch's whole history, so it understates
+badly.** A version superseded in place is still reachable from the commit that
+held it, and `unused` therefore calls it used. To count only the branch tip:
+
+```bash
+git annex unused --used-refspec='+refs/heads/master'
+```
+
+On `proj_discoverie/derivatives` the default reported **18801 keys / 83.90 GB**;
+the tips-only form reported **22504 keys / 500.71 GB**. The 416.80 GB difference
+was almost entirely 431 unzipped `s6-*task-MIST*.nii` images superseded in place
+by their `.nii.gz` twins. The refspec needs a `+`/`-` prefix — `--used-refspec='HEAD'`
+errors with *"bad refspec item"*, which reads like nothing to do.
+
+Dropping that extra set means old commits can no longer be checked out **with
+content**; the current tree is untouched. Decide that deliberately.
+
+**Every `unused` run rewrites `.git/annex/unused`, which is the numbering
+`dropunused` consumes.** Run the default scan between a tips-only scan and the
+drop and `dropunused 1-22504` silently addresses a different, smaller set. Re-run
+the exact scan you intend to drop from, immediately before dropping, and do not
+interleave another.
+
+**8. A local unused list cannot see keys that were never local.** `git annex
+unused` examines the local object store, so content that only ever existed on the
+remote is invisible to it. Scan the remote instead:
+
+```bash
+git annex unused --from gin
+```
+
+This found **138.18 GB** in `proj_discoverie/firstlevel` (the whole
+`model_1_basic` first-level output, long since removed from the tree) and
+**55.23 GB** in `derivatives`, neither of which appeared in any local list. Such
+keys are single-copy by definition, so dropping them needs `--force` and is
+permanent — diff against the current tree first:
+
+```bash
+git annex unused --from gin | awk '/^ +[0-9]+ +[A-Z]/{print $2}' | sort -u > /tmp/u.txt
+git annex find --format='${key}\n' | sort -u > /tmp/cur.txt
+comm -12 /tmp/cur.txt /tmp/u.txt | wc -l        # must be 0
+```
+
+**9. The `gin` remote's fetch URL is https while its push URL is ssh.** In 14 of
+18 subdatasets across `proj_cfs` and `proj_discoverie`. Push works; anything that
+**reads** from GIN blocks forever on a username prompt that never arrives, with
+no error. This stalled a `git annex drop` in `proj_discoverie/firstlevel` for 68
+minutes at zero I/O, on paths that did not even exist. Two consequences: address
+GIN by its ssh URL explicitly, and treat every `gin/master` remote-tracking ref as
+stale — `git rev-list --count gin/master..HEAD` is then meaningless. Get the real
+tip with:
+
+```bash
+git ls-remote "$(git remote get-url --push gin)" refs/heads/master
+```
+
+#### Telling a re-gzip from a real result
+
+Two places in this workflow produce a file that differs from its recorded key
+while containing the same data, and both look like new output:
+
+- **A typechange whose size matches the committed key exactly but whose md5
+  differs** is a recompression. Only the gzip header's embedded mtime changed. 38
+  such `s6-*rest*.nii.gz` files (53.65 GB) turned up in
+  `proj_discoverie/derivatives`; saving them would have added 53.65 GB of
+  duplicate content locally and the same again to the push backlog. `git checkout`
+  restored the symlinks instead. Confirm by comparing **decompressed** md5s before
+  deciding.
+- **A `.nii` orphan alongside a tracked `.nii.gz`**: because annex keys are
+  `MD5E-s<size>--<md5>` — size plus MD5 of the content — you can derive the key
+  the unzipped twin *would* have and look it up directly:
+
+```bash
+sz=$(gunzip -c file.nii.gz | wc -c); md5=$(gunzip -c file.nii.gz | md5sum | cut -d' ' -f1)
+grep -F "MD5E-s${sz}--${md5}.nii" /tmp/unused_list.txt
+```
+
+A hit proves `gunzip` reproduces the orphan bit-for-bit. This replaced
+`git annex whereused`, which managed 88 of 19238 keys in several minutes and had
+to be abandoned.
+
+#### One more on #3, because it recurred
+
+The key-set diff in #3 is needed on **every** drop, including ones that look safe
+because the dropped paths all have local copies — local copies protect the
+*dropped* model, not the *kept* ones. Skipped on `proj_discoverie/secondlevel`, a
+13.75 GB drop of models 20–30 removed **9 keys shared with the kept models**: the
+per-ROI mask files (`Amyg_L.nii`, `aINS_R.nii`, `Tha_L.nii` …) are byte-identical
+across model directories and so share one key. 49 files in `model_2h`–`model_2l`
+became unavailable on GIN; found by re-running `--not --in=gin` on the kept models
+afterwards, repaired by copying the 9 keys back. Note that after such a repair the
+restored keys show up under the dropped models' paths too — one key serves every
+path that references it, so that is not a failed drop.
+
 
 ## Conventions
 
