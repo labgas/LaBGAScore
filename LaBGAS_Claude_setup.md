@@ -103,6 +103,10 @@ from everyone else logged into the same server.
    identical, only the `setupAgenticToolkit("install")` step needs to be run from MATLAB on
    the server rather than on Windows.
 
+Every session you start under `/data` automatically loads `/data/CLAUDE.md`, a symlink to
+[`LaBGAS_session_start.md`](LaBGAS_session_start.md): which docs Claude reads first, and
+how it works with you. Change it there, not per user.
+
 You're operational once `which claude` resolves, `claude` starts without prompting you to
 log in again, and you can open a chat from inside a LaBGAS repo directory.
 
