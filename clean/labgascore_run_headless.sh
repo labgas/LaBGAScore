@@ -1,10 +1,10 @@
 #!/bin/bash
 #
-# labgascore_run_headless.sh -- publish LaBGAS analysis reports without a display
+# /data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -- publish LaBGAS analysis reports without a display
 #
 # USAGE
 #
-#   labgascore_run_headless.sh -d <projdir> -s <setup_script> <script> [<script> ...]
+#   /data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d <projdir> -s <setup_script> <script> [<script> ...]
 #
 #   ALL OPTIONS MUST COME BEFORE THE SCRIPT NAMES. Anything after the first
 #   script name is treated as another script.
@@ -34,12 +34,12 @@
 # EXAMPLES
 #
 #   # one script
-#   labgascore_run_headless.sh -d /data/proj_xxx \
+#   /data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d /data/proj_xxx \
 #       -s proj_secondlevel_m1_s0_a_set_up_paths_always_run_first \
 #       proj_secondlevel_m1_s4_prep_2_load_image_data_and_save
 #
 #   # a whole chain, with artefact checks
-#   labgascore_run_headless.sh -d /data/proj_xxx \
+#   /data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d /data/proj_xxx \
 #       -s proj_secondlevel_m1_s0_a_set_up_paths_always_run_first \
 #       -s proj_secondlevel_m1_s2_prep_1_set_conditions_contrasts \
 #       -s proj_secondlevel_m1_s3_prep_1b_behavioral_data \
@@ -49,7 +49,7 @@
 #       proj_secondlevel_m1_s6_prep_3a_run_second_level_regression
 #
 #   # long chain in the background, survives logout
-#   setsid nohup labgascore_run_headless.sh -d /data/proj_xxx -s ... > run.log 2>&1 < /dev/null &
+#   setsid nohup /data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d /data/proj_xxx -s ... > run.log 2>&1 < /dev/null &
 #
 # WHY THE MATLAB INVOCATION LOOKS LIKE THIS
 #
