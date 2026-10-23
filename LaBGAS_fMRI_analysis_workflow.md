@@ -44,8 +44,19 @@ Note what headless does **not** cost you: **figure size is not capped by the vir
 
 Use the wrapper in `LaBGAScore/clean`:
 
+The examples use the wrapper's full path, which works as pasted. To type just
+`labgascore_run_headless.sh`, put its folder on your `PATH` once, in `~/.bashrc`,
+then open a new shell:
+
 ```bash
-labgascore_run_headless.sh -d /data/proj_xxx \
+export PATH="/data/master_github_repos/LaBGAScore/clean:$PATH"
+```
+
+Without that, the short name fails with `command not found`.
+
+
+```bash
+/data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d /data/proj_xxx \
     -s proj_secondlevel_m1_s0_a_set_up_paths_always_run_first \
     proj_secondlevel_m1_s4_prep_2_load_image_data_and_save
 ```
@@ -53,7 +64,7 @@ labgascore_run_headless.sh -d /data/proj_xxx \
 A whole chain, checking that each script actually wrote its results, and left running after you log out:
 
 ```bash
-setsid nohup labgascore_run_headless.sh -d /data/proj_xxx \
+setsid nohup /data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d /data/proj_xxx \
     -p /data/master_github_repos/LaBGAScore \
     -p /data/proj_xxx/code \
     -s proj_secondlevel_m1_s0_a_set_up_paths_always_run_first \
@@ -68,7 +79,7 @@ setsid nohup labgascore_run_headless.sh -d /data/proj_xxx \
 - `-d` is **required** and must be the superdataset root: `prep_s0_define_directories` derives every path from `pwd`, so running from elsewhere silently points the analysis at the wrong tree.
 - `-s` runs your setup scripts in order; at least one must define `htmlsavedir`. Repeat it for `prep_1`, `prep_1b`, and so on.
 - `-a` gives the expected output of the correspondingly numbered script (`-` where there is nothing to check). See "Why the artefact check matters" below.
-- `-p` / `-P` put things on the MATLAB path if your `startup.m` does not already (`-P` prepends without `genpath`, which is what SPM12 wants).
+- `-p` / `-P` put things on the MATLAB path if your `startup.m` does not already (`-P` prepends without `genpath`, which is what SPM12 wants). Typically `-P /opt/KUL_apps/spm12` plus one `-p` each for CanlabCore, LaBGAScore, the CANlab_help_examples fork and your study's `code` subdataset; a missing one shows up as `Unrecognized function or variable` in the report.
 - **All options must come before the script names.** Anything after the first script name is treated as another script; the wrapper refuses obvious mistakes rather than running the wrong thing.
 - `-h` prints the full option list.
 
@@ -1223,7 +1234,7 @@ ery_4a_firstlevel_m1_s2_fit_model
 Or headless from the Linux command line, which is the default for second level and works equally well here — first-level fits take hours, and this survives logout ([step 2a](#2a-running-headless)):
 
 ```bash
-setsid nohup labgascore_run_headless.sh -d /data/proj_erythritol/proj_erythritol_4a \
+setsid nohup /data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d /data/proj_erythritol/proj_erythritol_4a \
     -s ery_4a_firstlevel_m1_s1_options_dsgn_struct \
     ery_4a_firstlevel_m1_s2_fit_model \
     > firstlevel.log 2>&1 < /dev/null &
@@ -1661,7 +1672,7 @@ If the script produces any output, perform a manual `datalad save` to the releva
 See [step 2a](#2a-running-headless) for the full option list. One script:
 
 ```bash
-labgascore_run_headless.sh -d /data/proj_<yourstudy> \
+/data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d /data/proj_<yourstudy> \
     -s <projname>_secondlevel_m<M>_s0_a_set_up_paths_always_run_first \
     <projname>_secondlevel_m<M>_s<N>_<scriptname>
 ```
@@ -1669,7 +1680,7 @@ labgascore_run_headless.sh -d /data/proj_<yourstudy> \
 A whole chain, asserting that each script wrote its results, surviving logout:
 
 ```bash
-setsid nohup labgascore_run_headless.sh -d /data/proj_<yourstudy> \
+setsid nohup /data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d /data/proj_<yourstudy> \
     -s <projname>_secondlevel_m<M>_s0_a_set_up_paths_always_run_first \
     -s <projname>_secondlevel_m<M>_s2_prep_1_set_conditions_contrasts \
     -s <projname>_secondlevel_m<M>_s3_prep_1b_behavioral_data \

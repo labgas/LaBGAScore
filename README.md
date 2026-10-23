@@ -175,14 +175,16 @@ In short: LaBGAScore owns study setup, first-level modeling, atlas/mask generati
 display, using the wrapper in `clean/`:
 
 ```bash
-labgascore_run_headless.sh -d /data/proj_xxx \
+/data/master_github_repos/LaBGAScore/clean/labgascore_run_headless.sh -d /data/proj_xxx \
     -s proj_secondlevel_m1_s0_a_set_up_paths_always_run_first \
     -a data_objects.mat \
     proj_secondlevel_m1_s4_prep_2_load_image_data_and_save
 ```
 
 Prepend `setsid nohup ... > run.log 2>&1 < /dev/null &` for long chains, which then survive
-logout. `-h` prints the full option list. Run interactively in X2go instead only when you
+logout. `-h` prints the full option list. The full path works as pasted; to use the
+short name, add `/data/master_github_repos/LaBGAScore/clean` to your `PATH` in
+`~/.bashrc` (otherwise: `command not found`). Run interactively in X2go instead only when you
 want higher-resolution figures (72 dpi headless against 96–144 dpi in a graphical session)
 or are debugging. Figure *size* is not limited headless: without a display `publish` prints
 figures rather than capturing them from the screen.
