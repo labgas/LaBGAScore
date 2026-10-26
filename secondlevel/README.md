@@ -113,11 +113,13 @@ Those two compounded: clipping at 7.0345 on a 2·ln scale caps reported evidence
 at BF10 ≈ 34, so an unclipped peak of 39591 printed as 7.03. **Converting a
 stored value: `BF10 = exp(v/2)`, never `exp(v)`.**
 
-### PDM (3 files)
+### PDM (2 files)
 
-`LaBGAScore_pdm_report` and `LaBGAScore_pdm_report_image` in `functions/`, plus
-`LaBGAScore_pdm_regenerate_reports.m` at the top level for rebuilding reports
-from existing results.
+`LaBGAScore_pdm_report` and `LaBGAScore_pdm_report_image` in `functions/`. The
+latter reports from an already-written `PDM*.nii`, so a report can be rebuilt
+from existing results without refitting the bootstrap. (A top-level
+`LaBGAScore_pdm_regenerate_reports.m`, which did that for a hardcoded list of
+since-deleted models, was removed on 2026-10-26; it is in git history.)
 
 ## `scripts/`
 
