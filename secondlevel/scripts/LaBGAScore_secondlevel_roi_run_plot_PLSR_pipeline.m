@@ -276,6 +276,14 @@ T1_downsample = fullfile(maskdir,'fmriprep20_template_downsample.nii');
 % OUTPUT DIRECTORY
 
 pipeline_resultsdir = fullfile(resultsdir,'pls_enet_pipeline');
+if ~isempty(results_suffix)
+    % One subfolder per feature set. Without it, every run in a model shares
+    % pls_enet_pipeline/ and the last run silently overwrites the others' .mat
+    % files, maps and figures - found in proj_discoverie model_2h, where two-site
+    % runs overwrote the reported KUL-only PLS-DA/ENet results. With the default
+    % results_suffix = '' the path is unchanged.
+    pipeline_resultsdir = fullfile(pipeline_resultsdir, results_suffix);
+end
 
     if ~exist(pipeline_resultsdir,'dir')
         mkdir(pipeline_resultsdir);
