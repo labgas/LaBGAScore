@@ -233,6 +233,14 @@ still appearing in GIN's listing only means the ~140-byte symlinks are tracked.
 move to a different depth breaks them. See `LaBGAS_fMRI_analysis_workflow.md`,
 the `off_study` section. `find <path> -xtype l` lists the casualties.
 
+**Never annex files a CONN project reads or writes** — unzipped anat/probseg
+`.nii`, CONN's `esub-*` masks, `dssub-*` and the `*.QC_*.mat` sidecars in
+`derivatives` — until the CONN analysis is signed off. Annexing makes them read-only
+symlinks, which can break a CONN re-run; CONN can still *read* through a symlink,
+which is why the `ssub-*` rest images are annexed deliberately in `proj_cfs` and
+`proj_moodbugs_wp2`. Check the CONN project's `CONN_x.Setup` file lists
+(`rsfmri/conn_*.mat`) before tracking anything in `derivatives`.
+
 **Never `datalad save` a live analysis tree**: saving makes results read-only
 symlinks, which kills a running MATLAB job mid-write.
 

@@ -35,4 +35,9 @@ Numbers in these docs are dated measurements. Re-derive them before relying on t
 3. Never delete files, drop annexed content or push to GIN without explicit approval.
    Read the project `CLAUDE.md` on its GIN policy first: content missing from GIN is
    often missing by decision.
-4. Be concise.
+4. Never annex files a CONN project reads or writes (unzipped anat/probseg `.nii`,
+   `esub-*`, `dssub-*`, `*.QC_*.mat` in `derivatives`) until the CONN analysis is
+   signed off: read-only symlinks can break a CONN re-run. Check the project's
+   `CONN_x.Setup` file lists first. The `ssub-*` rest images are the deliberate
+   exception.
+5. Be concise.
