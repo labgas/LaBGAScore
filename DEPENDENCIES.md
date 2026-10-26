@@ -3,7 +3,7 @@
 > **Generated file — do not edit.** Regenerate with
 > `LaBGAScore_dep_report('/data/master_github_repos/LaBGAScore')`
 > (see `clean/LaBGAScore_dep_report.m` in LaBGAScore).
-> Generated 2026-10-08 by MATLAB 2021a.
+> Generated 2026-10-26 by MATLAB 2021a.
 
 This document records which **external** functions each file calls and which
 repository those live in. Calls that resolve back into this repository, and
@@ -78,7 +78,7 @@ than guessed:
 | `canlab_glm_subject_levels_run1subject_old` | firstlevel | CanlabCore, spm12 | 10 | 11 |
 | `LaBGAScore_prep_graphvar_input_from_conn` | graphvar | CanlabCore | 3 | 2 |
 | `LaBGAScore_juspace_corr_behav` | juspace | CANlab_help_examples | 1 | 0 |
-| `LaBGAScore_prep_juspace_input` | juspace | CANlab_help_examples, CanlabCore | 7 | 4 |
+| `LaBGAScore_prep_juspace_input` | juspace | CANlab_help_examples, CanlabCore | 8 | 4 |
 | `LaBGAScore_mrs_osprey_jobfile_GE` | mrs | — | 0 | 0 |
 | `LaBGAScore_mrs_osprey_jobfile_Philips` | mrs | — | 0 | 0 |
 | `LaBGAScore_mrs_osprey_single_sess_jobfile_GE` | mrs | — | 0 | 0 |
@@ -135,7 +135,6 @@ than guessed:
 | `LaBGAScore_prep_s2_smooth_multisess` | prep | spm12 | 2 | 1 |
 | `ENet_neuroimaging_pipeline` | secondlevel | CanlabCore | 1 | 0 |
 | `LaBGAScore_blob_montage` | secondlevel | CanlabCore | 3 | 0 |
-| `LaBGAScore_pdm_regenerate_reports` | secondlevel | CanlabCore | 4 | 5 |
 | `LaBGAScore_pdm_report` | secondlevel | — | 0 | 0 |
 | `LaBGAScore_pdm_report_image` | secondlevel | CanlabCore | 2 | 0 |
 | `LaBGAScore_region_table` | secondlevel | CanlabCore | 6 | 0 |
@@ -199,7 +198,7 @@ than guessed:
 
 | Repository | Call edges | Distinct functions |
 |---|---:|---:|
-| CanlabCore | 669 | 62 |
+| CanlabCore | 663 | 61 |
 | spm12 | 202 | 32 |
 | ooFmriDataObjML | 18 | 11 |
 | osprey | 16 | 8 |
@@ -725,6 +724,7 @@ No external dependencies.
 - `apply_mask` *(@image_vector)*
 - `fmri_data` *(@fmri_data)*
 - `fmri_mask_image` *(@fmri_mask_image)*
+- `get_wh_image` *(@image_vector)*
 - `load_atlas`
 - `resample_space` *(@image_vector)* — `ambiguous_within_repo`, 2 candidates
 - `threshold` *(@atlas)* — `dotcall`, 4 candidates
@@ -1166,17 +1166,6 @@ No external dependencies.
 - `addblobs` *(@fmridisplay)*
 - `canlab_results_fmridisplay`
 - `title_montage` *(@fmridisplay)*
-
-### `LaBGAScore_pdm_regenerate_reports`
-
-`secondlevel/LaBGAScore_pdm_regenerate_reports.m`
-
-**CanlabCore**
-
-- `fmri_data` *(@fmri_data)*
-- `load_atlas`
-- `region` *(@region)* — `dotcall`
-- `table` *(@glm_map)* — `dotcall`, 4 candidates
 
 ### `LaBGAScore_pdm_report`
 
