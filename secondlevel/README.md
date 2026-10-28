@@ -79,7 +79,9 @@ fold**, which is what `foldPreprocess` and `residualizeFold` exist to enforce.
 ### The TFCE stack (5 files)
 
 `tfce_transform_3d` → `tfce_volume` → `tfce_one_fmri_dat`, with
-`group_tfce_from_subject_maps` for group TFCE from subject-level maps and
+`group_tfce_from_subject_maps` for group TFCE from subject-level maps
+(designs `'onesample'`, `'twosample'` and, since 2026-10-27, `'regression'` for
+one continuous predictor; calibration in its header) and
 `tfce_fwe_from_null` for max-statistic FWE p-values out of a saved permutation
 null. `tfce_volume` is **shared with `decoding_toolbox/`**, so its inference and
 the SVM pipeline's are the same code.

@@ -15,12 +15,18 @@ function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
 %  - dat = [nVox × nSubj] subject-level con images
 %
 % design : char
-%  - 'onesample' : one-sample / paired design (sign-flip permutations)
-%  - 'twosample' : two independent groups (label exchange permutations)
+%  - 'onesample'  : one-sample / paired design (sign-flip permutations)
+%  - 'twosample'  : two independent groups (label exchange permutations)
+%  - 'regression' : slope of ONE continuous predictor (residual permutation,
+%                   predictor held fixed)
 %
 % group : [] or [nSubj × 1]
 %  - [] for 'onesample'
 %  - group labels for 'twosample'
+%  - the continuous predictor for 'regression'. The statistic is the OLS t
+%    of its slope in  Y ~ 1 + predictor + covariates,  i.e. the same t as an
+%    unweighted regress() on that design. A prep_3a run with robust
+%    regression therefore reports a slightly different t-map beside it.
 %
 % covariates : [] or [nSubj × nCov]
 %  - nuisance covariates to control (Freedman–Lane)
@@ -102,6 +108,21 @@ function [tfce_dat, p_img, info] = group_tfce_from_subject_maps( ...
 %                     false positives     mean p      power
 %   one-sample            0.055            0.502       1.00
 %   two-sample            0.040            0.532       1.00
+%
+% Design 'regression' (added 2026-10-27), same criterion - global
+% max-statistic p < .05 - on n = 40, a 179-voxel sphere, 100 permutations,
+% predictor x ~ N(0,1), covariate correlated r = .5 with x and carrying a
+% strong centred effect:
+%
+%                                            datasets   rejections   mean p
+%   null, no covariate                          200        0.050      0.476
+%   null, covariate                             800        0.048      0.491
+%   true slope 0.5, covariate                   200        1.000      0.010
+%   null, covariate present but NOT passed      200        0.870      0.029
+%
+% The last row shows the covariate handling does real work: leave the
+% covariate out and its effect, correlated with x, is read as an x effect.
+% The OLS t-map matches regress() (non-robust) to 2e-15.
 %
 % For comparison, the code this replaced scored 0.000 / 0.972 / 0.00 for
 % 'onesample' (the test could never reject) and 0.060 / 0.475 / 0.10 for
@@ -190,10 +211,18 @@ switch design
            ['design ''twosample'' needs exactly 2 group levels, found %d ' ...
             '(values: %s).\nIf this is a CONTINUOUS predictor stored in ' ...
             'DAT.BETWEENPERSON.group - which several models do, naming it ' ...
-            '"group" only for plumbing - then TFCE does not apply: this ' ...
-            'function implements onesample and twosample designs only. Set ' ...
-            'doTFCE = false for that model.'], ...
+            '"group" only for plumbing - use design ''regression'' instead.'], ...
            numel(grp_vals), mat2str(grp_vals(1:min(6,end))', 4));
+   case 'regression'
+       assert(~isempty(group) && numel(group)==nSubj, ...
+           'design ''regression'' needs a predictor with one value per subject (%d).', nSubj);
+       group = double(group(:));
+       assert(all(isfinite(group)), ...
+           'the regression predictor contains NaN or Inf; drop those subjects upstream');
+       assert(numel(unique(group)) > 2, ...
+           ['the regression predictor takes %d distinct value(s); a binary ' ...
+            'predictor is a two-group comparison - use design ''twosample''.'], ...
+           numel(unique(group)));
    otherwise
        error('Unknown design');
 end
@@ -228,6 +257,18 @@ end
 t_one = @(dat) one_sample_tmap(dat);
 t_two = @(datA,datB) two_sample_tmap(datA,datB);
 
+% For 'regression' the design is FIXED across permutations - only the
+% residuals move - so its projection is computed once here.
+reg_proj = [];
+if strcmp(design,'regression')
+   if use_covariates
+       D = [ones(nSubj,1), group, covariates];
+   else
+       D = [ones(nSubj,1), group];
+   end
+   reg_proj = regression_projection(D, 2);
+end
+
 % ============================================================
 % REAL t-map
 % ============================================================
@@ -239,6 +280,9 @@ switch design
        idxA = group==grp_vals(1);
        idxB = group==grp_vals(2);
        t_real = t_two(Y(:,idxA),Y(:,idxB));
+
+   case 'regression'
+       t_real = regression_tmap(Y, reg_proj);
 end
 
 % The observed map fixes the integration grid; every permutation then reuses
@@ -328,6 +372,13 @@ parfor (p = 1:nPerm, maxWorkers)
            R_perm = R(:,randperm(nSubj));
            gA = group == grp_vals(1);
            gB = group == grp_vals(2);
+
+       case 'regression'
+           % Freedman-Lane: permute the residuals of the reduced (nuisance-only)
+           % model and hold the predictor fixed, as for 'twosample'. R keeps the
+           % per-voxel mean, which is constant over subjects and so unaffected by
+           % the permutation; the intercept in the full model absorbs it.
+           R_perm = R(:,randperm(nSubj));
    end
 
    % --- reconstruct data ---
@@ -340,6 +391,9 @@ parfor (p = 1:nPerm, maxWorkers)
 
        case 'twosample'
            t_perm = t_two(Yp(:,gA),Yp(:,gB));
+
+       case 'regression'
+           t_perm = regression_tmap(Yp, reg_proj);
    end
 
    tf = tfce_one_fmri_dat( ...
@@ -417,4 +471,27 @@ vA = var(datA,0,2);
 vB = var(datB,0,2);
 
 tmap = (mA - mB) ./ sqrt(vA./nA + vB./nB);
+end
+
+function P = regression_projection(D, col)
+% Precomputes what regression_tmap needs for the OLS t of column col of the
+% full-rank design D [nSubj × p].
+[n, p] = size(D);
+assert(rank(D) == p, ...
+   'the regression design (intercept, predictor, covariates) is rank-deficient');
+[Q, Rr] = qr(D, 0);
+P.pinvD = Rr \ Q';                      % [p × n], B = pinvD * Y'
+P.D = D;
+P.col = col;
+P.df = n - p;
+Ri = inv(Rr);
+P.c = Ri(col,:) * Ri(col,:)';           % [inv(D'D)](col,col)
+end
+
+function tmap = regression_tmap(dat, P)
+% dat: [nVox × nSubj]; OLS t of the slope in column P.col of P.D.
+B = P.pinvD * dat';                     % [p × nVox]
+res = dat' - P.D * B;                   % [nSubj × nVox]
+s2 = sum(res.^2, 1) ./ P.df;
+tmap = (B(P.col,:) ./ sqrt(s2 .* P.c))';
 end
