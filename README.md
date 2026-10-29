@@ -62,7 +62,7 @@ For second-level (group) analyses specifically, there is a matching pair of fold
 
 The top level is organized by analysis topic, not as a conventional MATLAB toolbox:
 
-`prep/`, `firstlevel/`, `secondlevel/`, `stats_tools/`, `atlas_mask_tools/`, `pet/`, `mrs/`, `decoding_toolbox/`, `cosmomvpa/`, `graphvar/`, `juspace/`, `power/`, `figures/`, `clean/`, `qr_code/`.
+`prep/`, `firstlevel/`, `secondlevel/`, `stats_tools/`, `atlas_mask_tools/`, `pet/`, `mrs/`, `decoding_toolbox/`, `cosmomvpa/`, `graphvar/`, `juspace/`, `power/`, `figures/`, `clean/`, `qr_code/` — plus `conference_presentations/`, which holds no code (see [below](#domain-by-domain-overview)).
 
 Most domains split into `<domain>/scripts/` (or top-level `.m` scripts) and `<domain>/functions/` (helper functions the scripts call). There is exactly one class in the whole repo, `secondlevel/classes/ProgressTracker.m` (a `handle`-derived progress/ETA helper for long loops).
 
@@ -148,6 +148,8 @@ Both assume local repos live under `/data/master_github_repos` (see `githubrootd
 **`clean/`** — utilities: `LaBGAScore_clean_gzip_all_nii.m` (recursive `.nii` gzip), `LaBGAScore_clean_sourcedata.m` (cleans the `sourcedata` subdataset), `LaBGAScore_move_repos_matlabpath.m`, `LaBGAScore_smart_parallel_pool_setup.m`, the provenance/dependency tooling, the report runners described below (`labgascore_run_headless.sh`, `LaBGAScore_run_reports.m`), `labgascore_rotate_github_pat.sh` (rotates the GitHub PAT across the three places it is stored, validating it first), and the three script checkers — `LaBGAScore_check_all_scripts.m` plus the two Python option-ordering checkers `use_before_def.py` and `set_after_use.py`, with their positive controls in `checker_positive_controls/` (see [Tests, CI, and the script checkers](#tests-ci-and-the-script-checkers)). [`clean/README.md`](clean/README.md) indexes the folder by what each file is for; [`clean/README_provenance.md`](clean/README_provenance.md) remains authoritative for the provenance and dependency tooling.
 
 **`qr_code/`** — standalone Python utilities (`emailQR.py`, `email_QR_Input.py`, `QRtoPDF.py`) for generating and emailing QR codes; not MATLAB, and unrelated to the neuroimaging pipeline proper.
+
+**`conference_presentations/`** — not code: the lab's posters and talks as PDFs, shared openly under CC BY 4.0, filed as `<year>/<meeting>/<First_Author_Name>_<topic>_<meeting>_<year>.pdf`. The lab website reads this folder daily and links each PDF from its first author's entry on the [Team page](https://labgas.github.io/team/), so the file name has to follow that convention exactly. See [`conference_presentations/README.md`](conference_presentations/README.md).
 
 ## Relationship to `CANlab_help_examples` (LaBGAS fork)
 
@@ -355,4 +357,6 @@ New to Claude entirely? Start with **[`LaBGAS_Claude_setup.md`](LaBGAS_Claude_se
 
 ## License
 
-GNU General Public License v3.0 — see [`LICENSE`](LICENSE).
+GNU General Public License v3.0 — see [`LICENSE`](LICENSE). The exception is
+`conference_presentations/`, whose posters and talks are shared under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — see that folder's README.
