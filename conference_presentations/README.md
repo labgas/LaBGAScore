@@ -46,6 +46,22 @@ not place, with the reason. The usual reasons are:
 
 Fix the name and push again. To rename a file, use `git mv` so its history is kept.
 
+## A QR code on your poster
+
+The link to your PDF follows from its file name, so you can make the QR code **before** printing,
+even before uploading:
+
+```
+https://github.com/labgas/LaBGAScore/blob/main/conference_presentations/<year>/<meeting>/<file name>.pdf
+```
+
+Use [`qr_code/QRtoPDF.py`](../qr_code/QRtoPDF.py) in this repository: set `pdf_url` to that link,
+run `python QRtoPDF.py` (needs `pip install qrcode[pil]`), and place `QR_to_pdf.png` on your poster.
+Any other QR generator works too.
+
+Then upload the final PDF under **exactly** that name. A renamed file breaks the printed QR code.
+Scan the code with your phone before printing to check it opens your poster.
+
 ## Licence
 
 Unlike the code in this repository (GPL-3.0), the presentations in this folder are shared under
