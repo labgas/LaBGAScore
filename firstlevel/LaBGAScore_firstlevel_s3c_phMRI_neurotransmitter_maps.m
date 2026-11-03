@@ -25,6 +25,7 @@
 % * sessions           cell array of condition names, in order of corresponding sessions, as they appear in the first-level SPM.Vbeta descrip field
 % * name_nts           cell array of neurotransmitter target names to select from the Hansen et al. 2022 map set (as in nt_maps.metadata_table.target)
 % * results_suffix     arbitrary name appended to the results .xlsx filename
+% * results_subdir     subfolder of secondlevel/<modelingfilesdir> for the results .xlsx; '' writes into secondlevel/<modelingfilesdir> itself
 % * add_covars         true/false, whether to interpolate and add covariates to the results table
 % * name_covars        cell array of covariate column names, as they appear in covars_filename (only used if add_covars is true)
 % * covars_filename    name of the .csv file with covariate values, located in BIDSdir (only used if add_covars is true)
@@ -52,9 +53,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s3c_phMRI_neurotransmitter_maps.m         v1.2
+% LaBGAScore_firstlevel_s3c_phMRI_neurotransmitter_maps.m         v1.3
 %
-% last modified: 2026/09/02
+% last modified: 2026/10/30
 %
 %
 %% SET STUDY, MODEL AND SESSION INFO
@@ -77,6 +78,7 @@ nt_maps = fmri_data_st(nt_maps);        % handles metadata_table more gracefully
 
 name_nts = {'D2','MOR','CB1'};                                                                                     % as in nt_maps.metadata_table.target
 results_suffix = 'nt_maps';                                                                                              % arbitrary name to append to results excel file
+results_subdir = 'neurotransmitter_responses';                                                                           % subfolder of secondlevel/<modelingfilesdir> to write the results file into, '' for none
 
 nt_maps_target = nt_maps.get_wh_image((contains(nt_maps.metadata_table.target,name_nts)));
 nt_maps_target = nt_maps_target.get_wh_image(nt_maps_target.metadata_table.N > 10);
@@ -118,7 +120,7 @@ secondleveldir = fullfile(rootdir, 'secondlevel');
     if ~exist (secondleveldir,'dir')
         error('\nsecondlevel subdataset %s does not exist, please create using datalad commands prior to proceeding\n',secondleveldir);
     else
-        secondlevelmodeldir = fullfile(secondleveldir,modelingfilesdir);
+        secondlevelmodeldir = fullfile(secondleveldir,modelingfilesdir,results_subdir);
         if ~exist (secondlevelmodeldir,'dir')
             mkdir(secondlevelmodeldir);
         end
@@ -155,8 +157,15 @@ for sub = 1:num_subs
     load(fullfile(subfirstlevelmodeldir,'DSGN.mat'));
     
     betas = SPM.Vbeta;
+    if ~isequal(sessions,phDSGN.sessions)
+        error('\nsessions in this script (%s) differ from phDSGN.sessions in %s (%s), please check before proceeding\n',strjoin(sessions,', '),fullfile(subfirstlevelmodeldir,'DSGN.mat'),strjoin(phDSGN.sessions,', '));
+    end
+    
     idx = contains({betas.descrip}, phDSGN.sessions);
     betas_oi = betas(idx);
+        if size(betas_oi,2) ~= phDSGN.nr_timebins*size(SPM.Sess,2)
+            error('\n%d betas of interest found for %s, expected %d timebins x %d sessions, please check sessions before proceeding\n',size(betas_oi,2),firstlevelsubjs{sub},phDSGN.nr_timebins,size(SPM.Sess,2));
+        end
     betas_oi_fp = cell(size(betas_oi,2),1);
         for b = 1:size(betas_oi_fp,1)
             betas_oi_fp{b} = fullfile(subfirstlevelmodeldir,betas_oi(b).fname(1,:));
@@ -221,10 +230,12 @@ for sub = 1:num_subs
                 
                 covar_interp_subj = [];
 
-                for sess = 1:(height(subj_table)/phDSGN.nr_timebins)
+                sess_subj = unique(subj_table.condition,'stable'); % sessions actually in this subject's model, in beta order; indexing phDSGN.sessions here misaligns covariates when an earlier session is missing
+                
+                for sess = 1:numel(sess_subj)
                     
-                    covar_time_2interp = covars_table_sub.Timepoint(covars_table_sub.Condition == phDSGN.sessions{sess});
-                    covar_2interp = covars_table_sub.(name_covars{covar})(covars_table_sub.Condition == phDSGN.sessions{sess});
+                    covar_time_2interp = covars_table_sub.Timepoint(covars_table_sub.Condition == char(sess_subj(sess)));
+                    covar_2interp = covars_table_sub.(name_covars{covar})(covars_table_sub.Condition == char(sess_subj(sess)));
 
                         if sum(~isnan(covar_2interp)) > 2
                             covar_interp_sess = interp1(covar_time_2interp,covar_2interp,[1:phDSGN.nr_timebins],'spline');

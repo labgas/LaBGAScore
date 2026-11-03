@@ -305,7 +305,9 @@ should turn that switch off as well.
 2. **Regenerate all results.** Agreed by the team on 2026-09-10. Refits so far:
    proj_moodbugs_wp2 (`model_2_basic`, and `model_3_basic` with HPF 300),
    proj_discoverie (`model_2_basic`, 158 subjects), proj_cfs (`model_2_basic`,
-   134 subjects). Second level rerun as `model_1a`/`model_1b` (moodbugs),
+   134 subjects), proj_erythritol_phMRI (`model_2_basic`, 20 subjects, 2026-10-30:
+   24 motion columns + spikes + CSF, with the phMRI chain's own fixes, see
+   `README_phMRI.md`). Second level rerun as `model_1a`/`model_1b` (moodbugs),
    `model_3a` (discoverie) and `model_1a` (cfs).
 3. **Compare group maps, not single-subject con images** — that is the only level
    at which bias and added variance separate. Recorded per study in

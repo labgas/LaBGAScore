@@ -4,15 +4,19 @@
 % *USAGE*
 %
 % This scripts performs first-level model specification, estimation, and
-% contrast definition and estimation for phMRI designs with two or three
-% conditions (more than three would need hard-coded adaptations).
+% contrast definition and estimation for phMRI designs with any number of
+% conditions (one session per condition).
+%
+% The noise model per session is the six realignment parameters and their
+% first derivatives, z-scored (12 columns), optionally their squares
+% (24 columns), the fMRIprep motion_outlier spike regressors if
+% phDSGN.model_spikes is true, and the global CSF signal.
 %
 % *OPTIONS*
 %
-% For LaBGAS_options fields (mandatory.omit_spike_trials,
-% mandatory.spikes_percent_threshold, mandatory.vif_thresh,
-% movement_reg_quadratic, spikes.dvars_threshold,
-% spikes.spike_additional_vols), see LaBGAScore_firstlevel_s1_options_dsgn_struct.m
+% For LaBGAS_options fields (subjs2analyze, mandatory.spikes_percent_threshold,
+% movement_reg_quadratic, spikes.spike_additional_vols), see
+% LaBGAScore_firstlevel_s1_options_dsgn_struct.m
 %
 % phDSGN fields (this script's own struct, all STUDY-SPECIFIC unless noted):
 %
@@ -26,6 +30,7 @@
 % * start_dyn           dynamic (volume) number where administration starts
 % * timebin_length      length of each post-administration timebin, in seconds
 % * sessions            cell array of condition names, in order of corresponding sessions
+% * model_spikes        true/false, add fMRIprep motion_outlier columns as spike regressors
 %
 % *DEPENDENCIES*
 %
@@ -48,9 +53,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s1b_fit_phMRI_model.m         v1.2
+% LaBGAScore_firstlevel_s1b_fit_phMRI_model.m         v1.3
 %
-% last modified: 2026/09/02
+% last modified: 2026/10/30
 %
 %
 %% INITIATE DSGN AND LABGAS_OPTIONS STRUCTURES
@@ -74,23 +79,30 @@ phDSGN.start_dyn = 264;        % nr of dynamic where administration starts
 phDSGN.timebin_length = 60;    % in seconds
 phDSGN.sessions = {'sucrose','erythritol','water'}; % names of conditions - in order of corresponding sessions!
 
+% noise model
+phDSGN.model_spikes = true;    % add fMRIprep motion_outlier columns as spike regressors; false gives 24hmp (or 12hmp) + csf only
+
 % calculations, don't change
 phDSGN.timebin_length_tr = phDSGN.timebin_length/phDSGN.tr;
 phDSGN.nr_timebins = (phDSGN.nr_dyns-phDSGN.start_dyn)/phDSGN.timebin_length_tr; % nr of post-infusion timebins
+
+    if mod(phDSGN.nr_timebins,1) ~= 0 || mod(phDSGN.timebin_length_tr,1) ~= 0
+        error('\ntimebin_length must be a whole number of TRs and (nr_dyns - start_dyn) a whole number of timebins, please check phDSGN before proceeding\n');
+    end
 
 
 % LABGAS OPTIONS
 
 LaBGAS_options = struct();
 
+% subjects
+LaBGAS_options.subjs2analyze = {}; % enter subjects separated by comma if you only want to analyze selected subjects e.g. {'sub-001','sub-002'}; leave empty to loop over all subjects
+
 % required options
-LaBGAS_options.mandatory.omit_spike_trials = 'no';
 LaBGAS_options.mandatory.spikes_percent_threshold=0.15;
-LaBGAS_options.mandatory.vif_thresh=2;
 LaBGAS_options.movement_reg_quadratic = true; % change to false if you don't want to add quadratic terms for movement parameters and their first-order derivatives
 
-% spike options
-LaBGAS_options.spikes.dvars_threshold = 2;
+% spike options, only used if phDSGN.model_spikes is true
 LaBGAS_options.spikes.spike_additional_vols=0; % OPTIONAL, NOT RECOMMENDED TO TURN ON
 
 
@@ -112,6 +124,14 @@ firstleveldir = fullfile(rootdir, 'firstlevel');
     end
     
 phDSGN.subjects = derivsubjdirs';
+
+    if ~isempty(LaBGAS_options.subjs2analyze)
+        missing_subjs = setdiff(LaBGAS_options.subjs2analyze,derivsubjs);
+            if ~isempty(missing_subjs)
+                error('\nsubject(s) %s in LaBGAS_options.subjs2analyze not found in %s, please check before proceeding\n',strjoin(missing_subjs,', '),derivdir);
+            end
+        derivsubjs = LaBGAS_options.subjs2analyze(:);
+    end
 
     
 %% FIT PHMRI MODEL LOOPED OVER SUBJECTS
@@ -140,11 +160,14 @@ for sub = 1:size(derivsubjs,1)
     derivsubjsesdirs = cell(1,size(phDSGN.sessions,2));
     derivsubjsesmodeldirs = cell(1,size(phDSGN.sessions,2));
     noise_regs = cell(1,size(phDSGN.sessions,2));
-    phDSGN.conditions = cell(1,size(phDSGN.sessions,2));
+    phDSGN.conditions = {};
+    phDSGN.contrastnames = {}; % reset per subject, so nothing is left over from a previous subject with more sessions
+    phDSGN.contrastweights = {};
+    phDSGN.contrasts = {};
 
         for sess = 1:size(phDSGN.sessions,2)
-            
-            derivsubjsesdirs{sess} = fullfile(derivsubjdirs{sub},['ses-' num2str(sess)],'func');
+
+            derivsubjsesdirs{sess} = fullfile(derivdir,derivsubjs{sub},['ses-' num2str(sess)],'func'); % built from the subject NAME, so a LaBGAS_options.subjs2analyze subset stays aligned
             derivsubjsesmodeldirs{sess} = fullfile(derivsubjsesdirs{sess},phDSGN.modelingfilesdir);
                 if exist(derivsubjsesdirs{sess},'dir')
                     if ~exist(derivsubjsesmodeldirs{sess},'dir')
@@ -153,17 +176,23 @@ for sub = 1:size(derivsubjs,1)
                 end
                 
             derivimg = dir(fullfile(derivsubjsesdirs{sess},'s6*.nii.gz'));
+                if isempty(derivimg)
+                    derivimg = dir(fullfile(derivsubjsesdirs{sess},'s6*.nii')); % smoothed image may only exist unzipped, e.g. after the .nii.gz was removed
+                end
                 if size(derivimg,1) > 1
-                    error('\nMore than one image file found with filter s6*.nii.gz in dir %s, please check before proceeding\n', derivsubjsesdirs{sess});
+                    error('\nMore than one image file found with filter s6*.nii(.gz) in dir %s, please check before proceeding\n', derivsubjsesdirs{sess});
                 elseif size(derivimg,1) < 1
-                    fprintf('\nWARNING: No image files found with filter s6*.nii.gz in dir %s, missing condition - proceeding\n', derivsubjsesdirs{sess});
+                    fprintf('\nWARNING: No image files found with filter s6*.nii(.gz) in dir %s, missing condition - proceeding\n', derivsubjsesdirs{sess});
                     continue
                 else
-                    derivimg_nii = fullfile(derivimg.folder, derivimg.name(1,1:end-3));
-                        if ~exist(derivimg_nii,'file')
+                    derivimg_name = regexprep(derivimg.name,'\.gz$','');
+                        if ~exist(fullfile(derivimg.folder,derivimg_name),'file')
                             gunzip(fullfile(derivimg.folder,derivimg.name));
                         end
-                    derivimages{sess} = spm_select('ExtFPlist', derivimg.folder, derivimg.name(1,1:end-3), Inf);
+                    derivimages{sess} = spm_select('ExtFPlist', derivimg.folder, ['^' regexptranslate('escape',derivimg_name) '$'], Inf);
+                        if size(derivimages{sess},1) ~= phDSGN.nr_dyns
+                            error('\n%d volumes found in %s, phDSGN.nr_dyns is %d; check that the image content is present (datalad get) and nr_dyns is correct before proceeding\n', size(derivimages{sess},1), fullfile(derivimg.folder,derivimg_name), phDSGN.nr_dyns);
+                        end
                 end
 
             fmriprep_noisefile = dir(fullfile(derivsubjsesdirs{sess},'*desc-confounds_timeseries.tsv'));
@@ -193,6 +222,9 @@ for sub = 1:size(derivsubjs,1)
                 % load confound regressor file generated by fMRIprep into Matlab table
                 % variable
                 Rfull = readtable(fmriprep_noisefiles{sess},'TreatAsEmpty','n/a','FileType', 'text', 'Delimiter', 'tab');
+                    if height(Rfull) ~= phDSGN.nr_dyns
+                        error('\n%d rows found in %s, phDSGN.nr_dyns is %d, please check before proceeding\n', height(Rfull), fmriprep_noisefiles{sess}, phDSGN.nr_dyns);
+                    end
 
                 % replace NaNs in first row with Os
                 wh_replace = ismissing(Rfull(1,:));
@@ -273,8 +305,8 @@ for sub = 1:size(derivsubjs,1)
                     end
                 Rmotionderiv = [Rmotion,Rmotionderiv];
                 regsmotion2 = Rmotionderiv.Properties.VariableNames;
-                zscore = @(x) zscore(x);
-                Rmotionzscore = varfun(zscore,Rmotionderiv);
+                zscorefun = @(x) zscore(x); % not named zscore: a variable of that name shadows the function on every later call in this workspace
+                Rmotionzscore = varfun(zscorefun,Rmotionderiv);
                     for regz = 1:size(Rmotionzscore.Properties.VariableNames,2)
                         Rmotionzscore.Properties.VariableNames{regz} = regsmotion2{regz};
                     end
@@ -286,24 +318,25 @@ for sub = 1:size(derivsubjs,1)
                     else
                         Rmotionfinal = Rmotionzscore;
                     end
-                R = [Rmotionfinal,Rspikes,Rcsf];
+                    if phDSGN.model_spikes
+                        R = [Rmotionfinal,Rspikes,Rcsf];
+
+                        % compute and output how many spikes total
+                        n_spike_regs = width(Rspikes);
+                        n_spike_regs_percent = n_spike_regs / height(Rfull);
+                        fprintf('\n%s ses-%d: %d motion, %d spike and 1 csf regressor(s)\n', derivsubjs{sub}, sess, width(Rmotionfinal), n_spike_regs);
+
+                        % print warning if #volumes identified as spikes exceeds
+                        % user-defined threshold
+                            if n_spike_regs_percent > LaBGAS_options.mandatory.spikes_percent_threshold
+                                warning('number of volumes identified as spikes (%1.2f) exceeds threshold %1.2f in %s ses-%d',n_spike_regs_percent,LaBGAS_options.mandatory.spikes_percent_threshold,derivsubjs{sub},sess)
+                            end
+                    else
+                        R = [Rmotionfinal,Rcsf];
+                        fprintf('\n%s ses-%d: %d motion and 1 csf regressor(s), spikes not modelled\n', derivsubjs{sub}, sess, width(Rmotionfinal));
+                    end
 
                 names = R.Properties.VariableNames;
-
-                % get row indices for spikes for later use
-                Rspikes.spikes=sum(Rspikes{:,1:end},2);
-                volume_idx = [1:height(Rfull)]; 
-                spikes = volume_idx(Rspikes.spikes==1)';
-
-                % compute and output how many spikes total
-                n_spike_regs = sum(dvars_cols | spike_cols | additional_spike_cols);
-                n_spike_regs_percent = n_spike_regs / height(Rfull);
-
-                % print warning if #volumes identified as spikes exceeds
-                % user-defined threshold
-                    if n_spike_regs_percent > LaBGAS_options.mandatory.spikes_percent_threshold
-                        warning('\nnumber of volumes identified as spikes exceeds threshold %1.2f in %s',LaBGAS_options.mandatory.spikes_percent_threshold,subjrunnames{run})
-                    end
 
                 % save confound regressors as matrix named R for use in
                 % SPM/CANlab GLM model tools
@@ -311,7 +344,7 @@ for sub = 1:size(derivsubjs,1)
                 noise_regs{sess} = R;
 
                 % write confound regressors
-                filename_noise_regs = fullfile(derivsubjsesmodeldirs{sess},'noise_regs');
+                filename_noise_regs = fullfile(derivsubjsesmodeldirs{sess},phDSGN.multireg);
                 save(filename_noise_regs,'R','names');
 
                 clear Rmotion* Rcsf Rspikes
@@ -336,10 +369,11 @@ for sub = 1:size(derivsubjs,1)
     sess_subj = phDSGN.sessions(~empty_derivimgs);
     derivimages = derivimages(~empty_derivimgs);
     derivsubjsesmodeldirs = derivsubjsesmodeldirs(~empty_derivimgs);
+    noise_regs = noise_regs(~empty_derivimgs); % keep aligned with sess_subj, otherwise the contrast weights skip the wrong noise columns when an earlier session is missing
     
         for sess = 1:size(sess_subj,2)
             
-            phDSGN.conditions{sess} = cell(1,size(sess_subj,2));
+            phDSGN.conditions{sess} = cell(1,phDSGN.nr_timebins);
             
             matlabbatch{1}.spm.stats.fmri_spec.sess(sess).scans = cellstr(derivimages{sess});
             
@@ -351,12 +385,13 @@ for sub = 1:size(derivsubjs,1)
                 matlabbatch{1}.spm.stats.fmri_spec.sess(sess).cond(b).tmod = 0;
                 matlabbatch{1}.spm.stats.fmri_spec.sess(sess).cond(b).pmod = struct('name', {}, 'param', {}, 'poly', {});
                 matlabbatch{1}.spm.stats.fmri_spec.sess(sess).cond(b).orth = 1;
-                matlabbatch{1}.spm.stats.fmri_spec.sess(sess).hpf = phDSGN.hpf;
-                matlabbatch{1}.spm.stats.fmri_spec.sess(sess).multi_reg = {fullfile(derivsubjsesmodeldirs{sess},[phDSGN.multireg '.mat'])};
                 
                 phDSGN.conditions{sess}{b} = [sess_subj{sess} '_bin_' num2str(b)];
                 
             end
+            
+            matlabbatch{1}.spm.stats.fmri_spec.sess(sess).hpf = phDSGN.hpf;
+            matlabbatch{1}.spm.stats.fmri_spec.sess(sess).multi_reg = {fullfile(derivsubjsesmodeldirs{sess},[phDSGN.multireg '.mat'])};
             
         end
     
@@ -379,159 +414,118 @@ for sub = 1:size(derivsubjs,1)
     % THIRD BATCH: CONTRASTS
     %----------------------
     
+    % Each session's columns in the design matrix are its nr_timebins
+    % condition regressors followed by its own noise regressors, whose number
+    % differs between sessions when spikes are modelled. sess_cols{s} holds
+    % the condition columns of session s, so every weight is placed by
+    % column index rather than by counting zeros.
+    
     matlabbatch{3}.spm.stats.con.spmmat(1) = cfg_dep('Model estimation: SPM.mat File', substruct('.','val', '{}',{2}, '.','val', '{}',{1}, '.','val', '{}',{1}), substruct('.','spmmat'));
     
-    sess_indices = 1:size(sess_subj,2);
-    n_contrasts = sum(sess_indices(1,1:end-1));
-    
-    if n_contrasts < 1
-        fprintf('\nWARNING: Only 1 session found for subject %s, skipping contrasts\n', derivsubjs{sub});
-        continue
-    end
-    
-    % T-CONTRASTS
-    
-    for cont = 1:n_contrasts % coded for max 3 sessions (and hence 3 contrasts)
+    nr_sess_subj = size(sess_subj,2);
+    nr_cols_sess = phDSGN.nr_timebins + cellfun(@(x) size(x,2), noise_regs);
+    first_col_sess = [0 cumsum(nr_cols_sess(1:end-1))];
+    nr_cols = sum(nr_cols_sess); % session constants come after this and get weight 0
+    sess_cols = cell(1,nr_sess_subj);
+        for s = 1:nr_sess_subj
+            sess_cols{s} = first_col_sess(s) + (1:phDSGN.nr_timebins);
+        end
         
-        for a = 1:phDSGN.nr_timebins %loop for contrast manager
+        if nr_sess_subj >= 2
+            sess_pairs = nchoosek(1:nr_sess_subj,2); % (1,2), (1,3), (2,3) for three sessions, the order of the original hardcoded contrasts
+        else
+            sess_pairs = zeros(0,2);
+            fprintf('\nWARNING: Only 1 session found for subject %s, writing within-session F-contrasts only\n', derivsubjs{sub});
+        end
+    
+    con = 0;
+    
+    % T-CONTRASTS: session i vs session j, per timebin
+    
+    for p = 1:size(sess_pairs,1)
+        
+        i = sess_pairs(p,1);
+        j = sess_pairs(p,2);
+        
+        for a = 1:phDSGN.nr_timebins
             
-            if cont == 1
-                
-                matlabbatch{3}.spm.stats.con.consess{a}.tcon.name = [sess_subj{1} '_' sess_subj{2} '_bin_' num2str(a)];
-                matlabbatch{3}.spm.stats.con.consess{a}.tcon.weights = [zeros(1, a-1) 1 zeros(1,(phDSGN.nr_timebins-1)) zeros(1,size(noise_regs{1},2)) -1]; 
-                matlabbatch{3}.spm.stats.con.consess{a}.tcon.sessrep = 'none';
-                
-                phDSGN.contrastnames{a} = matlabbatch{3}.spm.stats.con.consess{a}.tcon.name;
-                phDSGN.contrastweights{a} = matlabbatch{3}.spm.stats.con.consess{a}.tcon.weights;
-                
-            else
-                
-                b = a + (phDSGN.nr_timebins*(cont-1));
-                
-                if cont == 2
-                    
-                    matlabbatch{3}.spm.stats.con.consess{b}.tcon.name = [sess_subj{1} '_' sess_subj{3} '_bin_' num2str(a)];
-                    matlabbatch{3}.spm.stats.con.consess{b}.tcon.weights = [zeros(1, a-1) 1 zeros(1,((phDSGN.nr_timebins*cont-1))) zeros(1,size(noise_regs{1},2)) zeros(1,size(noise_regs{2},2)) -1];
-                    matlabbatch{3}.spm.stats.con.consess{b}.tcon.sessrep = 'none';
-                    
-                    phDSGN.contrastnames{b} = matlabbatch{3}.spm.stats.con.consess{b}.tcon.name;
-                    phDSGN.contrastweights{b} = matlabbatch{3}.spm.stats.con.consess{b}.tcon.weights;
-                    
-                elseif cont == 3
-                    
-                    matlabbatch{3}.spm.stats.con.consess{b}.tcon.name = [sess_subj{2} '_' sess_subj{3} '_bin_' num2str(a)];
-                    matlabbatch{3}.spm.stats.con.consess{b}.tcon.weights = [zeros(1, phDSGN.nr_timebins) zeros(1,size(noise_regs{1},2)) zeros(1,a-1) 1 zeros(1,(phDSGN.nr_timebins-1)) zeros(1,size(noise_regs{3},2)) -1]; 
-                    matlabbatch{3}.spm.stats.con.consess{b}.tcon.sessrep = 'none';
-                    
-                    phDSGN.contrastnames{b} = matlabbatch{3}.spm.stats.con.consess{b}.tcon.name;
-                    phDSGN.contrastweights{b} = matlabbatch{3}.spm.stats.con.consess{b}.tcon.weights;
-                    
-                else
-                    
-                    error('\n More than 3 sessions not yet implemented in script, please customize before proceeding\n'); 
-                    
-                end
-            end
+            con = con + 1;
+            weights = zeros(1,nr_cols);
+            weights(sess_cols{i}(a)) = 1;
+            weights(sess_cols{j}(a)) = -1;
+            
+            matlabbatch{3}.spm.stats.con.consess{con}.tcon.name = [sess_subj{i} '_' sess_subj{j} '_bin_' num2str(a)];
+            matlabbatch{3}.spm.stats.con.consess{con}.tcon.weights = weights;
+            matlabbatch{3}.spm.stats.con.consess{con}.tcon.sessrep = 'none';
             
         end
-         
-    end
-    
-    % F-CONTRASTS
-    
-    c = b+1;
-    
-    if n_contrasts == 1
-    
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_main_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = eye(phDSGN.nr_timebins);
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_interaction_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = diff(eye(phDSGN.nr_timebins));
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{2} '_main_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [zeros(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{1},2)) eye(phDSGN.nr_timebins)];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{2} '_interaction_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [zeros(phDSGN.nr_timebins-1,phDSGN.nr_timebins) zeros(phDSGN.nr_timebins-1,size(noise_regs{1},2)) diff(eye(phDSGN.nr_timebins))];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_' sess_subj{2} '_main_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [eye(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{1},2)) -eye(phDSGN.nr_timebins)];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_' sess_subj{2} '_interaction_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [diff(eye(phDSGN.nr_timebins)) zeros((phDSGN.nr_timebins-1),size(noise_regs{1},2)) -diff(eye(phDSGN.nr_timebins))];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        
-        for con = (b+1):c
-            phDSGN.contrastnames{con} = matlabbatch{3}.spm.stats.con.consess{con}.fcon.name;
-            phDSGN.contrastweights{con} = matlabbatch{3}.spm.stats.con.consess{con}.fcon.weights;
-        end
-    
-    elseif n_contrasts == 3
-        
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_main_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = eye(phDSGN.nr_timebins);
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_interaction_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = diff(eye(phDSGN.nr_timebins));
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{2} '_main_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [zeros(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{1},2)) eye(phDSGN.nr_timebins)];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{2} '_interaction_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [zeros(phDSGN.nr_timebins-1,phDSGN.nr_timebins) zeros(phDSGN.nr_timebins-1,size(noise_regs{1},2)) diff(eye(phDSGN.nr_timebins))];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{3} '_main_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [zeros(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{1},2)) zeros(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{2},2)) eye(phDSGN.nr_timebins)];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{3} '_interaction_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [zeros(phDSGN.nr_timebins-1,phDSGN.nr_timebins) zeros(phDSGN.nr_timebins-1,size(noise_regs{1},2)) zeros(phDSGN.nr_timebins-1,phDSGN.nr_timebins) zeros(phDSGN.nr_timebins-1,size(noise_regs{2},2)) diff(eye(phDSGN.nr_timebins))];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_' sess_subj{2} '_main_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [eye(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{1},2)) -eye(phDSGN.nr_timebins)];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_' sess_subj{2} '_interaction_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [diff(eye(phDSGN.nr_timebins)) zeros((phDSGN.nr_timebins-1),size(noise_regs{1},2)) -diff(eye(phDSGN.nr_timebins))];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_' sess_subj{3} '_main_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [eye(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{1},2)) zeros(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{2},2)) -eye(phDSGN.nr_timebins)];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{1} '_' sess_subj{3} '_interaction_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [diff(eye(phDSGN.nr_timebins)) zeros(phDSGN.nr_timebins-1,size(noise_regs{1},2)) zeros(phDSGN.nr_timebins-1,phDSGN.nr_timebins) zeros(phDSGN.nr_timebins-1,size(noise_regs{2},2)) -diff(eye(phDSGN.nr_timebins))];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{2} '_' sess_subj{3} '_main_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [zeros(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{1},2)) eye(phDSGN.nr_timebins) zeros(phDSGN.nr_timebins,size(noise_regs{2},2)) -eye(phDSGN.nr_timebins)];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        c = c+1;
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.name = [sess_subj{2} '_' sess_subj{3} '_interaction_effect'];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.weights = [zeros(phDSGN.nr_timebins-1,phDSGN.nr_timebins) zeros(phDSGN.nr_timebins-1,size(noise_regs{1},2)) diff(eye(phDSGN.nr_timebins)) zeros(phDSGN.nr_timebins-1,size(noise_regs{2},2)) -diff(eye(phDSGN.nr_timebins))];
-        matlabbatch{3}.spm.stats.con.consess{c}.fcon.sessrep = 'none';
-        
-        for con = (b+1):c
-            phDSGN.contrastnames{con} = matlabbatch{3}.spm.stats.con.consess{con}.fcon.name;
-            phDSGN.contrastweights{con} = matlabbatch{3}.spm.stats.con.consess{con}.fcon.weights;
-        end
-        
-    elseif n_contrasts > 3
-        
-        error('\n More than 3 sessions not yet implemented in script, please customize before proceeding\n');
         
     end
+    
+    % F-CONTRASTS: main effect and interaction (effect of timebin) per session,
+    % then the same for each pair of sessions
+    
+    main_w = eye(phDSGN.nr_timebins);
+    inter_w = diff(eye(phDSGN.nr_timebins));
+    
+    nr_fcons = 2*nr_sess_subj + 2*size(sess_pairs,1);
+    fcon_names = cell(1,nr_fcons);
+    fcon_weights = cell(1,nr_fcons);
+    f = 0;
+    
+        for s = 1:nr_sess_subj
+            
+            weights = zeros(phDSGN.nr_timebins,nr_cols);
+            weights(:,sess_cols{s}) = main_w;
+            f = f + 1;
+            fcon_names{f} = [sess_subj{s} '_main_effect'];
+            fcon_weights{f} = weights;
+            
+            weights = zeros(phDSGN.nr_timebins-1,nr_cols);
+            weights(:,sess_cols{s}) = inter_w;
+            f = f + 1;
+            fcon_names{f} = [sess_subj{s} '_interaction_effect'];
+            fcon_weights{f} = weights;
+            
+        end
+        
+        for p = 1:size(sess_pairs,1)
+            
+            i = sess_pairs(p,1);
+            j = sess_pairs(p,2);
+            
+            weights = zeros(phDSGN.nr_timebins,nr_cols);
+            weights(:,sess_cols{i}) = main_w;
+            weights(:,sess_cols{j}) = -main_w;
+            f = f + 1;
+            fcon_names{f} = [sess_subj{i} '_' sess_subj{j} '_main_effect'];
+            fcon_weights{f} = weights;
+            
+            weights = zeros(phDSGN.nr_timebins-1,nr_cols);
+            weights(:,sess_cols{i}) = inter_w;
+            weights(:,sess_cols{j}) = -inter_w;
+            f = f + 1;
+            fcon_names{f} = [sess_subj{i} '_' sess_subj{j} '_interaction_effect'];
+            fcon_weights{f} = weights;
+            
+        end
+        
+        for f = 1:numel(fcon_names)
+            
+            con = con + 1;
+            
+            matlabbatch{3}.spm.stats.con.consess{con}.fcon.name = fcon_names{f};
+            matlabbatch{3}.spm.stats.con.consess{con}.fcon.weights = fcon_weights{f};
+            matlabbatch{3}.spm.stats.con.consess{con}.fcon.sessrep = 'none';
+            
+        end
+        
+        for c = 1:con
+            consess = matlabbatch{3}.spm.stats.con.consess{c};
+            contype = fieldnames(consess);
+            phDSGN.contrastnames{c} = consess.(contype{1}).name;
+            phDSGN.contrastweights{c} = consess.(contype{1}).weights;
+        end
     
     matlabbatch{3}.spm.stats.con.delete = 0;
    
@@ -552,15 +546,18 @@ for sub = 1:size(derivsubjs,1)
     % ADD CON IMAGES NAMES TO phDSGN STRUCTURE AND SAVE
     %--------------------------------------------------
     
-    tconimgs = dir(fullfile(subfirstlevelmodeldir,'con*.nii'));
-    fconimgs = dir(fullfile(subfirstlevelmodeldir,'ess*.nii'));
-    conimgs = [tconimgs;fconimgs];
+    % taken from SPM.xCon, so phDSGN.contrasts{c} is the image of
+    % phDSGN.contrastnames{c} (con_*.nii for t-, ess_*.nii for F-contrasts)
     
-    phDSGN.contrasts = cell(1,size(conimgs,1));
+    load(fullfile(subfirstlevelmodeldir,'SPM.mat'),'SPM');
     
-    for conimg = 1:size(conimgs,1)
-        phDSGN.contrasts{conimg} = fullfile(conimgs(conimg).folder,conimgs(conimg).name);
+    phDSGN.contrasts = cell(1,size(SPM.xCon,2));
+    
+    for conimg = 1:size(SPM.xCon,2)
+        phDSGN.contrasts{conimg} = fullfile(subfirstlevelmodeldir,SPM.xCon(conimg).Vcon.fname);
     end
+    
+    clear SPM
     
     savefilename = fullfile(subfirstlevelmodeldir, 'DSGN.mat');
     save(savefilename, 'phDSGN', '-v7.3');

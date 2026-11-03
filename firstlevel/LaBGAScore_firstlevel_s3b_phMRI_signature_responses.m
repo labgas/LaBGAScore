@@ -25,6 +25,7 @@
 % * path_sigs          cell array of signature .nii paths (which(...)) or load_image_set() keywords to apply
 % * name_sigs          cell array of names for every individual signature in path_sigs (expand load_image_set sets into their constituent names)
 % * results_suffix     arbitrary name appended to the results .xlsx filename
+% * results_subdir     subfolder of secondlevel/<modelingfilesdir> for the results .xlsx; '' writes into secondlevel/<modelingfilesdir> itself
 % * add_covars         true/false, whether to interpolate and add covariates to the results table
 % * name_covars        cell array of covariate column names, as they appear in covars_filename (only used if add_covars is true)
 % * covars_filename    name of the .csv file with covariate values, located in BIDSdir (only used if add_covars is true)
@@ -52,9 +53,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s3b_phMRI_signature_responses.m         v2.2
+% LaBGAScore_firstlevel_s3b_phMRI_signature_responses.m         v2.3
 %
-% last modified: 2026/09/02
+% last modified: 2026/10/30
 %
 %
 %% SET STUDY, MODEL AND SESSION INFO
@@ -75,6 +76,7 @@ sessions = {'sucrose','erythritol','water'}; % names of conditions AS THEY APPEA
 path_sigs = {which('PleasureSignature.nii'), which('Reward_Signature_bootstrapped_0.5.nii.gz'), load_image_set('ncs')};         % either 1) signature .nii file on Matlab path or 2) keyword from load_image_set
 name_sigs = {'pleasure','reward','craving','craving drugs','craving food'};                                                     % if one of the signatures defined using load_image_set in path_sigs, list the names of all signatures included in the set separately here
 results_suffix = 'reward_sigs';                                                                                                 % arbitrary name to append to results excel file
+results_subdir = 'signature_responses';                                                                                         % subfolder of secondlevel/<modelingfilesdir> to write the results file into, '' for none
 
 
 %% SET COVARIATE OPTION AND INFO
@@ -111,7 +113,7 @@ secondleveldir = fullfile(rootdir, 'secondlevel');
     if ~exist (secondleveldir,'dir')
         error('\nsecondlevel subdataset %s does not exist, please create using datalad commands prior to proceeding\n',secondleveldir);
     else
-        secondlevelmodeldir = fullfile(secondleveldir,modelingfilesdir);
+        secondlevelmodeldir = fullfile(secondleveldir,modelingfilesdir,results_subdir);
         if ~exist (secondlevelmodeldir,'dir')
             mkdir(secondlevelmodeldir);
         end
@@ -148,8 +150,15 @@ for sub = 1:num_subs
     load(fullfile(subfirstlevelmodeldir,'DSGN.mat'));
     
     betas = SPM.Vbeta;
+    if ~isequal(sessions,phDSGN.sessions)
+        error('\nsessions in this script (%s) differ from phDSGN.sessions in %s (%s), please check before proceeding\n',strjoin(sessions,', '),fullfile(subfirstlevelmodeldir,'DSGN.mat'),strjoin(phDSGN.sessions,', '));
+    end
+    
     idx = contains({betas.descrip}, phDSGN.sessions);
     betas_oi = betas(idx);
+        if size(betas_oi,2) ~= phDSGN.nr_timebins*size(SPM.Sess,2)
+            error('\n%d betas of interest found for %s, expected %d timebins x %d sessions, please check sessions before proceeding\n',size(betas_oi,2),firstlevelsubjs{sub},phDSGN.nr_timebins,size(SPM.Sess,2));
+        end
     betas_oi_fp = cell(size(betas_oi,2),1);
         for b = 1:size(betas_oi_fp,1)
             betas_oi_fp{b} = fullfile(subfirstlevelmodeldir,betas_oi(b).fname(1,:));
@@ -214,10 +223,12 @@ for sub = 1:num_subs
                 
                 covar_interp_subj = [];
 
-                for sess = 1:(height(subj_table)/phDSGN.nr_timebins)
+                sess_subj = unique(subj_table.condition,'stable'); % sessions actually in this subject's model, in beta order; indexing phDSGN.sessions here misaligns covariates when an earlier session is missing
+                
+                for sess = 1:numel(sess_subj)
                     
-                    covar_time_2interp = covars_table_sub.Timepoint(covars_table_sub.Condition == phDSGN.sessions{sess});
-                    covar_2interp = covars_table_sub.(name_covars{covar})(covars_table_sub.Condition == phDSGN.sessions{sess});
+                    covar_time_2interp = covars_table_sub.Timepoint(covars_table_sub.Condition == char(sess_subj(sess)));
+                    covar_2interp = covars_table_sub.(name_covars{covar})(covars_table_sub.Condition == char(sess_subj(sess)));
 
                         if sum(~isnan(covar_2interp)) > 2
                             covar_interp_sess = interp1(covar_time_2interp,covar_2interp,[1:phDSGN.nr_timebins],'spline');

@@ -21,14 +21,20 @@
 % section below):
 %
 % * name_covars       cell array of covariate column names, as they appear in covars_filename
-% * nr_noise_reg      number of noise regressors already in the first-level model (e.g. 24 head motion params + csf, no spikes for phMRI)
 % * covars_filename   name of the .csv file with covariate values, located in BIDSdir
+%
+% The contrast weights are placed by column index, taken from SPM.Sess in
+% each subject's SPM.mat, so the number of noise regressors per session
+% (which varies when spikes are modelled) does not need to be specified.
+%
+% Covariate contrasts are appended to the existing ones; the script errors
+% if a subject's SPM.mat already contains contrasts for these covariates.
 %
 % *DEPENDENCIES*
 %
-% MATLAB Report Generator toolbox (mlreportgen.utils.capitalizeFirstChar)
-% git-annex on the system path (the script shells out to
-% `git annex unannex *.mat` before writing results)
+% SPM12 on Matlab path (spm_jobman)
+% git-annex on the system path, only if SPM.mat is already annexed (the
+% script then runs `git annex unlock` on SPM.mat and DSGN.mat before writing)
 %
 % -------------------------------------------------------------------------
 %
@@ -49,9 +55,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_firstlevel_s2b_phMRI_covar_contrasts.m         v1.2
+% LaBGAScore_firstlevel_s2b_phMRI_covar_contrasts.m         v1.3
 %
-% last modified: 2026/09/02
+% last modified: 2026/10/30
 %
 %
 %% INITIATE DSGN STRUCTURE
@@ -88,7 +94,6 @@ phDSGN.nr_timebins = (phDSGN.nr_dyns-phDSGN.start_dyn)/phDSGN.timebin_length_tr;
 % NOTE: STUDY-SPECIFIC
 
 name_covars = {'delta_GLP1','delta_PYY','delta_insulin','delta_leptin'};
-nr_noise_reg = 25;                                                          % 24hmp + csf, no spikes modelled in phMRI
 covars_filename = 'blood_hormones_msd.csv';
 
 
@@ -124,12 +129,20 @@ covars_table.Condition = categorical(covars_table.Condition);
 covars_table.Timepoint(covars_table.Timepoint == -10) = 0; % recode to 0 for correct interpolation
 covars_table.Scan_included = logical(covars_table.Scan_included);
 
+missing_sessions = setdiff(phDSGN.sessions,categories(covars_table.Condition));
+    if ~isempty(missing_sessions)
+        error('\nsession name(s) %s not found in the Condition column of %s (capitalization matters), please check phDSGN.sessions before proceeding\n',strjoin(missing_sessions,', '),covars_filename);
+    end
+
+covar_sessions = phDSGN.sessions; % kept separately, since loading each subject's DSGN.mat below overwrites phDSGN
+
 covars = struct();
     for s = 1:num_sess
         covars.(phDSGN.sessions{s}) = cell(num_covars,num_subs);
     end
     
 subs2include = [];
+idx_2include = false(1,num_subs);
 
 for sub = 1:num_subs
     
@@ -171,7 +184,6 @@ for sub = 1:num_subs
 end 
 
 num_subs_included = size(subs2include,1);
-idx_2include = logical(idx_2include);
 
 for s = 1:num_sess
     covars.(phDSGN.sessions{s}) = covars.(phDSGN.sessions{s})(:,idx_2include);
@@ -180,6 +192,12 @@ end
 
 %% CREATE, SAVE, AND RUN CONTRAST BATCH
 % -------------------------------------------------------------------------
+
+% Weights are placed by column index from SPM.Sess, so they land on the
+% intended timebin regressors whatever the number of noise regressors per
+% session. Contrasts are named <covariate>_<cond_a>_<cond_b>_bin_<a>, for
+% every pair of sessions in the subject's model (in nchoosek order), and are
+% only written if the covariate is available for both sessions of the pair.
 
 clear sub c s
 
@@ -193,103 +211,75 @@ for sub = 1:num_subs_included
     
     matlabbatch{1}.spm.stats.con.spmmat = {fullfile(subfirstlevelmodeldir,'SPM.mat')};
     
+    num_existing_contrasts = size(SPM.xCon,2);
+    
+        if num_existing_contrasts > 0 && any(startsWith({SPM.xCon(:).name},name_covars))
+            error('\nSPM.mat of %s already contains covariate contrasts for %s, delete them (or refit with s1b) before rerunning this script\n',subs2include(sub,:),strjoin(name_covars,', '));
+        end
+    
     num_sess_sub = size(SPM.Sess,2);
-    sess_sub_indices = 1:num_sess_sub;
-    num_contrasts = sum(sess_sub_indices(1,1:end-1));
+    nr_cols = size(SPM.xX.X,2);
+    sess_sub_names = cell(1,num_sess_sub);
+    sess_sub_covars = cell(1,num_sess_sub); % field of the covars struct matching each session
+    sess_cols = cell(1,num_sess_sub);
     
     for n = 1:num_sess_sub
-         cond = strsplit(char(SPM.Sess(n).U(1).name),'_');
-         condname = cond{1};
-         sess_sub_names{n} = condname;
+         sess_sub_names{n} = regexprep(char(SPM.Sess(n).U(1).name),'_bin_\d+$','');
+         covar_idx = strcmpi(covar_sessions,sess_sub_names{n});
+             if sum(covar_idx) ~= 1
+                 error('\nsession %s of %s matches %d entries of phDSGN.sessions in this script, please check before proceeding\n',sess_sub_names{n},subs2include(sub,:),sum(covar_idx));
+             end
+         sess_sub_covars{n} = covar_sessions{covar_idx};
+         sess_cols{n} = SPM.Sess(n).col(1:phDSGN.nr_timebins);
     end
     
-    num_existing_contrasts = size(SPM.xCon,2);
+        if num_sess_sub >= 2
+            sess_pairs = nchoosek(1:num_sess_sub,2);
+        else
+            sess_pairs = zeros(0,2);
+        end
+    
+    con = 0;
     
      for c = 1:num_covars
         
-        for cont = 1:num_contrasts
+        for p = 1:size(sess_pairs,1)
+            
+            i = sess_pairs(p,1);
+            j = sess_pairs(p,2);
+            covar_i = covars.(sess_sub_covars{i}){c,sub};
+            covar_j = covars.(sess_sub_covars{j}){c,sub};
+            
+                if isempty(covar_i) || isempty(covar_j)
+                    continue
+                end
             
             for a = 1:phDSGN.nr_timebins
                 
-                if cont == 1
-                    
-                    if ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{1})){c,sub}) && ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{2})){c,sub})
+                con = con + 1;
+                weights = zeros(1,nr_cols);
+                weights(sess_cols{i}(a)) = covar_i(1,a);
+                weights(sess_cols{j}(a)) = -covar_j(1,a);
                 
-                        matlabbatch{1}.spm.stats.con.consess{a + (c-1)*(phDSGN.nr_timebins*3)}.tcon.name = [name_covars{c} '_' sess_sub_names{1} '_' sess_sub_names{2} '_bin_' num2str(a)];
-                        matlabbatch{1}.spm.stats.con.consess{a + (c-1)*(phDSGN.nr_timebins*3)}.tcon.weights = [zeros(1, a-1) covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{1})){c,sub}(1,a) zeros(1,(phDSGN.nr_timebins-1)) zeros(1,nr_noise_reg) -covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{2})){c,sub}(1,a)]; 
-                        matlabbatch{1}.spm.stats.con.consess{a + (c-1)*(phDSGN.nr_timebins*3)}.tcon.sessrep = 'none';
-
-                        phDSGN.contrastnames{a + num_existing_contrasts + (c-1)*(phDSGN.nr_timebins*3)} = matlabbatch{1}.spm.stats.con.consess{a + (c-1)*(phDSGN.nr_timebins*3)}.tcon.name;
-                        phDSGN.contrastweights{a + num_existing_contrasts + (c-1)*(phDSGN.nr_timebins*3)} = matlabbatch{1}.spm.stats.con.consess{a + (c-1)*(phDSGN.nr_timebins*3)}.tcon.weights;
-                        
-                    end
+                matlabbatch{1}.spm.stats.con.consess{con}.tcon.name = [name_covars{c} '_' sess_sub_names{i} '_' sess_sub_names{j} '_bin_' num2str(a)];
+                matlabbatch{1}.spm.stats.con.consess{con}.tcon.weights = weights;
+                matlabbatch{1}.spm.stats.con.consess{con}.tcon.sessrep = 'none';
                 
-                else
-
-                    if cont == 2
-                        
-                        if ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{1})){c,sub}) && ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{2})){c,sub})
-
-                            b = a + (phDSGN.nr_timebins*(cont-1));
-                        
-                        else
-                        
-                            b = a;
-                        
-                        end
-                        
-                        if ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{1})){c,sub}) && ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{3})){c,sub})
-
-                            matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.name = [name_covars{c} '_' sess_sub_names{1} '_' sess_sub_names{3} '_bin_' num2str(a)];
-                            matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.weights = [zeros(1, a-1) covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{1})){c,sub}(1,a) zeros(1,((phDSGN.nr_timebins*cont-1))) zeros(1,nr_noise_reg) zeros(1,nr_noise_reg) -covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{3})){c,sub}(1,a)];
-                            matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.sessrep = 'none';
-
-                            phDSGN.contrastnames{b + num_existing_contrasts + (c-1)*(phDSGN.nr_timebins*3)} = matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.name;
-                            phDSGN.contrastweights{b + num_existing_contrasts + (c-1)*(phDSGN.nr_timebins*3)} = matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.weights;
-                            
-                        end
-
-                    elseif cont == 3
-                        
-                        if ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{1})){c,sub}) && ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{2})){c,sub}) && ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{3})){c,sub})
-                            
-                            b = a + (phDSGN.nr_timebins*(cont-1));
-                        
-                        else
-                        
-                            b = a;
-                            
-                        end
-                        
-                        if ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{2})){c,sub}) && ~isempty(covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{3})){c,sub})
-
-                            matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.name = [name_covars{c} '_' sess_sub_names{2} '_' sess_sub_names{3} '_bin_' num2str(a)];
-                            matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.weights = [zeros(1, phDSGN.nr_timebins) zeros(1,nr_noise_reg) zeros(1,a-1) covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{2})){c,sub}(1,a) zeros(1,(phDSGN.nr_timebins-1)) zeros(1,nr_noise_reg) -covars.(mlreportgen.utils.capitalizeFirstChar(sess_sub_names{3})){c,sub}(1,a)]; 
-                            matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.sessrep = 'none';
-
-                            phDSGN.contrastnames{b + num_existing_contrasts + (c-1)*(phDSGN.nr_timebins*3)} = matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.name;
-                            phDSGN.contrastweights{b + num_existing_contrasts + (c-1)*(phDSGN.nr_timebins*3)} = matlabbatch{1}.spm.stats.con.consess{b + (c-1)*(phDSGN.nr_timebins*3)}.tcon.weights;
-                            
-                        else
-                            
-                            break
-                            
-                        end
-
-                    else
-
-                        error('\n More than 3 sessions not yet implemented in script, please customize before proceeding\n'); 
-
-                    end
-                end
-            
+                phDSGN.contrastnames{num_existing_contrasts + con} = matlabbatch{1}.spm.stats.con.consess{con}.tcon.name;
+                phDSGN.contrastweights{num_existing_contrasts + con} = weights;
+                
             end
-         
+            
         end
         
      end
-    
-    matlabbatch{1}.spm.stats.con.consess = matlabbatch{1}.spm.stats.con.consess(~cellfun('isempty',matlabbatch{1}.spm.stats.con.consess)); % get rid of empty cells for missing conditions, causes spm to error out
+     
+        if con == 0
+            fprintf('\nWARNING: no covariate contrasts could be made for %s, skipping\n',subs2include(sub,:));
+            continue
+        end
+        
+    fprintf('\n%s: adding %d covariate contrasts to %d existing ones\n',subs2include(sub,:),con,num_existing_contrasts);
     
     matlabbatch{1}.spm.stats.con.delete = 0;
     
@@ -297,8 +287,20 @@ for sub = 1:num_subs_included
     % SAVE BATCHES AND RUN
     %---------------------
     
+    % SPM.mat and DSGN.mat are modified in place, so unlock them first if
+    % they were already annexed (datalad save turns them into read-only
+    % symlinks)
+    
+    for f = {'SPM.mat','DSGN.mat'}
+        if system(['test -L "' fullfile(subfirstlevelmodeldir,f{1}) '"']) == 0
+            [status,result] = system(['cd "' subfirstlevelmodeldir '" && git annex unlock ' f{1}]);
+                if status ~= 0
+                    error('\ngit annex unlock %s failed in %s:\n%s\n',f{1},subfirstlevelmodeldir,result);
+                end
+        end
+    end
+    
     cd(subfirstlevelmodeldir);
-    ! git annex unannex *.mat
     
     eval(['save cov_contrasts_first_level_' subs2include(sub,:) '.mat matlabbatch']);
 
@@ -311,13 +313,16 @@ for sub = 1:num_subs_included
     % ADD CON IMAGES NAMES TO phDSGN STRUCTURE AND SAVE
     %--------------------------------------------------
     
-    tconimgs = dir(fullfile(subfirstlevelmodeldir,'con*.nii'));
-    fconimgs = dir(fullfile(subfirstlevelmodeldir,'ess*.nii'));
-    conimgs = [tconimgs;fconimgs];
+    % taken from SPM.xCon, so phDSGN.contrasts{c} is the image of
+    % phDSGN.contrastnames{c}
     
-    for conimg = (num_existing_contrasts+1):size(conimgs,1)
-        phDSGN.contrasts{conimg} = fullfile(conimgs(conimg).folder,conimgs(conimg).name);
+    load(fullfile(subfirstlevelmodeldir,'SPM.mat'),'SPM');
+    
+    for conimg = (num_existing_contrasts+1):size(SPM.xCon,2)
+        phDSGN.contrasts{conimg} = fullfile(subfirstlevelmodeldir,SPM.xCon(conimg).Vcon.fname);
     end
+    
+    clear SPM
     
     savefilename = fullfile(subfirstlevelmodeldir, 'DSGN.mat');
     save(savefilename, 'phDSGN', '-append');
