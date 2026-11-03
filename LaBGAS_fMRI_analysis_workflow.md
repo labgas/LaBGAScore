@@ -172,6 +172,8 @@ For example:
 2. [Tutorials with Matlab live scripts](https://canlab.github.io/tutorials/)
 3. [Walkthroughs](https://canlab.github.io/walkthroughs/)
 
+The server's SPM12 does not run with SPM's own defaults: see [the lab's edits to the shared SPM defaults](#the-labs-edits-to-the-shared-spm-defaults).
+
 ### 6. Configure your Git identity
 
 Follow [these instructions](http://handbook.datalad.org/en/latest/intro/installation.html#initial-configuration) in the Datalad Handbook.
@@ -1246,6 +1248,45 @@ Then save the output it wrote to the derivatives and firstlevel subdatasets and 
 cd /data/proj_erythritol/proj_erythritol_4a
 datalad save -m "ran ery_4a_firstlevel_m1_s2_fit_model.m on all subjects"
 ```
+
+#### Memory, and running subjects in parallel
+
+SPM estimates a model in chunks of at most `defaults.stats.maxmem` bytes of data, and a MATLAB process peaks at several times that chunk: SPM holds raw, whitened/filtered and residual copies of it at once. The chunk size changes memory use and speed, **not the estimates**.
+
+The server's shared SPM (`/opt/KUL_apps/spm12/spm_defaults.m`) sets `maxmem = 2^32` (4 GB) since 2026-10-30. It used to be `2^36.7` (~112 GB), which processed a whole subject in a single chunk. On 2026-10-30 four parallel phMRI fits (3 sessions × 1416 volumes) exhausted the server's 251 GB of RAM. The kernel's OOM killer then killed fits, and the server's monitoring agents with them. Measured on one such subject (34 GiB of data as double):
+
+| `maxmem` | chunks | peak RAM per MATLAB process | estimation time |
+|---|---|---|---|
+| `2^36.7` (old) | 1 | ~138 GB (killed) | 20.6 min alone, 31.9 min with 3 other fits |
+| `2^34` | 3 | 62–67 GB | 21–23 min |
+| `2^32` (current) | 9 | **17 GB** | 25 min |
+
+Because of the lab's `mask.thresh = -Inf` (see below), SPM processes every voxel of the bounding box. A subject's data size is therefore roughly *number of scans × 1.08 M voxels × 8 bytes* at 2 mm MNI resolution.
+
+- **This server is shared.** Count other users' jobs before starting several fits, and check `free -g`.
+- **To run subjects in parallel, use one MATLAB process per subject**, so a crash or kill loses one subject. A killed subject leaves a specification-only `SPM.mat`. Refitting into that directory makes SPM ask "stop|continue", which a headless run cannot answer, so remove the directory first.
+- **To use a different value for one job**, put an `spm_my_defaults.m` on that job's path instead of editing the shared file:
+
+  ```matlab
+  global defaults                 % required: without it the setting is silently ignored
+  defaults.stats.maxmem = 2^33;
+  ```
+
+  SPM then prints *"Modified fields: stats"* when it loads its defaults. The chunk count in the log (`Chunk 1/9`) confirms what was used.
+
+#### The lab's edits to the shared SPM defaults
+
+`/opt/KUL_apps/spm12/spm_defaults.m` (SPM12 r7771) differs from the SPM release in five settings, each marked `% lukasvo76 edited` in the file. The file is not under version control, so keep a dated backup next to it before you change it (e.g. `spm_defaults.m.orig_20261030`).
+
+| setting | lab value | SPM default | why |
+|---|---|---|---|
+| `stats.fmri.hpf` | 180 | 128 | CANlab default |
+| `stats.fmri.cvi` | `'none'` | `'AR(1)'` | CANlab default; scripts that want AR(1) (e.g. the phMRI chain) set it explicitly in their batch |
+| `mask.thresh` | `-Inf` | 0.8 | CANlab default: no implicit masking |
+| `stats.topoFDR` | 0 | 1 | CANlab default |
+| `stats.maxmem` | `2^32` | `2^29` | see above |
+
+These apply to every SPM batch on the server that does not set the field itself. Copies of `spm_defaults.m` also exist in `cocoanCORE` and `CanlabPrivate`. SPM's own copy wins only while `/opt/KUL_apps/spm12` comes first on the path, so put SPM first (`-P` for the headless wrapper).
 
 ### 6. Check the first-level results
 

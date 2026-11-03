@@ -272,6 +272,19 @@ credential. And because `http.<host>.proactiveAuth` is set, an expired token
 breaks **reads** too, so public-repo fetches fail instead of falling back to
 anonymous. GIN is unaffected: separate PAT, ssh remotes.
 
+## Shared SPM defaults and memory
+
+`/opt/KUL_apps/spm12/spm_defaults.m` carries five lab edits (hpf 180, cvi `'none'`,
+`mask.thresh = -Inf`, topoFDR 0, `maxmem = 2^32`), documented in
+`LaBGAS_fMRI_analysis_workflow.md` under "Memory, and running subjects in parallel".
+`maxmem` was `2^36.7` (~112 GB) until 2026-10-30. Then four parallel phMRI fits
+reached 138 GB each and the OOM killer took out fits and the server's monitoring
+agents. **Peak RAM is several times `maxmem`**, not `maxmem` itself (17 GB at
+`2^32`, 62-67 GB at `2^34`, for 34 GiB of data). Override it per job with an
+`spm_my_defaults.m`, which needs `global defaults` or the setting is silently ignored.
+Never edit the shared file without a dated backup next to it; it is not under
+version control.
+
 ## Running scripts and publishing reports
 
 **Headless is the default**; X2go is the alternative when higher-resolution figures are
