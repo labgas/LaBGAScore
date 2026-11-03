@@ -185,8 +185,9 @@ subdataset table, the model inventory, what belongs on GIN, and the open items:
 | CFS | `/data/proj_cfs/CLAUDE.md` |
 | MOODBUGS WP2 | `/data/proj_moodbugs/proj_moodbugs_wp2/CLAUDE.md` (note the nested path) |
 | bitter-reward | `/data/proj_bitter-reward/CLAUDE.md` |
+| erythritol phMRI | `/data/proj_erythritol/proj_erythritol_phMRI/CLAUDE.md` (nested; written 2026-10-30) |
 
-**Read the project's own `CLAUDE.md` before touching its data.** Two of the four
+**Read the project's own `CLAUDE.md` before touching its data.** Two of these
 run a deliberate selective-backup policy — `proj_cfs/secondlevel` holds only the
 final models on GIN, and `proj_discoverie/derivatives` deliberately keeps 464.82
 GB of unsmoothed preprocessed BOLD **local-only** — so content missing from GIN

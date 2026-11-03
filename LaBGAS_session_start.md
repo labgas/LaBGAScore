@@ -25,6 +25,7 @@ Before doing anything else in a session, read:
 | CFS | `/data/proj_cfs` |
 | MOODBUGS WP2 | `/data/proj_moodbugs/proj_moodbugs_wp2` (nested) |
 | bitter-reward | `/data/proj_bitter-reward` |
+| erythritol phMRI | `/data/proj_erythritol/proj_erythritol_phMRI` (nested) |
 
 Numbers in these docs are dated measurements. Re-derive them before relying on them.
 
