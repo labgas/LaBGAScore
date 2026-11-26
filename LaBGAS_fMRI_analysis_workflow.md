@@ -1476,14 +1476,15 @@ previous ones is stale, and silently keeping a stale value is worse than losing
 it. **The rule is simply: any time you re-run `prep_2` or `prep_3`, re-run
 `prep_4` and everything downstream of it.**
 
-#### Ten traps when adapting a template
+#### Eleven traps when adapting a template
 
 Traps 1, 2, 3, 6, 7 and 8 fail *silently* — the script runs to completion and publishes a
 report, but the analysis is not the one you specified. Between them they account
 for eight wrong-but-clean runs during recent model builds, so they are worth
-knowing before you edit anything. Traps 4, 5 and 10 are the exception: they raise an
+knowing before you edit anything. Traps 4, 5, 10 and 11 are the exception: they raise an
 error or print a visibly wrong label, but all point away from the real cause.
-Traps 6 to 9 were found during the discoverie model_2h build, trap 10 during model_2i.
+Traps 6 to 9 were found during the discoverie model_2h build, trap 10 during model_2i,
+and trap 11 during the bitter-reward model_3/model_4 mask rebuild.
 
 **1. Where you put your option overrides.** Set every study option by
 **replacing the template's own assignment line, in place**. Do not add a block
@@ -1644,6 +1645,49 @@ means `prep_1b` already did it, anything else errors with both counts named —
 and separately checks the design tables against the retained count rather than
 letting `prep_3a` discover the mismatch. Either convention works, so long as
 `prep_1b` and `prep_2` agree on which one is in force.
+
+**11. An atlas granularity level with no labels.** The mask scripts in
+LaBGAScore `atlas_mask_tools/` select parcels at up to three granularity levels
+of the same atlas — `labels1`/`labels2`/`labels3`, read at
+`granularity1`/`granularity2`/`granularity3` (for `canlab2024_fine_2mm`,
+`labels_2` finest through `labels_4` coarsest). Most masks need only one or two
+of them, and the obvious way to switch a level off is to empty it. Before
+`LaBGAScore_atlas_binary_mask_from_atlas.m` v3.3 that did not work:
+
+```
+Error using atlas/threshold
+Empty or invalid .probability_maps. Cannot threshold
+```
+
+`select_atlas_subset` loops over the strings it is handed, so `{}` matches
+nothing and returns a 0-region atlas, which `threshold` then rejects. The error
+names `threshold`, but nothing is wrong there — and a per-block `isempty` guard
+would still not have been enough, because the merge seeded unconditionally from
+the first level, so a mask whose *first* level is the empty one failed a second
+way.
+
+Two related failures in the companion script,
+`LaBGAScore_atlas_rois_from_atlas.m`, were silent rather than loud. A
+`while roi_counter < nr_roisN` wrapper around each level's `for` loop would
+**hang forever** when `labelsN` was emptied but `roi_bilateral_idxN` was left
+behind (`nr_roisN` stays positive and nothing increments `roi_counter`), and
+would **skip a level entirely** when it held exactly one unilateral ROI, since
+`1 < 1` is false.
+
+Since v3.3 / v1.6, empty a level with `labelsN = {}` — and in the ROI script
+empty `roi_namesN` and `roi_bilateral_idxN` with it, since the three must hold
+equal numbers of entries or the script errors naming all three counts. Emptying
+every level errors rather than writing a mask of nothing.
+
+The same pass added a check for the subtler version of this trap: **a label that
+matches nothing at the level you asked for**. Labels are matched by substring
+and within one level only, so a label that exists in the atlas at a different
+granularity contributes no parcels and, before v3.3, did so in silence. In the
+bitter-reward model_4 mask, `insula_anterior_L` and `insula_operculum_L` exist
+in `canlab2024_fine_2mm` only at `labels_4` while the script requested them at
+`labels_3` — two of the six requested labels silently doing nothing. This now
+errors, naming the level and the offending strings; `strict_labels = false`
+downgrades it to a warning.
 
 
 | # | Script | Description |

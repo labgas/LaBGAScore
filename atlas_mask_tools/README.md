@@ -17,6 +17,7 @@ within a family are strictly nested. The measured voxel counts are in
 - [The scripts](#the-scripts)
   - [`LaBGAScore_atlas_binary_mask_from_atlas.m`](#labgascore_atlas_binary_mask_from_atlasm)
   - [`LaBGAScore_atlas_rois_from_atlas.m`](#labgascore_atlas_rois_from_atlasm)
+  - [Granularity levels](#granularity-levels)
   - [Which one do I want](#which-one-do-i-want)
 - [Who consumes the output](#who-consumes-the-output)
 - [The bundled masks](#the-bundled-masks)
@@ -65,6 +66,16 @@ Options control how much of the provenance is kept alongside it:
   whole mask. Needed to extract ROI averages over the mask as a unit.
 - `single_roi` — set true when the mask is one contiguous region.
 
+Two further options control the selection itself:
+
+- `prob_threshold` — the probability at which each selected parcel is
+  thresholded, 0.20 by default. Before v3.3 this value was hardcoded in six
+  separate places, so changing it meant editing all six.
+- `strict_labels` — what to do when a requested label matches nothing at the
+  granularity level it was asked for: error naming the level and the offending
+  strings (default), or, set to `false`, warn and carry on with whatever did
+  match. See [Granularity levels](#granularity-levels).
+
 ### `LaBGAScore_atlas_rois_from_atlas.m`
 
 Builds **a set of ROIs**, each one itself a combination of atlas parcels, and
@@ -78,6 +89,50 @@ first time:
 |---|---|---|
 | original | one index per **parcel** that went into each ROI | labelling voxel-wise results with parcel names |
 | flat | one index per **ROI** | extracting ROI averages — always saved, because the second-level ROI machinery needs it |
+
+Each granularity level here is described by **three parallel variables** —
+`labelsN`, `roi_namesN` and `roi_bilateral_idxN` — which must hold the same
+number of entries. Since v1.6 the script checks this and errors naming all three
+counts; before that a mismatch either hung the script forever or silently
+skipped a level. See [Granularity levels](#granularity-levels).
+
+### Granularity levels
+
+Both scripts select parcels at up to **three granularity levels of the same
+atlas**, because a CANlab atlas carries several nested label fields and the
+region you want is rarely all at one of them. The levels are set as pairs: the
+labels to look for (`labels1`, `labels2`, `labels3`) and the field to look for
+them in (`granularity1`, `granularity2`, `granularity3`). For
+`canlab2024_fine_2mm` those fields run `labels_2` (finest) through `labels_4`
+(coarsest); `help atlas.select_atlas_subset` and the atlas object's own
+`fieldnames` are authoritative for any other atlas.
+
+**A level may be empty.** Most masks need only one or two levels, and the way to
+switch one off is `labelsN = {}` — in the ROI script, emptying `roi_namesN` and
+`roi_bilateral_idxN` alongside it. Since v3.3 / v1.6 the scripts skip an empty
+level and say so; emptying *all* of them errors rather than writing a mask of
+nothing.
+
+Before those versions, emptying a level did not work, and the error pointed away
+from the cause:
+
+```
+Error using atlas/threshold
+Empty or invalid .probability_maps. Cannot threshold
+```
+
+`select_atlas_subset` loops over the strings it is given, so `{}` matches nothing
+and hands back a 0-region atlas, which `threshold` then rejects. Note that a
+per-block `isempty` guard would not have been enough on its own: the merge seeded
+unconditionally from the first level, so a mask whose *first* level is the empty
+one failed a second way.
+
+**Labels are matched by substring, and matched within one level only.** A label
+that exists in the atlas but at a different granularity than the one you asked
+for matches nothing — the failure the `strict_labels` check now catches. The
+real case: `insula_anterior_L` and `insula_operculum_L` exist in
+`canlab2024_fine_2mm` only at `labels_4`, so requesting them at `labels_3`
+contributed no parcels at all, and before v3.3 did so in silence.
 
 ### Which one do I want
 

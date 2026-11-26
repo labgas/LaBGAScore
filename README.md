@@ -7,7 +7,7 @@ Core scripts (and templates for them) for LaBGAS's (Laboratory for Brain-Gut Axi
 > 1. **[`LaBGAS_fMRI_analysis_workflow.md`](LaBGAS_fMRI_analysis_workflow.md)** — the
 >    step-by-step guide to running a study end to end, from server access and DICOM
 >    conversion through first and second level. Read it before this README; everything
->    else assumes it. Its **"Ten traps when adapting a template"** section is the
+>    else assumes it. Its **"Eleven traps when adapting a template"** section is the
 >    single highest-value page in this repo — every trap in it is a real
 >    wrong-but-clean run someone already paid for.
 > 2. **This README** — what lives where in this repo, and why.
@@ -343,7 +343,7 @@ exit is success; the runner translates that and prints a single verdict line.
 both failure modes are invisible to MATLAB's own static analysis, which is why
 these two checkers exist alongside it rather than inside it.
 
-See also **["Ten traps when adapting a template"](LaBGAS_fMRI_analysis_workflow.md)**
+See also **["Eleven traps when adapting a template"](LaBGAS_fMRI_analysis_workflow.md)**
 in the workflow document, which is the catalogue these checkers were distilled
 from; traps 6 and 7 are exactly what the two Python scripts automate.
 
