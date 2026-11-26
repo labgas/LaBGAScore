@@ -27,6 +27,16 @@
 %
 % * single_roi = true/false                     set to true if you are writing a mask/roi with one single contiguous region
 %
+% * prob_threshold = <0-1>                      probability threshold applied to each selected subset; canlab2024 and
+%                                                 other probabilistic atlases need this. Was hardcoded as 0.20 in six
+%                                                 separate places before v3.3
+%
+% * strict_labels = true/false                  true (default) errors when a requested label matches nothing in the
+%                                                 atlas; false downgrades that to a warning and builds the mask from
+%                                                 whatever did match. Leaving a level EMPTY ({}) is always legitimate
+%                                                 and is skipped silently - the check is for typos, which would
+%                                                 otherwise produce a quietly smaller mask
+%
 %
 % *DEPENDENCIES*
 %
@@ -38,6 +48,14 @@
 %
 % help atlas.select_atlas_subset
 % https://canlab.github.io/_pages/using_canlab_atlases/using_canlab_atlases.html
+%
+% GRANULARITY LEVELS MAY BE LEFT EMPTY. Set any of labels1/labels2/labels3 to
+% {} and that level is skipped; the remaining levels are merged as usual. This
+% works for the FIRST level too, which the pre-v3.3 code could not do because
+% it seeded the merge from atlases{1} unconditionally. Before v3.3 an empty
+% level died at .threshold() with 'Empty or invalid .probability_maps. Cannot
+% threshold', because select_atlas_subset returns a 0-region atlas when its
+% loop over the requested labels never executes.
 %
 % This script is checked in as a worked example for one specific study/model
 % (reward-region atlas labels, maskname 'bit_rew_m1m', etc.) rather than a fully
@@ -53,9 +71,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_atlas_binary_mask_from_atlas.m         v3.2
+% LaBGAScore_atlas_binary_mask_from_atlas.m         v3.3
 %
-% last modified: 2026/08/20
+% last modified: 2026/11/26
 
 
 % Set options
@@ -64,6 +82,8 @@
 save_original_atlas_obj = true;
 save_merged_atlas_obj = false;
 single_roi = false;
+prob_threshold = 0.20;
+strict_labels = true;
 
 
 % Define maskname and directory where mask will be written
@@ -104,46 +124,111 @@ atlas1 = load_atlas(atlasname1); % you get a CANlab atlas object
 % see help atlas for adding labels etc
 
 
-% Select regions you want to include from the lowest level of granularity
-% ('labels_4')
+% Select the regions you want to include, per level of granularity
 %--------------------------------------------------------------------------
-
-labels1 = {'insula_anterior','insula_operculum','Hippocampal_Formation','Amygdala','VStriatum','CAU','PUT','GP'};
-
-atlas1_subset = select_atlas_subset(atlas1, labels1, 'labels_4');
-atlas1_subset = atlas1_subset.threshold(0.20); % canlab2024 is a probabilistic atlas
-
-atlas1_subset_flat = select_atlas_subset(atlas1, labels1, 'labels_4', 'flatten');
-atlas1_subset_flat = atlas1_subset_flat.threshold(0.20);
 
 % NOTE: you can select parcels using labels at different levels of
-% granularity, in this case 'labels_4', which is a lot easier compared to
-% having to list all the fine-grained labels!
+% granularity rather than having to list every fine-grained label - in
+% canlab2024 'labels_4' is the coarsest and 'labels_2' the finest.
+%
+% Leave a level EMPTY ({}) if your model does not draw on it. Empty levels
+% are skipped and the remaining ones merged as usual - including when it is
+% the FIRST level that is empty. A level that is NOT empty but matches
+% nothing in the atlas is an error rather than a silently smaller mask; see
+% strict_labels in the options above.
 
+% lowest level of granularity
+labels1 = {'insula_anterior','insula_operculum','Hippocampal_Formation','Amygdala','VStriatum','CAU','PUT','GP'};
+granularity1 = 'labels_4';
 
-% Select regions you want to include from the intermediate level of granularity
-% ('labels_3')
-%--------------------------------------------------------------------------
-
+% intermediate level of granularity
 labels2 = {'vmPFC','Hythal','VTA_PBP','PAG','SN','LC+','Parabrachial'};
+granularity2 = 'labels_3';
 
-atlas2_subset = select_atlas_subset(atlas1, labels2, 'labels_3');
-atlas2_subset = atlas2_subset.threshold(0.20); % canlab2024 is a probabilistic atlas
-
-atlas2_subset_flat = select_atlas_subset(atlas1, labels2, 'labels_3', 'flatten');
-atlas2_subset_flat = atlas2_subset_flat.threshold(0.20);
-
-
-% Select regions you want to include from the highest level of granularity
-% ('labels_2')
-% -------------------------------------------------------------------------
+% highest level of granularity
 labels3 = {'Ctx_47m_L','Ctx_a47r_L','Ctx_47s_L','Ctx_47m_R','Ctx_a47r_R','Ctx_47s_R','Ctx_a10p_L','Ctx_10pp_L','Ctx_11l_L','Ctx_13l_L','Ctx_OFC_L','Ctx_a10p_R','Ctx_10pp_R','Ctx_11l_R','Ctx_13l_R','Ctx_OFC_R'};
+granularity3 = 'labels_2';
 
-atlas3_subset = select_atlas_subset(atlas1, labels3, 'labels_2');
-atlas3_subset = atlas3_subset.threshold(0.20); % canlab2024 is a probabilistic atlas
 
-atlas3_subset_flat = select_atlas_subset(atlas1, labels3, 'labels_2','flatten');
-atlas3_subset_flat = atlas3_subset_flat.threshold(0.20); % canlab2024 is a probabilistic atlas
+% Build one thresholded subset per NON-EMPTY level
+% -------------------------------------------------------------------------
+
+level_labels = {labels1, labels2, labels3};
+level_granularity = {granularity1, granularity2, granularity3};
+
+atlases = {};
+atlases_flat = {};
+atlas_fields = fieldnames(atlas1);
+
+for level = 1:numel(level_labels)
+
+    these_labels = level_labels{level};
+    this_granularity = level_granularity{level};
+
+    if isempty(these_labels)
+
+        fprintf('\nLevel %d (%s): no labels requested - skipping this level\n', level, this_granularity);
+        continue
+
+    end
+
+    if ~any(strcmp(this_granularity, atlas_fields))
+
+        error('Level %d: ''%s'' is not a field of atlas ''%s''. Available label fields: %s', ...
+            level, this_granularity, atlasname1, ...
+            strjoin(atlas_fields(contains(atlas_fields, 'labels'))', ', '));
+
+    end
+
+    % select_atlas_subset matches SUBSTRINGS unless 'exact'/'regexp' is
+    % passed, so test each requested label the same way rather than guessing
+    available_labels = atlas1.(this_granularity);
+    is_unmatched = cellfun(@(s) ~any(contains(available_labels, s)), these_labels);
+
+    if any(is_unmatched)
+
+        msg = sprintf(['Level %d (%s): %d of %d requested labels match nothing in atlas ''%s'':\n  %s\n' ...
+            'Check the spelling and the granularity level. Set strict_labels = false to downgrade this to a warning.'], ...
+            level, this_granularity, sum(is_unmatched), numel(these_labels), atlasname1, ...
+            strjoin(these_labels(is_unmatched), ', '));
+
+        if strict_labels
+            error('%s', msg);
+        else
+            warning('%s', msg);
+        end
+
+    end
+
+    subset = select_atlas_subset(atlas1, these_labels, this_granularity);
+
+    if num_regions(subset) == 0
+
+        error(['Level %d (%s): the requested labels selected 0 atlas regions, so .threshold() ' ...
+            'would fail with ''Empty or invalid .probability_maps''. Labels requested: %s'], ...
+            level, this_granularity, strjoin(these_labels, ', '));
+
+    end
+
+    subset = subset.threshold(prob_threshold); % canlab2024 is a probabilistic atlas
+
+    subset_flat = select_atlas_subset(atlas1, these_labels, this_granularity, 'flatten');
+    subset_flat = subset_flat.threshold(prob_threshold);
+
+    atlases{end+1} = subset; %#ok<SAGROW>
+    atlases_flat{end+1} = subset_flat; %#ok<SAGROW>
+
+    fprintf('\nLevel %d (%s): %d labels requested, %d atlas regions selected\n', ...
+        level, this_granularity, numel(these_labels), num_regions(subset));
+
+end
+
+if isempty(atlases)
+
+    error(['All granularity levels are empty, so there is nothing to build a mask from. ' ...
+        'Populate at least one of labels1/labels2/labels3.']);
+
+end
 
 
 % Change data type of probability maps if needed
@@ -152,34 +237,29 @@ atlas3_subset_flat = atlas3_subset_flat.threshold(0.20); % canlab2024 is a proba
 % NOTE: Before merging the atlases, make sure that they have the same type of variables (look at the probability_maps. e.g. single/sparse double)
 % This command converts probability_maps property variable type from single to double, and then to sparse double - may not be needed for all atlases
 
-%atlas2_subset.probability_maps = double(atlas2_subset.probability_maps);
-%atlas2_subset.probability_maps = sparse(atlas2_subset.probability_maps);
+%atlases{2}.probability_maps = double(atlases{2}.probability_maps);
+%atlases{2}.probability_maps = sparse(atlases{2}.probability_maps);
 
 
 % Merge the atlases
 % -------------------------------------------------------------------------
 
-atlases = {atlas1_subset, atlas2_subset, atlas3_subset};
-atlases_flat = {atlas1_subset_flat, atlas2_subset_flat, atlas3_subset_flat};
-
-nr_atlases = numel(atlases);
-atlas_nr = 1;
-
 combined_atlas = atlases{1};
 combined_atlas_flat = atlases_flat{1};
-    
-    while atlas_nr < nr_atlases
-        
-        combined_atlas = merge_atlases(combined_atlas, atlases{atlas_nr+1});
-        combined_atlas_flat = merge_atlases(combined_atlas_flat, atlases_flat{atlas_nr+1});
-        
-        atlas_nr = atlas_nr+1;
-        
-    end
-    
-    if any(unique(combined_atlas_flat.dat) > 1)
-        combined_atlas_flat.dat(combined_atlas_flat.dat > 0) = 1; % binarize
-    end
+
+for atlas_nr = 2:numel(atlases)
+
+    combined_atlas = merge_atlases(combined_atlas, atlases{atlas_nr});
+    combined_atlas_flat = merge_atlases(combined_atlas_flat, atlases_flat{atlas_nr});
+
+end
+
+fprintf('\nMerged %d granularity level(s) into a combined atlas with %d regions\n', ...
+    numel(atlases), num_regions(combined_atlas));
+
+if any(unique(combined_atlas_flat.dat) > 1)
+    combined_atlas_flat.dat(combined_atlas_flat.dat > 0) = 1; % binarize
+end
 
 % NOTE: merge_atlases function automatically resamples the space of the
 % second to the first (which should not be needed if they are all subsets of the same atlas), and adds consecutive labels

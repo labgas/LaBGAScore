@@ -62,6 +62,19 @@
 % fully generic template - the atlas/label/ROI names in the body below are
 % study-specific and need adapting for your own study
 %
+% A GRANULARITY LEVEL MAY BE LEFT EMPTY. Set labelsN, roi_namesN and
+% roi_bilateral_idxN all to {} / [] and that level contributes nothing. All
+% three must be emptied together - a guard enforces that, because a stale
+% roi_bilateral_idxN left behind makes nr_roisN disagree with the labels
+% actually present.
+%
+% As of v1.6 the per-level 'while roi_counter < nr_roisN' wrapper is gone. It
+% was redundant - the inner for loop builds every ROI in a single pass - and
+% it caused two failures: an INFINITE LOOP when a level's labels were emptied
+% while nr_roisN stayed positive, and a silent no-op for a level holding ONE
+% unilateral ROI, where nr_roisN = 1 made the entry condition 1 < 1 false so
+% that ROI was never built.
+%
 % -------------------------------------------------------------------------
 %
 % modified by: Aleksandra Budzinska, Lukas Van Oudenhove
@@ -70,9 +83,9 @@
 %
 % -------------------------------------------------------------------------
 %
-% LaBGAScore_atlas_rois_from_atlas.m         v1.5
+% LaBGAScore_atlas_rois_from_atlas.m          v1.6
 %
-% last modified: 2026/08/20
+% last modified: 2026/11/26
 
 
 %% SET OPTIONS, DEFINE DIRS, AND SPECIFY MODEL AND ROI SET NAMES
@@ -121,6 +134,13 @@ roi_names1 = {'amINS','ventral_striatum','caudate','putamen'};
 roi_bilateral_idx1 = [true true true true];
 
 nr_rois1 = ((size(roi_names1,2)*2) - (size(roi_names1,2) - sum(roi_bilateral_idx1)));
+
+if ~isequal(numel(labels1), numel(roi_names1), numel(roi_bilateral_idx1))
+    error(['Level 1: labels1 (%d), roi_names1 (%d) and roi_bilateral_idx1 (%d) must have the same ' ...
+        'number of entries. Emptying a level means emptying all three; leaving a stale roi_bilateral_idx ' ...
+        'behind makes nr_rois1 disagree with the labels actually present.'], ...
+        numel(labels1), numel(roi_names1), numel(roi_bilateral_idx1));
+end
 roi_atlases1_flat = cell(1, nr_rois1);
 roi_counter = 1;
 
@@ -130,9 +150,7 @@ if save_original_roi_atlas_obj
     
 end
 
-while roi_counter < nr_rois1
-
-    for label = 1:size(labels1,2)
+for label = 1:size(labels1,2)
 
             if roi_bilateral_idx1(label)
 
@@ -181,8 +199,6 @@ while roi_counter < nr_rois1
             
             clear roi_atlas_bilateral
             
-    end
-
 end
 
 clear roi_counter
@@ -199,6 +215,13 @@ roi_names2 = {'vmPFC','hypothalamus','VTA'};
 roi_bilateral_idx2 = [true false false];
 
 nr_rois2 = ((size(roi_names2,2)*2) - (size(roi_names2,2) - sum(roi_bilateral_idx2)));
+
+if ~isequal(numel(labels2), numel(roi_names2), numel(roi_bilateral_idx2))
+    error(['Level 2: labels2 (%d), roi_names2 (%d) and roi_bilateral_idx2 (%d) must have the same ' ...
+        'number of entries. Emptying a level means emptying all three; leaving a stale roi_bilateral_idx ' ...
+        'behind makes nr_rois2 disagree with the labels actually present.'], ...
+        numel(labels2), numel(roi_names2), numel(roi_bilateral_idx2));
+end
 roi_atlases2_flat = cell(1, nr_rois2);
 roi_counter = 1;
 
@@ -208,9 +231,7 @@ if save_original_roi_atlas_obj
     
 end
 
-while roi_counter < nr_rois2
-
-    for label = 1:size(labels2,2)
+for label = 1:size(labels2,2)
 
             if roi_bilateral_idx2(label)
 
@@ -258,8 +279,6 @@ while roi_counter < nr_rois2
             
             clear roi_atlas_bilateral
             
-    end
-
 end
 
 clear roi_counter
@@ -276,6 +295,13 @@ roi_names3 = {'lOFC','mOFC'};
 roi_bilateral_idx3 = [true true];
 
 nr_rois3 = ((size(roi_names3,2)*2) - (size(roi_names3,2) - sum(roi_bilateral_idx3)));
+
+if ~isequal(numel(labels3), numel(roi_names3), numel(roi_bilateral_idx3))
+    error(['Level 3: labels3 (%d), roi_names3 (%d) and roi_bilateral_idx3 (%d) must have the same ' ...
+        'number of entries. Emptying a level means emptying all three; leaving a stale roi_bilateral_idx ' ...
+        'behind makes nr_rois3 disagree with the labels actually present.'], ...
+        numel(labels3), numel(roi_names3), numel(roi_bilateral_idx3));
+end
 roi_atlases3_flat = cell(1, nr_rois3);
 roi_counter = 1;
 
@@ -285,9 +311,7 @@ if save_original_roi_atlas_obj
     
 end
 
-while roi_counter < nr_rois3
-
-    for label = 1:size(labels3,2)
+for label = 1:size(labels3,2)
 
             if roi_bilateral_idx3(label)
 
@@ -335,8 +359,6 @@ while roi_counter < nr_rois3
             
             clear roi_atlas_bilateral
             
-    end
-
 end
 
 clear roi_counter
